@@ -1,0 +1,23 @@
+include: package:very_good_analysis/analysis_options.yaml
+
+analyzer:
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+    - build/**
+    - android/**
+    - ios/**
+  errors:
+    # The design board is the specification; a widget tree that mirrors it is
+    # long by nature rather than by accident.
+    lines_longer_than_80_chars: ignore
+
+linter:
+  rules:
+    public_member_api_docs: false
+    # Riverpod's `.family` provider types are declared under the package's
+    # `src/`, so annotating them would mean importing another package's
+    # implementation. The inferred type is correct and public.
+    specify_nonobvious_property_types: false
+    always_use_package_imports: true
+    prefer_relative_imports: false
