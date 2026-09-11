@@ -149,28 +149,36 @@ void main() {
       },
     );
 
-    test('reading in full also marks it seen, and records an event', () async {
-      final id = await sources.add(
-        title: 'Ars',
-        feedUrl: 'https://example.com/ars',
-        category: 'Technology',
-      );
-      await articles.upsert(id, [_article('a')]);
-      final article = (await db.select(db.articles).get()).single;
+    test(
+      'opening the full article marks it read and records an event',
+      () async {
+        final id = await sources.add(
+          title: 'Ars',
+          feedUrl: 'https://example.com/ars',
+          category: 'Technology',
+        );
+        await articles.upsert(id, [_article('a')]);
+        final article = (await db.select(db.articles).get()).single;
 
-      await articles.markRead(
-        article.id,
-        mode: ReadMode.full,
-        dwell: const Duration(minutes: 3),
-      );
+        await articles.mark(
+          article.id,
+          mode: ReadMode.full,
+          dwell: const Duration(minutes: 3),
+        );
 
-      final updated = (await db.select(db.articles).get()).single;
-      expect(updated.readInFull, isTrue);
-      expect(updated.readInReel, isTrue);
+        final updated = (await db.select(db.articles).get()).single;
+        expect(updated.readFull, isTrue);
+        // Reading is not seeing: the two flags are independent, and opening an
+        // article from Today never touches Linger's own state.
+        expect(updated.seenInLinger, isFalse);
 
-      final events = await db.select(db.readEvents).get();
-      expect(events.single.dwellMs, const Duration(minutes: 3).inMilliseconds);
-    });
+        final events = await db.select(db.readEvents).get();
+        expect(
+          events.single.dwellMs,
+          const Duration(minutes: 3).inMilliseconds,
+        );
+      },
+    );
   });
 
   group('RefreshService', () {

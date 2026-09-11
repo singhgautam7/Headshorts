@@ -8,6 +8,7 @@ import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
+import 'package:headshorts/core/widgets/notice.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/data/sources/opml.dart';
 import 'package:headshorts/features/sources/add_source_screen.dart';
@@ -73,9 +74,10 @@ class _OpmlImportScreenState extends ConsumerState<OpmlImportScreen> {
   Future<void> _import() async {
     setState(() => _importing = true);
     final repository = ref.read(sourceRepositoryProvider);
-    for (final entry in _folders.entries.where(
-      (e) => _selected.contains(e.key),
-    )) {
+    final chosen = _folders.entries.where((e) => _selected.contains(e.key));
+
+    var added = 0;
+    for (final entry in chosen) {
       for (final feed in entry.value) {
         await repository.add(
           title: feed.title,
@@ -84,11 +86,19 @@ class _OpmlImportScreenState extends ConsumerState<OpmlImportScreen> {
           category: entry.key,
           accent: SourceAccent.fromKey(feed.feedUrl),
         );
+        added++;
       }
     }
     if (!mounted) return;
+
+    final categories = chosen.length;
     unawaitedRefresh(ref);
     context.pop();
+    showNotice(
+      context,
+      'Added $added ${added == 1 ? 'feed' : 'feeds'} across '
+      '$categories ${categories == 1 ? 'category' : 'categories'}.',
+    );
   }
 
   @override

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head>
+    <title>HeadShorts starter feeds</title>
+  </head>
+  <body>
+    <outline text="India" title="India">
+      <outline type="rss" text="The Hindu" title="The Hindu" xmlUrl="https://www.thehindu.com/news/national/feeder/default.rss" htmlUrl="https://www.thehindu.com" hsAccentDark="#E4A868" hsAccentLight="#8A5518"/>
+      <outline type="rss" text="The Indian Express" title="The Indian Express" xmlUrl="https://indianexpress.com/feed/" htmlUrl="https://indianexpress.com" hsAccentDark="#9FC3A3" hsAccentLight="#37653F"/>
+      <outline type="rss" text="Scroll.in" title="Scroll.in" xmlUrl="https://feeds.feedburner.com/ScrollinArticles.rss" htmlUrl="https://scroll.in" hsAccentDark="#C6BE7E" hsAccentLight="#6B6323"/>
+      <outline type="rss" text="Hindustan Times" title="Hindustan Times" xmlUrl="https://www.hindustantimes.com/feeds/rss/india-news/rssfeed.xml" htmlUrl="https://www.hindustantimes.com" hsAccentDark="#74B1D1" hsAccentLight="#316E8B"/>
+      <outline type="rss" text="Times of India" title="Times of India" xmlUrl="https://timesofindia.indiatimes.com/rssfeedstopstories.cms" htmlUrl="https://timesofindia.indiatimes.com" hsAccentDark="#CB8FCC" hsAccentLight="#8C478E"/>
+      <outline type="rss" text="NDTV" title="NDTV" xmlUrl="https://feeds.feedburner.com/ndtvnews-india-news" htmlUrl="https://www.ndtv.com" hsAccentDark="#97C37C" hsAccentLight="#43761B"/>
+      <outline type="rss" text="Livemint" title="Livemint" xmlUrl="https://www.livemint.com/rss/news" htmlUrl="https://www.livemint.com" hsAccentDark="#C5C36E" hsAccentLight="#6D6A00"/>
+    </outline>
+    <outline text="World" title="World">
+      <outline type="rss" text="BBC News" title="BBC News" xmlUrl="https://feeds.bbci.co.uk/news/world/rss.xml" htmlUrl="https://www.bbc.co.uk/news" hsAccentDark="#E39191" hsAccentLight="#9C3A3C"/>
+      <outline type="rss" text="The Guardian" title="The Guardian" xmlUrl="https://www.theguardian.com/world/rss" htmlUrl="https://www.theguardian.com/world" hsAccentDark="#93B4DC" hsAccentLight="#2F567F"/>
+      <outline type="rss" text="Al Jazeera" title="Al Jazeera" xmlUrl="https://www.aljazeera.com/xml/rss/all.xml" htmlUrl="https://www.aljazeera.com" hsAccentDark="#86C0BC" hsAccentLight="#226663"/>
+      <outline type="rss" text="NPR" title="NPR" xmlUrl="https://feeds.npr.org/1004/rss.xml" htmlUrl="https://www.npr.org" hsAccentDark="#D98BB6" hsAccentLight="#994275"/>
+      <outline type="rss" text="France 24" title="France 24" xmlUrl="https://www.france24.com/en/rss" htmlUrl="https://www.france24.com" hsAccentDark="#C7BE6B" hsAccentLight="#716805"/>
+      <outline type="rss" text="Deutsche Welle" title="Deutsche Welle" xmlUrl="https://rss.dw.com/rdf/rss-en-world" htmlUrl="https://www.dw.com" hsAccentDark="#DC8BAF" hsAccentLight="#9A436E"/>
+      <outline type="rss" text="The Conversation" title="The Conversation" xmlUrl="https://theconversation.com/articles.atom" htmlUrl="https://theconversation.com" hsAccentDark="#DE917F" hsAccentLight="#964F40"/>
+      <outline type="rss" text="Sky News" title="Sky News" xmlUrl="https://feeds.skynews.com/feeds/rss/world.xml" htmlUrl="https://news.sky.com" hsAccentDark="#CC8FCB" hsAccentLight="#8C478D"/>
+      <outline type="rss" text="CBC World" title="CBC World" xmlUrl="https://www.cbc.ca/webfeed/rss/rss-world" htmlUrl="https://www.cbc.ca" hsAccentDark="#D79679" hsAccentLight="#90543A"/>
+      <outline type="rss" text="ABC Australia" title="ABC Australia" xmlUrl="https://www.abc.net.au/news/feed/51120/rss.xml" htmlUrl="https://www.abc.net.au/news" hsAccentDark="#AC9AE5" hsAccentLight="#6D53A9"/>
+    </outline>
+    <outline text="Technology" title="Technology">
+      <outline type="rss" text="Ars Technica" title="Ars Technica" xmlUrl="https://feeds.arstechnica.com/arstechnica/index" htmlUrl="https://arstechnica.com" hsAccentDark="#B6A6DE" hsAccentLight="#574289"/>
+      <outline type="rss" text="The Verge" title="The Verge" xmlUrl="https://www.theverge.com/rss/index.xml" htmlUrl="https://www.theverge.com" hsAccentDark="#D8A2C4" hsAccentLight="#8A3C70"/>
+      <outline type="rss" text="Hacker News" title="Hacker News" xmlUrl="https://hnrss.org/frontpage" htmlUrl="https://news.ycombinator.com" hsAccentDark="#86C181" hsAccentLight="#30782C"/>
+      <outline type="rss" text="TechCrunch" title="TechCrunch" xmlUrl="https://techcrunch.com/feed/" htmlUrl="https://techcrunch.com" hsAccentDark="#6BC79F" hsAccentLight="#097955"/>
+      <outline type="rss" text="Engadget" title="Engadget" xmlUrl="https://www.engadget.com/rss.xml" htmlUrl="https://www.engadget.com" hsAccentDark="#A9C577" hsAccentLight="#567109"/>
+      <outline type="rss" text="MIT Technology Review" title="MIT Technology Review" xmlUrl="https://www.technologyreview.com/feed/" htmlUrl="https://www.technologyreview.com" hsAccentDark="#6BC4C7" hsAccentLight="#057578"/>
+      <outline type="rss" text="404 Media" title="404 Media" xmlUrl="https://www.404media.co/rss/" htmlUrl="https://www.404media.co" hsAccentDark="#99A0EB" hsAccentLight="#575BB0"/>
+      <outline type="rss" text="Simon Willison" title="Simon Willison" xmlUrl="https://simonwillison.net/atom/everything/" htmlUrl="https://simonwillison.net" hsAccentDark="#E28B96" hsAccentLight="#9D4655"/>
+      <outline type="rss" text="Android Police" title="Android Police" xmlUrl="https://www.androidpolice.com/feed/" htmlUrl="https://www.androidpolice.com" hsAccentDark="#A1C57A" hsAccentLight="#4D7410"/>
+      <outline type="rss" text="Daring Fireball" title="Daring Fireball" xmlUrl="https://daringfireball.net/feeds/main" htmlUrl="https://daringfireball.net" hsAccentDark="#C592D3" hsAccentLight="#854A96"/>
+    </outline>
+    <outline text="Business" title="Business">
+      <outline type="rss" text="Financial Times" title="Financial Times" xmlUrl="https://www.ft.com/rss/home" htmlUrl="https://www.ft.com" hsAccentDark="#7AC38D" hsAccentLight="#117A3D"/>
+      <outline type="rss" text="Business Standard" title="Business Standard" xmlUrl="https://www.business-standard.com/rss/home_page_top_stories.rss" htmlUrl="https://www.business-standard.com" hsAccentDark="#72B2CE" hsAccentLight="#2E6F89"/>
+      <outline type="rss" text="Moneycontrol" title="Moneycontrol" xmlUrl="https://www.moneycontrol.com/rss/business.xml" htmlUrl="https://www.moneycontrol.com" hsAccentDark="#D28EC3" hsAccentLight="#924584"/>
+    </outline>
+    <outline text="Science" title="Science">
+      <outline type="rss" text="Nature" title="Nature" xmlUrl="https://www.nature.com/nature.rss" htmlUrl="https://www.nature.com" hsAccentDark="#7CC38A" hsAccentLight="#197A39"/>
+      <outline type="rss" text="Quanta Magazine" title="Quanta Magazine" xmlUrl="https://api.quantamagazine.org/feed/" htmlUrl="https://www.quantamagazine.org" hsAccentDark="#96C37D" hsAccentLight="#42761C"/>
+      <outline type="rss" text="Phys.org" title="Phys.org" xmlUrl="https://phys.org/rss-feed/" htmlUrl="https://phys.org" hsAccentDark="#C7B06B" hsAccentLight="#79641B"/>
+      <outline type="rss" text="Science News" title="Science News" xmlUrl="https://www.sciencenews.org/feed" htmlUrl="https://www.sciencenews.org" hsAccentDark="#80C286" hsAccentLight="#237934"/>
+      <outline type="rss" text="NASA" title="NASA" xmlUrl="https://www.nasa.gov/rss/dyn/breaking_news.rss" htmlUrl="https://www.nasa.gov" hsAccentDark="#C7A56B" hsAccentLight="#806025"/>
+    </outline>
+    <outline text="Culture" title="Culture">
+      <outline type="rss" text="Aeon" title="Aeon" xmlUrl="https://aeon.co/feed.rss" htmlUrl="https://aeon.co" hsAccentDark="#C7B86B" hsAccentLight="#756611"/>
+      <outline type="rss" text="The Paris Review" title="The Paris Review" xmlUrl="https://www.theparisreview.org/blog/feed/" htmlUrl="https://www.theparisreview.org" hsAccentDark="#D59778" hsAccentLight="#8E5638"/>
+      <outline type="rss" text="Pitchfork" title="Pitchfork" xmlUrl="https://pitchfork.com/rss/news/" htmlUrl="https://pitchfork.com" hsAccentDark="#A4C578" hsAccentLight="#51730D"/>
+      <outline type="rss" text="Guardian Books" title="Guardian Books" xmlUrl="https://www.theguardian.com/books/rss" htmlUrl="https://www.theguardian.com/books" hsAccentDark="#82C184" hsAccentLight="#297931"/>
+      <outline type="rss" text="Longreads" title="Longreads" xmlUrl="https://longreads.com/feed/" htmlUrl="https://longreads.com" hsAccentDark="#A39DE8" hsAccentLight="#6357AD"/>
+    </outline>
+    <outline text="Sport" title="Sport">
+      <outline type="rss" text="BBC Sport" title="BBC Sport" xmlUrl="https://feeds.bbci.co.uk/sport/rss.xml" htmlUrl="https://www.bbc.co.uk/sport" hsAccentDark="#A4C578" hsAccentLight="#51730D"/>
+      <outline type="rss" text="ESPNcricinfo" title="ESPNcricinfo" xmlUrl="https://www.espncricinfo.com/rss/content/story/feeds/0.xml" htmlUrl="https://www.espncricinfo.com" hsAccentDark="#6BC7BB" hsAccentLight="#00766C"/>
+      <outline type="rss" text="Guardian Football" title="Guardian Football" xmlUrl="https://www.theguardian.com/football/rss" htmlUrl="https://www.theguardian.com/football" hsAccentDark="#80C286" hsAccentLight="#237934"/>
+    </outline>
+    <outline text="Health" title="Health">
+      <outline type="rss" text="Guardian Health" title="Guardian Health" xmlUrl="https://www.theguardian.com/society/health/rss" htmlUrl="https://www.theguardian.com/society/health" hsAccentDark="#9EC47A" hsAccentLight="#4B7411"/>
+      <outline type="rss" text="STAT News" title="STAT News" xmlUrl="https://www.statnews.com/feed/" htmlUrl="https://www.statnews.com" hsAccentDark="#C7A26B" hsAccentLight="#815F28"/>
+    </outline>
+  </body>
+</opml>

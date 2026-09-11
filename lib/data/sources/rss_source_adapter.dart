@@ -1,4 +1,5 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart' show compute;
 import 'package:headshorts/data/db/tables.dart';
 import 'package:headshorts/data/feed/feed_parser.dart';
 import 'package:headshorts/data/sources/source_adapter.dart';
@@ -41,7 +42,11 @@ class RssSourceAdapter implements SourceAdapter {
       }
 
       return FetchResult.fresh(
-        articles: FeedParser.parse(body),
+        // Parsed on a background isolate. A 300KB feed document costs
+        // hundreds of milliseconds to parse, and forty-five of them in a row
+        // on the UI thread is exactly what made the first briefing look
+        // frozen. Nothing here touches the tree, so it ships out whole.
+        articles: await compute(FeedParser.parse, body),
         etag: response.headers.value('etag'),
         lastModified: response.headers.value('last-modified'),
       );

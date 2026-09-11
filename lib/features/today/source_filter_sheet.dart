@@ -74,7 +74,15 @@ class _SourceFilterSheet extends ConsumerWidget {
         const SizedBox(height: HsSpace.x4),
         HsButton(
           'Show all',
-          onPressed: ref.read(mutedSourcesProvider.notifier).showAll,
+          // Disabled when nothing is hidden, and closes on success: behind a
+          // scrim a reset that leaves the sheet open looks like nothing
+          // happened.
+          onPressed: muted.isEmpty
+              ? null
+              : () {
+                  ref.read(mutedSourcesProvider.notifier).showAll();
+                  Navigator.of(context).pop();
+                },
           kind: HsButtonKind.secondary,
         ),
       ],

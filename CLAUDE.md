@@ -32,6 +32,10 @@ than production code. Recreate the *visual output*, not the DOM structure.
 | Reuters in the starter set | The Guardian, in Reuters' slot and accent | Reuters withdrew its public feeds; the address 404s. Shipping a dead feed is worse than substituting a live publisher. |
 | Scroll.in at `scroll.in/feed` | `feeds.feedburner.com/ScrollinArticles.rss` | The site path returns an empty document. |
 | A phone status bar in each mock | The real system status bar (`SafeArea`) | The mock frames draw "9:41"; on a device that is the OS's. |
+| The nav pill 22 above the frame edge | 8 above the safe area | The mock measures from the frame; a phone puts the system gesture inset there first, and the pill ends up floating in the bottom margin. |
+| More is the settings screen | More is a hub; Settings is a page in it | Stats, AI summaries, About and Privacy are not settings, and burying them under that heading made the tab describe one fifth of itself. |
+| A "Top" sub-tab | "Latest" | "Top" reads as ranking, which the app does not do. Same tab, honest name. |
+| Fixed India / World / Tech tabs | Tabs derived from the reader's own categories | The mock shows one reader's set. Categories are a label on a source, so the tab bar follows whatever they have. |
 
 ---
 
@@ -65,6 +69,7 @@ lib/
     readability/on-device article extraction
     prefs/      settings store (shared_preferences)
   features/     today · linger · reader · sources · more · stats · onboarding
+                more/ is the hub; more/settings_screen.dart is one page in it
 ```
 
 ### Extension point: adding a source
@@ -95,15 +100,249 @@ Two levels, both deliberately cheap:
 
 ---
 
+### The category model
+
+A **category is a label on a source** (`sources.category`) — open-ended, and
+the reader's to edit. Nothing else defines it:
+
+- **Latest** is not a category. It is every enabled source merged, minus the
+  ones muted there (`sources.mutedInLatest`), deduped, newest first.
+- **A category tab** appears for each category with at least one *enabled*
+  source, and disappears when the last one leaves. Recategorising a feed moves
+  it live, because the tab bar is a stream over the sources table.
+- **Everything downstream reads `activeCategoryProvider`, not the reader's
+  raw selection.** A selection left pointing at a category that has since lost
+  its last source falls back to Latest. Without that, pausing one feed leaves
+  the query filtering on a name nothing is filed under and Today goes blank
+  for no visible reason.
+- **The strip and the pages are one control.** Today's categories are a
+  `PageView` synced to the strip: tapping a tab and swiping the list are the
+  same gesture. Only the category in front of the reader is queried; the one
+  arriving under their thumb shows the skeleton until the swipe settles.
+- **OPML seeds it and stops there.** A feed's nearest ancestor outline becomes
+  its category on import; from then on it is just a label like any other.
+- **Rename is the whole of category management.** Renaming onto a new name
+  creates it; onto an existing name merges the two; a per-source assign moves
+  one feed. `SourceRepository.renameCategory` is the only operation needed.
+- **The feed's own `<category>` tags are ignored** for structure. They may
+  later drive filtering *within* a category; they never define one.
+
+### The bundled catalog
+
+`assets/feeds/starter_feeds.opml` ships ~45 verified feeds across eight
+categories, parsed once per launch into `SourceCatalog`
+(`sourceCatalogProvider`). It is a **directory to search, not a starting
+state** — nothing in it is subscribed until the reader says so.
+
+- **An OPML asset rather than a Dart list**, because that is the format the app
+  already imports and exports: a curated set is edited the same way a reader's
+  own subscriptions are, and the parser is exercised by the app's own data on
+  every launch.
+- Accents travel in `hsAccentDark` / `hsAccentLight`, our own OPML extension,
+  so the design board's eight survive the round trip byte-for-byte (asserted by
+  test). Anyone else's OPML omits them and the app derives a tone instead.
+- **Every URL in the file was fetched and checked before shipping.** Eight
+  candidates were dropped for 403/404/empty responses. Re-verify before adding
+  more — a dead feed in the catalog is worse than a short catalog.
+- `search(query)` matches case-insensitively on name *and* category, and every
+  whitespace-separated term must match, so a second word narrows. An empty
+  query browses everything. `grouped(query)` returns the same results grouped
+  by category in catalog order.
+
+The catalog is the only source list: `starter_set.dart` is gone, and the
+onboarding picker and the Sources screen both read from `SourceCatalog`.
+
+`accentFor` is **idempotent** — the catalog bakes derived accents into the file
+and the app resolves them again at read time, so those two must agree. Getting
+there needed a loop: squeezing a colour back into 8-bit sRGB moves it, so one
+pass does not always land inside the band, and a single pass would shift a
+channel on every launch. It iterates to a fixed point instead.
+
+### Where subscription lives
+
+Everything that changes *what the app fetches* is in Sources or Settings, and
+every one of those changes flows through the reactive store, so Today and
+Linger reflect it without anything being told to reload:
+
+| Screen | Does |
+|---|---|
+| **More** | A hub, not a settings page: Stats · Settings · AI summaries (Beta) · About · Privacy, and "Made with ❤️ in India" pinned at the foot |
+| **Sources** | The **whole catalog** plus the reader's own additions, searchable, grouped by category, one toggle per source. Also renames a category, and opens a source |
+| Sources → Add | Feed discovery from a pasted site address, for anything the catalog does not have |
+| Source detail | Category, accent, Mute in Latest, Unsubscribe |
+| Settings | One page *inside* More: Appearance · Sources · Reading (text size, link open mode, fairness cap) · Data (refresh cadence, export OPML, clear cache) |
+
+**Sources shows the same list the onboarding picker showed.** The place a
+reader chose their sources is the place they change them, so there is no
+separate "browse the catalog" screen to go and find — `manageableSourcesProvider`
+merges the catalog with `sources`, matching on `feedUrl`, so a subscribed
+publisher is one row carrying its live state rather than two.
+
+The toggle means **"in my briefing or not"**:
+
+- Off → on, not yet subscribed: subscribe, then refresh, so the reader gets
+  items rather than an empty category.
+- Off → on, already subscribed: re-enable. The cached items come straight
+  back.
+- On → off: **pause**, never unsubscribe. The subscription and its items
+  survive, so turning it back on is instant.
+
+Unsubscribing is destructive — it takes the source's articles with it — so it
+stays a deliberate act on the source's own screen, not a toggle.
+
+Two settings do real work rather than being stored and ignored:
+
+- **Open links** picks the `LaunchMode` — a Custom Tab, or the reader's own
+  browser. Threaded through to `ArticleBody` so in-article links honour it too.
+- **Check for new** gates `refreshIfDue`, which is what launch and tab-return
+  call. An explicit pull or tap on the refresh mark calls `refresh` and always
+  fetches: an ask is never quietly ignored.
+
+**Clear cached articles** deletes articles *and* read events, and keeps
+subscriptions. Read state goes with the rows that carried it — leaving "read"
+markers pointing at nothing would be worse.
+
+### Filter is not selection
+
+Two controls look alike on screen and must never be confused:
+
+| | Home's "All sources" | Sources / Settings |
+|---|---|---|
+| What it is | A **view filter** — `mutedSourcesProvider`, in memory | **Subscription**, a row in `sources` |
+| Scope | The list in front of the reader, right now | The whole app, until changed |
+| Survives a restart | No | Yes |
+| Changes what is fetched | Never | Yes |
+| Changes the category tabs | Never | Yes |
+
+Conflating them would quietly unsubscribe people, so `filter_vs_selection_test`
+holds the line: hiding a source in Home leaves it subscribed, enabled, fetched
+and still owning its category tab.
+
+Category tabs derive from **subscribed** sources' categories, so adding a Tech
+source makes that tab appear and unsubscribing the last one removes it. That is
+end-to-end tested from `SourceCatalog` through `SourceRepository` to
+`watchCategories` and `watchBriefing`.
+
+### De-duplication
+
+The same story reaches the app twice — a publisher's feed and an aggregator's,
+a national and a regional edition — and it is one thing to read.
+
+- **Within a feed:** `(sourceId, guid)`, falling back to the link.
+- **Across feeds:** `articles.canonicalUrl` — the link with tracking
+  parameters stripped, `www`/`m`/`amp` hosts and trailing slashes normalised,
+  and aggregator redirects unwrapped when the real address is in a query
+  parameter. Then `articles.titleKey`, a stemmed, sorted fingerprint of the
+  headline, for the same story filed under two different titles.
+- Both keys are computed at upsert and stored, so dedup and read-state
+  propagation are both indexed lookups rather than scans.
+- **A false merge is worse than a duplicate.** An item with neither key is
+  always kept, and a headline too short to fingerprint gets no title key.
+- Google News wraps the publisher's URL in a redirect. `canonicalUrl` unwraps
+  it when the address is in the query string; a redirect that only resolves
+  over the network is not followed, so an overlap can survive. Prefer
+  subscribing to the publisher or the aggregator, not both.
+
+### Seen and read are two different things
+
+Two independent flags on the article row. Conflating them is what makes a
+reader feel they have "used up" an article by glancing at it.
+
+| | Set by | Effect |
+|---|---|---|
+| `seenInLinger` | A Linger card settling as the active card, after a 500ms dwell | Keeps it from coming round again **in Linger**. Nothing else. |
+| `readFull` | Opening the full article, from Today **or** Linger | The only thing that counts as reading. Removes it from Linger; subtly de-emphasises it in Today. |
+
+The rules that follow from that, and that the tests pin:
+
+- **Linger sets `seenInLinger` only.** It never sets `readFull`, and never
+  affects Today.
+- **Opening the full article is the only thing that sets `readFull`.**
+- **Today marks nothing.** Scrolling past an item in Today changes no state at
+  all. `readFull` de-emphasises an item there; it never hides it.
+- The dwell matters: a fast flick through the stack must not consume the queue.
+- Both flags propagate across **every copy of the story** (rows sharing a
+  `canonicalUrl`). Without that, the second feed's copy of an article you have
+  already dealt with comes straight back, because de-duplication only collapses
+  copies that are all still in the result set.
+
+**Net effect:** an item seen in Linger disappears from Linger and still shows
+normally in Today. Opening its full article marks it read, which removes it
+from Linger and de-emphasises it in Today.
+
+### Linger has one Filter button
+
+`LingerFilter` is a category plus, optionally, the set of sources to keep —
+held for the session in `lingerFilterProvider` and the only thing that decides
+what `buildLingerQueue` is asked for. The sheet reuses Today's filter-sheet
+pattern: category chips, then the in-scope sources as selectable tags.
+
+It is a **filter**, and the same line holds here as on Today: only subscribed,
+enabled sources appear, and nothing in the sheet adds, removes or pauses one.
+The draft is edited in the sheet and committed on Apply, so a half-made choice
+never rebuilds the queue under the reader; Apply and Clear both close the
+sheet, and the queue shows its skeleton while the new one is built.
+
+Two details the tests pin: a null source set means "all of them" (so a source
+added later is included without being re-picked) while an **empty** set means
+nothing — saying so beats quietly ignoring the reader's own filter — and
+changing category clears the source picks, because a pick from another
+category would leave a filter matching nothing.
+
+### Linger's queue is a snapshot
+
+The unseen-and-unread filter is applied **when the queue is built**, never
+live. Marking the card in front of the reader as seen must not pull it out
+from under them — filtered items simply do not return next time.
+`LingerQueueController` owns the queue and the reader's position in it.
+
+When a refresh finishes, newly arrived unseen-and-unread items are **merged**
+into the queue at their chronological place and the index is re-anchored to
+the card the reader was on, so refreshing Today brings the latest news into
+Linger without moving anyone.
+
+### Today paginates
+
+Keyset pagination over `(publishedAt DESC, id DESC)` — the id breaks the ties
+that feeds create by stamping several items with the same minute. The window
+is bounded by the cursor of the last loaded item, never by an offset, so a
+refresh that prepends new items cannot make the list skip or repeat one under
+the reader. `todayPageSize` is 25; the next page loads as the reader comes
+within a screen of the end.
+
+`atEnd` is never latched on an empty cache. Nothing below a window that has
+not been opened yet is an empty cache, not the end of a list — latching there
+is what stopped Today ever paging again after a first run that arrived before
+its items did.
+
+It stays finite: when the cache is exhausted the list ends in "You're caught
+up". Nothing is ever fetched from the network by scrolling, and nothing says
+"caught up" until a refresh has actually finished
+(`awaitingFirstFetchProvider`).
+
+### Firehose control
+
+Strict chronological order plus dedup is the default, and the only default.
+Two opt-in controls exist, and neither ranks anything:
+
+- **Mute in Latest**, per source — keeps a firehose out of the merged list
+  while leaving it in its own category.
+- **Cap items in a row from one source** (`maxConsecutivePerSource`, off by
+  default) — an item that would exceed the run is held back until something
+  from elsewhere breaks it. Nothing is dropped or scored. It is labelled
+  fairness, because that is what it is.
+
 ## 4. Data model
 
 - **sources** — id, title, siteUrl, feedUrl (unique), category, `accentDark` /
-  `accentLight` (the accent's two tones), type, enabled, sortOrder, etag,
-  lastModified, lastFetchedAt, addedAt, `failingSince`, `lastError`.
+  `accentLight` (the accent's two tones), type, enabled, `mutedInLatest`,
+  sortOrder, etag, lastModified, lastFetchedAt, addedAt, `failingSince`,
+  `lastError`.
 - **articles** — id, sourceId (FK, cascade), guid, title, summary,
   contentSnippet, `fullContentHtml` (nullable — only when a full-content feed
-  or extraction supplied it), link, author, publishedAt, imageUrl, fetchedAt,
-  `readInReel`, `readInFull`. Unique on `(sourceId, guid)`.
+  or extraction supplied it), link, `canonicalUrl`, `titleKey`, author,
+  publishedAt, imageUrl, fetchedAt, `seenInLinger`, `readFull`. Unique on
+  `(sourceId, guid)`.
 - **read_events** — articleId, mode, at, dwellMs. Reading time comes from here,
   not from a column on `articles`.
 - **caught_up_days** — one row per day the reader reached the end of Today.
@@ -120,25 +359,78 @@ Rules:
   after each refresh.
 - Updating an article never erases a `fullContentHtml` the feed has stopped
   sending.
+- **Schema version 3.** Adding or renaming a column means bumping
+  `schemaVersion` and adding a step to `MigrationStrategy.onUpgrade` in
+  `database.dart`. v2 added the de-duplication keys and `mutedInLatest`; v3
+  renamed `read_in_reel`/`read_in_full` to `seenInLinger`/`readFull`, which
+  carry over as-is because the old flags meant exactly those two things.
 
 ---
 
 ## 5. Fetch pipeline
 
-`RefreshService.refreshAll()` fetches every enabled, non-abandoned source
-concurrently and emits progress **in completion order** (`Stream.fromFutures`),
-so one slow feed does not hold up the rest. Per source: conditional GET with
-the stored ETag/Last-Modified → parse → upsert → record success or failure.
+**Onboarding and a refresh are the same code.** `RefreshService.refreshAll()`
+is the only path that fetches anything, and it is what the first run, the
+launch check, a pull and the refresh mark all call. There is no first-run
+special case and no date window: a feed is fetched for whatever it currently
+contains, whenever it was published. Nothing anywhere filters on install time,
+and `pipeline_test`/`fetch_pipeline_test` pin that — an item dated two years
+before the subscription existed still reaches Today.
 
+Per source: conditional GET with the stored ETag/Last-Modified → parse →
+upsert → record success or failure.
+
+- **At most `RefreshService.concurrency` (6) feeds are in flight**, through a
+  fixed-width pool. Starting all forty-five at once is not faster on a phone:
+  it exhausts the connection pool and times out feeds that would otherwise
+  have answered. Outcomes are still emitted in completion order, so one slow
+  feed never holds up the bars for the rest.
+- **Every feed has a `perFeedTimeout` (15s) ceiling** on the whole attempt,
+  retry included, so a feed that stalls between bytes cannot hold the run.
+- **Parsing runs on a background isolate** (`compute(FeedParser.parse, body)`).
+  A 300KB feed costs hundreds of milliseconds to parse; a run of them on the
+  UI thread is what made the first briefing look frozen — the bars were
+  filling, the frames were not.
+- **`_refreshOne` never throws.** It used to be able to: a malformed document
+  that a parser choked on threw past the adapter's `FormatException` catch,
+  `Stream.fromFutures` carried the error, the whole run stopped, the remaining
+  feeds were dropped, and the reader arrived at an empty briefing that claimed
+  to be caught up. Every failure is now recorded against its own source.
+- **Items are stored before the validators that would 304 them.** Writing the
+  ETag first means the next refresh answers 304 for content that was never
+  saved: the feed goes quiet and nothing says why.
 - A 304 costs a header exchange and nothing else.
-- **Nothing here throws.** A dead feed is state recorded against the source
-  (`failingSince`, `lastError`), stated in words on that source's own screen.
-  It never becomes an error dialog or a red dot. Retries stop after 14 days.
-- Launch behaviour: open to cache, refresh behind the content, show a quiet
-  "updating…" and offer pull-to-refresh. **The only blocking loader in the app
-  is the first-run fetch in onboarding.**
+- A dead feed is state recorded against the source (`failingSince`,
+  `lastError`), stated in words on that source's own screen. It never becomes
+  an error dialog or a red dot. Retries stop after 14 days.
 
----
+**Requests carry a browser user agent**, feeds included — the same string the
+Reader sends for article pages. Publishers refuse an unknown client outright:
+Business Standard answered `HeadShorts/1.0` with a 403 and a browser string
+with the feed.
+
+**The reader is never told "caught up" over a cache that is still filling.**
+`RefreshProgress.finished` marks a run that reached the end; until the first
+one does, an empty briefing renders as the skeleton rather than the empty
+state. `RefreshController.refresh()` **joins** a run already in flight rather
+than returning immediately, so onboarding's await actually waits.
+
+Launch behaviour: open to cache, refresh behind the content, show a quiet
+"updating…" and offer pull-to-refresh. **The only blocking loader in the app
+is the first-run fetch in onboarding**, and it reports one bar per feed,
+filling as each returns.
+
+### Text fields are decoded; bodies are not
+
+Feeds escape their plain-text fields, and a fair number escape them twice
+(`&amp;amp;`). `FeedParser.plainText` strips markup and decodes entities until
+the text stops changing, at most `_maxDecodes` (2) times — on top of the one
+pass the XML layer has already done, which is three levels deep and further
+than any real feed goes. Title, summary, snippet, author and OPML category all
+run through it.
+
+`fullContentHtml` deliberately does not: the Reader's pipeline parses that as
+markup, and decoding it here would destroy the document.
 
 ## 6. Design & behaviour guardrails
 
@@ -150,6 +442,37 @@ and per-source accent through `AccentScope.of(context)`.
 The accent rule: a source accent is a **label, a hairline bar, and — in Linger
 only — a wash panel**. Never a saturated card fill. 15% over black, 7% over
 paper.
+
+**Colour arithmetic is done in oklab, never sRGB.** The design board writes
+its mixes as `color-mix(in oklab, …)` and the difference is not cosmetic: 15%
+of a light accent over black comes out `#221616` in sRGB and `#090303` in
+oklab — three times brighter, which is the difference between a coloured card
+and a whisper of hue. `Oklab.mix` in `core/tokens/oklab.dart` is the only
+correct way to blend two colours here; `Color.lerp` and `Color.alphaBlend` are
+not. Light-theme mixes happen to land in the same place either way, which is
+why only AMOLED looked wrong.
+
+**A raw colour never reaches the UI.** Everything goes through
+`accentFor(Brightness, Color)`. The design board's own nine accents pass
+through untouched — that is asserted by a test — and anything else (a
+publisher's brand red, a hue derived from a feed address) is desaturated to
+the board's chroma ceiling and moved into its lightness band, keeping the hue
+and dropping the shout. The bounds are measured from the board's own accents,
+not invented.
+
+**Every wait shows a skeleton**, and every skeleton is a flat fill: Today's
+first load and category swipe, Linger's queue build, the Reader's body, the
+Sources list while the catalog asset is read. A wait that draws nothing reads
+as a freeze, which is what the first-run fetch used to be.
+
+Performance is a set of habits rather than a pass: parse off the main isolate,
+bound the fetch pool, `ListView.builder` for anything list-shaped (the Sources
+screen flattens its headers and rows into one lazy list), `memCacheWidth` on
+every `CachedNetworkImage` so a publisher's 2000px hero is not decoded behind
+a 76dp thumbnail, a debounced search field, and `select` on any provider that
+emits more often than the widget needs — `refreshProvider` fires once per
+feed, and Today has no business rebuilding forty-five times for a word that
+changes twice.
 
 **Motion** fires only from a gesture or a tap. Nothing loops, nothing is
 ambient. Skeletons are flat fills with no shimmer sweep. The single exception
@@ -166,13 +489,128 @@ back thin it keeps whatever the feed gave, says so plainly, and hands off to
 the publisher in a Custom Tab — never a broken or empty page, never error
 styling.
 
+### The Reader pipeline
+
+One path, whatever came in: **normalise → clean → allowlist → render.**
+
+1. **Normalise.** A full-content feed body and on-device extraction both
+   arrive as one HTML string. Extraction uses `html_readability`'s
+   `htmlContent`, never `textContent` — plain text throws away every heading,
+   list and link. A feed carrying Markdown is converted first
+   (`normaliseToHtml`), so there is one pipeline rather than a second that
+   drifts.
+
+2. **Clean** (`ArticleCleaner.clean`), in this order, because each step
+   depends on what the last one left:
+   - *Images* — absolutise and de-lazy against the article URL.
+   - *Boilerplate containers* — matched on `class`, `id` and `data-*` against
+     the rules registry, then the always-dropped tags (`aside`, `iframe`,
+     `script`, `style`, `noscript`, `form`, `button`, `nav`, `video`, …).
+   - *Skip links, aria junk and orphan captions* — `a[href^="#"]` whose text
+     starts with "skip", `[aria-hidden="true"]`, and elements whose **entire**
+     text is a known label. The **container** goes, not just the text:
+     removing only the text is what leaves an "after newsletter promotion"
+     caption stranded in the middle of an article.
+   - *Links* — absolutised, tracking parameters stripped, `javascript:` and
+     bare fragments dropped.
+   - *Allowlist* — this is what kills junk nobody has seen yet. Only the tags
+     in `allowedTags` survive; anything else is **unwrapped** (its prose is
+     usually wanted) and `class`, `style`, `id`, `data-*` and every `on*`
+     handler are stripped. `href` on `a` and `src`/`alt` on `img` are kept.
+   - *Prune* — empty elements, `<br>` runs, leading and trailing blanks.
+
+   Boilerplate removal must run **before** sanitising: the rules read the very
+   attributes the allowlist throws away.
+
+3. **Render** (`features/reader/article_body.dart`) — every surviving tag is
+   mapped to a design token: the heading scale is derived from the body size,
+   so the "Aa" control scales headings, quotes and code along with the prose;
+   `blockquote` takes an accent rule; `pre`/`code` sit on a surface tint;
+   links are accent-toned and open in a Custom Tab, absolutising a relative
+   href at tap time as a safety net.
+
+**The cleaning registry is data** (`cleaning_rules.dart`): global rules plus
+`perDomainCleaningRules`, keyed on the article's host. A new publisher quirk is
+one entry — the pipeline never changes. Same extension shape as
+`SourceAdapter`.
+
+Two traps that cost real time, both now covered by tests:
+
+- **A fragment's own top-level children report a null parent** in
+  `package:html`. Using `parent == null` as an "already removed" guard
+  silently skips every root element — which is most of an extracted article,
+  so the cleaner appears to do nothing. Use `ArticleCleaner._attached`.
+- `querySelector('img')` searches descendants only, so an `<img>` must also be
+  checked for by name, or an article that opens or closes with a photograph
+  loses it.
+
+*Images* still need all three of:
+
+1. The de-lazying above: promote `data-src`/`data-original`/`srcset` into
+   `src`, unwrap `<picture>` to its decodable `<img>` fallback, upgrade `http`
+   to `https` (Android blocks cleartext), and **remove spacer images** — a 1×1
+   GIF stretched to full column width leaves a screen-high hole.
+2. A `Referer` from the article and a desktop `User-Agent`
+   (`ExtractionService.imageHeaders`) on every image request.
+3. `html_readability` does **not** reliably carry a publisher's `<figure>`
+   images into the extracted body — BBC and the Guardian lose all of them, The
+   Hindu keeps them. So the Reader shows the feed's own `imageUrl` as a lead
+   image whenever the body has no picture of its own. That is the dependable
+   path; the first two are for publishers whose figures survive.
+
+Any image that will not load collapses to nothing. A blank rectangle where a
+photograph should be is worse than no photograph.
+
 **The nav pill** is a floating, detached, content-hugging object: four tabs,
 no FAB, opaque by default (blur is an off-by-default setting), only the
 selected destination carries text, and inactive labels are not in the tree.
 
+It rests `HsSize.navPillInset` (8) above the bottom **safe area**, not the 22
+the board draws. The mock's inset is measured from the frame's edge; on a real
+phone that lands on top of the system's own gesture inset and the pill floats
+in the middle of the bottom margin — most visibly in Linger, where the card
+has to clear it. The SafeArea already provides the distance the mock drew.
+
+It **auto-hides on Today only**, driven by `navVisibilityProvider`: scrolling
+down slides it past the bottom inset, scrolling up brings it back. Because it
+is detached, that is a translation and nothing reflows. It always returns at
+the top of a list, when a list does not scroll at all, and on a tab change,
+and a 24px threshold stops a resting thumb making it flicker. Linger keeps its
+chrome, per the design board.
+
+**Bottom sheets are presented on the root navigator** (`showHsSheet` sets
+`useRootNavigator`). Presented on a branch navigator they render *beneath* the
+shell's floating pill, which then covers the sheet's own actions.
+
+**Tab switches cross-fade in `_BranchSwitcher`, not in the route.**
+`StatefulShellRoute.indexedStack` swaps branches instantly, so a transition on
+the branch's own page never plays at all. The shell builds its own container
+instead: every branch stays mounted, keeping its navigator and scroll
+position, and the swap animates on motion-page.
+
+**Filter sheets close on success.** Behind a scrim, an action that leaves the
+sheet open looks like it did nothing — which is exactly how "Show all" read
+before it popped.
+
+**`InfoSheet` is the one explainer surface.** Title, paragraphs, an optional
+numbered step list, an optional muted note, and up to two actions — all from
+the token layer, so it needs no new design. The OPML explainer
+(`features/sources/opml_explainer.dart`) is one call with different text;
+AMOLED and AI summaries should be the same. A low-emphasis `InfoButton` sits
+beside every "Import OPML" affordance, labelled "About OPML" for TalkBack, at
+a full 44dp target. Its primary action opens the file picker directly rather
+than sending the reader back to hunt for the button they were standing next
+to. `showNotice` states the outcome afterwards and leaves — no badge, no
+celebration.
+
 ---
 
 ## 7. Dev commands
+
+A note on test data: the de-duplicator collapses near-identical headlines, so
+fixture articles need genuinely distinct titles. Several tests "failed" during
+development purely because their sample headlines all fingerprinted alike —
+which was the fingerprint working, not a bug.
 
 ```bash
 flutter pub get
@@ -209,6 +647,8 @@ The launcher icon is generated from the design board's mark by
 | Models | `freezed` |
 | Secure storage | `flutter_secure_storage` |
 | Files | `file_selector` |
+| Colour | `Oklab` — ours; no package matches CSS `color-mix(in oklab, …)` |
+| Markdown | `markdown`, for the rare feed that carries it |
 | Lints | `very_good_analysis` |
 | Tests | `flutter_test`, `mocktail` |
 
@@ -236,9 +676,26 @@ The launcher icon is generated from the design board's mark by
 ## 9. Quality bar
 
 - `flutter analyze` clean under `very_good_analysis`. No warnings.
-- Tests cover the fetch/parse/dedup pipeline, the `SourceAdapter` registry,
-  OPML round-tripping, article-HTML normalisation, and the three widgets the
+- Tests cover the fetch/parse/dedup pipeline, the fetch pool's concurrency
+  ceiling and per-feed timeout, a feed that throws not taking the run with it,
+  onboarding-and-refresh parity, entity decoding (including double-encoded
+  fields), reactive category derivation and the fallback when a tab vanishes,
+  the Linger filter query, the `SourceAdapter` registry,
+  OPML round-tripping, the Reader cleaning pipeline, canonical-URL and
+  headline de-duplication, the fairness cap, category derivation and renaming,
+  the seen/read model, the scroll-direction nav controller, the oklab colour
+  maths against the design board's stated values, and the three widgets the
   design is most specific about: the nav pill, the Today card, the Linger card.
+- `test/fixtures/` holds **real saved article HTML**, not hand-written
+  samples: a Guardian article with the newsletter block, one with headings and
+  lists, one with inline links. Hand-written HTML is too tidy to catch what
+  publishers actually ship. `article_cleaner_test.dart` asserts the fixture
+  still contains the boilerplate before asserting it is gone, so the test
+  cannot quietly stop testing anything.
+- Two of those are guard rails rather than coverage: `accent_test.dart`
+  asserts the board's nine accents survive `accentFor` byte-for-byte, and
+  pins `Oklab.mix` to the board's own `color-mix` results. Breaking either is
+  a design regression, not a failing unit.
 - Every failure state has a designed screen: offline (serve cache), broken
   feed, thin extraction, empty sources, and "You're caught up".
 - No secrets in the repo. No analytics, no trackers, no server.

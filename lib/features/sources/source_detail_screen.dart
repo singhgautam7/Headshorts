@@ -13,6 +13,7 @@ import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/core/widgets/sheet.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/source_repository.dart';
+import 'package:headshorts/features/today/today_controller.dart';
 
 final sourceProvider = StreamProvider.family<SourceRow?, int>(
   (ref, id) => ref.watch(sourceRepositoryProvider).watchById(id),
@@ -96,6 +97,15 @@ class SourceDetailScreen extends ConsumerWidget {
               onTap: () => _editCategory(context, ref, source),
             ),
             _DetailRow(
+              label: 'Show in Latest',
+              trailing: HsToggle(
+                value: !source.mutedInLatest,
+                onChanged: (show) => ref
+                    .read(sourceRepositoryProvider)
+                    .setMutedInLatest(source.id, muted: !show),
+              ),
+            ),
+            _DetailRow(
               label: 'Accent colour',
               trailing: Container(
                 width: 20,
@@ -108,7 +118,7 @@ class SourceDetailScreen extends ConsumerWidget {
               onTap: () => _editAccent(context, ref, source),
             ),
             _DetailRow(
-              label: 'Remove source',
+              label: 'Unsubscribe',
               muted: true,
               divider: false,
               onTap: () async {
@@ -141,13 +151,7 @@ class SourceDetailScreen extends ConsumerWidget {
             spacing: HsSpace.x2,
             runSpacing: HsSpace.x2,
             children: [
-              for (final category in {
-                ...existing,
-                'India',
-                'World',
-                'Technology',
-                'Business',
-              })
+              for (final category in {...existing, ...defaultCategories})
                 HsChip(
                   category,
                   selected: category == source.category,
@@ -259,7 +263,7 @@ class _NotResponding extends ConsumerWidget {
           const SizedBox(height: HsSpace.x4),
           HsButton(
             'Look for a new feed address',
-            onPressed: () => context.push('/sources/add'),
+            onPressed: () => context.push('/sources/add-url'),
             height: HsSize.buttonSmall,
           ),
           const SizedBox(height: HsSpace.x2),

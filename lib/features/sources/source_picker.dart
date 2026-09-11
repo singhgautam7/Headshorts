@@ -4,42 +4,64 @@ import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
-import 'package:headshorts/data/sources/starter_set.dart';
+import 'package:headshorts/data/sources/source_catalog.dart';
 
-/// The starter-set list, grouped by category with a toggle per source.
+/// The catalog as a picker, grouped by category with a Select all per group.
 ///
-/// Shared by onboarding and by the Sources screen, so both read identically.
+/// Shared by onboarding and by Sources, so both read identically. Rows are the
+/// design board's source row — accent dot, title, toggle at 44dp — and the
+/// group header gains one control rather than a new layout.
 class SourcePicker extends StatelessWidget {
   const new({
-    required this.sources,
+    required this.grouped,
     required this.chosen,
     required this.onToggle,
+    required this.onToggleCategory,
     this.alreadySubscribed = const {},
     this.padding = const EdgeInsets.symmetric(horizontal: HsSpace.x5),
+    this.leading,
     super.key,
   });
 
-  final List<StarterSource> sources;
+  final Map<String, List<CatalogSource>> grouped;
   final Set<String> chosen;
   final Set<String> alreadySubscribed;
   final ValueChanged<String> onToggle;
+
+  /// Selects or clears a whole category at once.
+  final void Function(String category, {required bool selected})
+  onToggleCategory;
+
   final EdgeInsets padding;
+
+  /// Sits above the list and scrolls with it — the search field, in practice.
+  final Widget? leading;
 
   @override
   Widget build(BuildContext context) {
-    final grouped = <String, List<StarterSource>>{};
-    for (final source in sources) {
-      grouped.putIfAbsent(source.category, () => []).add(source);
-    }
+    final palette = context.hs;
 
     return ListView(
       padding: padding,
       children: [
+        ?leading,
+        if (grouped.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: HsSpace.x6),
+            child: Text(
+              'Nothing here matches. You can add any site by its address once '
+              'you are in.',
+              style: HsType.caughtUpBody.copyWith(color: palette.textSecondary),
+            ),
+          ),
         for (final entry in grouped.entries) ...[
           const SizedBox(height: 22),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10),
-            child: SectionLabel(entry.key),
+          _GroupHeader(
+            category: entry.key,
+            sources: entry.value,
+            chosen: chosen,
+            alreadySubscribed: alreadySubscribed,
+            onToggleCategory: onToggleCategory,
           ),
           for (var i = 0; i < entry.value.length; i++)
             _PickerRow(
@@ -57,6 +79,62 @@ class SourcePicker extends StatelessWidget {
   }
 }
 
+class _GroupHeader extends StatelessWidget {
+  const new({
+    required this.category,
+    required this.sources,
+    required this.chosen,
+    required this.alreadySubscribed,
+    required this.onToggleCategory,
+  });
+
+  final String category;
+  final List<CatalogSource> sources;
+  final Set<String> chosen;
+  final Set<String> alreadySubscribed;
+  final void Function(String category, {required bool selected})
+  onToggleCategory;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+    final selectable = sources
+        .where((s) => !alreadySubscribed.contains(s.feedUrl))
+        .toList();
+    final allChosen =
+        selectable.isNotEmpty &&
+        selectable.every((s) => chosen.contains(s.feedUrl));
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(child: SectionLabel(category)),
+          if (selectable.isNotEmpty)
+            Pressable(
+              onTap: () => onToggleCategory(category, selected: !allChosen),
+              semanticLabel: allChosen
+                  ? 'Clear $category'
+                  : 'Select all in $category',
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: HsSpace.x2,
+                  vertical: HsSpace.x2,
+                ),
+                child: Text(
+                  allChosen ? 'Clear' : 'Select all',
+                  style: HsType.buttonSmall.copyWith(
+                    color: palette.textSecondary,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
 class _PickerRow extends StatelessWidget {
   const new({
     required this.source,
@@ -66,7 +144,7 @@ class _PickerRow extends StatelessWidget {
     required this.onToggle,
   });
 
-  final StarterSource source;
+  final CatalogSource source;
   final bool selected;
   final bool locked;
   final bool showDivider;
@@ -99,6 +177,8 @@ class _PickerRow extends StatelessWidget {
               Expanded(
                 child: Text(
                   source.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: HsType.row.copyWith(
                     color: selected
                         ? palette.textPrimary

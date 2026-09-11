@@ -122,6 +122,21 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, SourceRow> {
     requiredDuringInsert: false,
     defaultValue: const Constant(0),
   );
+  static const VerificationMeta _mutedInLatestMeta = const VerificationMeta(
+    'mutedInLatest',
+  );
+  @override
+  late final GeneratedColumn<bool> mutedInLatest = GeneratedColumn<bool>(
+    'muted_in_latest',
+    aliasedName,
+    false,
+    type: DriftSqlType.bool,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'CHECK ("muted_in_latest" IN (0, 1))',
+    ),
+    defaultValue: const Constant(false),
+  );
   static const VerificationMeta _etagMeta = const VerificationMeta('etag');
   @override
   late final GeneratedColumn<String> etag = GeneratedColumn<String>(
@@ -200,6 +215,7 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, SourceRow> {
     type,
     enabled,
     sortOrder,
+    mutedInLatest,
     etag,
     lastModified,
     lastFetchedAt,
@@ -281,6 +297,15 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, SourceRow> {
       context.handle(
         _sortOrderMeta,
         sortOrder.isAcceptableOrUnknown(data['sort_order']!, _sortOrderMeta),
+      );
+    }
+    if (data.containsKey('muted_in_latest')) {
+      context.handle(
+        _mutedInLatestMeta,
+        mutedInLatest.isAcceptableOrUnknown(
+          data['muted_in_latest']!,
+          _mutedInLatestMeta,
+        ),
       );
     }
     if (data.containsKey('etag')) {
@@ -379,6 +404,10 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, SourceRow> {
         DriftSqlType.int,
         data['${effectivePrefix}sort_order'],
       )!,
+      mutedInLatest: attachedDatabase.typeMapping.read(
+        DriftSqlType.bool,
+        data['${effectivePrefix}muted_in_latest'],
+      )!,
       etag: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}etag'],
@@ -429,6 +458,11 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
   final bool enabled;
   final int sortOrder;
 
+  /// Kept out of the merged Latest list, while still appearing under its own
+  /// category. For a firehose the reader wants, but not in with everything
+  /// else.
+  final bool mutedInLatest;
+
   /// Conditional-GET validators, so a refresh usually costs a 304.
   final String? etag;
   final String? lastModified;
@@ -450,6 +484,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     required this.type,
     required this.enabled,
     required this.sortOrder,
+    required this.mutedInLatest,
     this.etag,
     this.lastModified,
     this.lastFetchedAt,
@@ -474,6 +509,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     }
     map['enabled'] = Variable<bool>(enabled);
     map['sort_order'] = Variable<int>(sortOrder);
+    map['muted_in_latest'] = Variable<bool>(mutedInLatest);
     if (!nullToAbsent || etag != null) {
       map['etag'] = Variable<String>(etag);
     }
@@ -507,6 +543,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
       type: Value(type),
       enabled: Value(enabled),
       sortOrder: Value(sortOrder),
+      mutedInLatest: Value(mutedInLatest),
       etag: etag == null && nullToAbsent ? const Value.absent() : Value(etag),
       lastModified: lastModified == null && nullToAbsent
           ? const Value.absent()
@@ -542,6 +579,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
       ),
       enabled: serializer.fromJson<bool>(json['enabled']),
       sortOrder: serializer.fromJson<int>(json['sortOrder']),
+      mutedInLatest: serializer.fromJson<bool>(json['mutedInLatest']),
       etag: serializer.fromJson<String?>(json['etag']),
       lastModified: serializer.fromJson<String?>(json['lastModified']),
       lastFetchedAt: serializer.fromJson<DateTime?>(json['lastFetchedAt']),
@@ -566,6 +604,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
       ),
       'enabled': serializer.toJson<bool>(enabled),
       'sortOrder': serializer.toJson<int>(sortOrder),
+      'mutedInLatest': serializer.toJson<bool>(mutedInLatest),
       'etag': serializer.toJson<String?>(etag),
       'lastModified': serializer.toJson<String?>(lastModified),
       'lastFetchedAt': serializer.toJson<DateTime?>(lastFetchedAt),
@@ -586,6 +625,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     SourceType? type,
     bool? enabled,
     int? sortOrder,
+    bool? mutedInLatest,
     Value<String?> etag = const Value.absent(),
     Value<String?> lastModified = const Value.absent(),
     Value<DateTime?> lastFetchedAt = const Value.absent(),
@@ -603,6 +643,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     type: type ?? this.type,
     enabled: enabled ?? this.enabled,
     sortOrder: sortOrder ?? this.sortOrder,
+    mutedInLatest: mutedInLatest ?? this.mutedInLatest,
     etag: etag.present ? etag.value : this.etag,
     lastModified: lastModified.present ? lastModified.value : this.lastModified,
     lastFetchedAt: lastFetchedAt.present
@@ -628,6 +669,9 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
       type: data.type.present ? data.type.value : this.type,
       enabled: data.enabled.present ? data.enabled.value : this.enabled,
       sortOrder: data.sortOrder.present ? data.sortOrder.value : this.sortOrder,
+      mutedInLatest: data.mutedInLatest.present
+          ? data.mutedInLatest.value
+          : this.mutedInLatest,
       etag: data.etag.present ? data.etag.value : this.etag,
       lastModified: data.lastModified.present
           ? data.lastModified.value
@@ -656,6 +700,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
           ..write('type: $type, ')
           ..write('enabled: $enabled, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('mutedInLatest: $mutedInLatest, ')
           ..write('etag: $etag, ')
           ..write('lastModified: $lastModified, ')
           ..write('lastFetchedAt: $lastFetchedAt, ')
@@ -678,6 +723,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     type,
     enabled,
     sortOrder,
+    mutedInLatest,
     etag,
     lastModified,
     lastFetchedAt,
@@ -699,6 +745,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
           other.type == this.type &&
           other.enabled == this.enabled &&
           other.sortOrder == this.sortOrder &&
+          other.mutedInLatest == this.mutedInLatest &&
           other.etag == this.etag &&
           other.lastModified == this.lastModified &&
           other.lastFetchedAt == this.lastFetchedAt &&
@@ -718,6 +765,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
   final Value<SourceType> type;
   final Value<bool> enabled;
   final Value<int> sortOrder;
+  final Value<bool> mutedInLatest;
   final Value<String?> etag;
   final Value<String?> lastModified;
   final Value<DateTime?> lastFetchedAt;
@@ -735,6 +783,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     this.type = const Value.absent(),
     this.enabled = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.mutedInLatest = const Value.absent(),
     this.etag = const Value.absent(),
     this.lastModified = const Value.absent(),
     this.lastFetchedAt = const Value.absent(),
@@ -753,6 +802,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     required SourceType type,
     this.enabled = const Value.absent(),
     this.sortOrder = const Value.absent(),
+    this.mutedInLatest = const Value.absent(),
     this.etag = const Value.absent(),
     this.lastModified = const Value.absent(),
     this.lastFetchedAt = const Value.absent(),
@@ -776,6 +826,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     Expression<String>? type,
     Expression<bool>? enabled,
     Expression<int>? sortOrder,
+    Expression<bool>? mutedInLatest,
     Expression<String>? etag,
     Expression<String>? lastModified,
     Expression<DateTime>? lastFetchedAt,
@@ -794,6 +845,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
       if (type != null) 'type': type,
       if (enabled != null) 'enabled': enabled,
       if (sortOrder != null) 'sort_order': sortOrder,
+      if (mutedInLatest != null) 'muted_in_latest': mutedInLatest,
       if (etag != null) 'etag': etag,
       if (lastModified != null) 'last_modified': lastModified,
       if (lastFetchedAt != null) 'last_fetched_at': lastFetchedAt,
@@ -814,6 +866,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     Value<SourceType>? type,
     Value<bool>? enabled,
     Value<int>? sortOrder,
+    Value<bool>? mutedInLatest,
     Value<String?>? etag,
     Value<String?>? lastModified,
     Value<DateTime?>? lastFetchedAt,
@@ -832,6 +885,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
       type: type ?? this.type,
       enabled: enabled ?? this.enabled,
       sortOrder: sortOrder ?? this.sortOrder,
+      mutedInLatest: mutedInLatest ?? this.mutedInLatest,
       etag: etag ?? this.etag,
       lastModified: lastModified ?? this.lastModified,
       lastFetchedAt: lastFetchedAt ?? this.lastFetchedAt,
@@ -876,6 +930,9 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     if (sortOrder.present) {
       map['sort_order'] = Variable<int>(sortOrder.value);
     }
+    if (mutedInLatest.present) {
+      map['muted_in_latest'] = Variable<bool>(mutedInLatest.value);
+    }
     if (etag.present) {
       map['etag'] = Variable<String>(etag.value);
     }
@@ -910,6 +967,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
           ..write('type: $type, ')
           ..write('enabled: $enabled, ')
           ..write('sortOrder: $sortOrder, ')
+          ..write('mutedInLatest: $mutedInLatest, ')
           ..write('etag: $etag, ')
           ..write('lastModified: $lastModified, ')
           ..write('lastFetchedAt: $lastFetchedAt, ')
@@ -1014,6 +1072,30 @@ class $ArticlesTable extends Articles
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _canonicalUrlMeta = const VerificationMeta(
+    'canonicalUrl',
+  );
+  @override
+  late final GeneratedColumn<String> canonicalUrl = GeneratedColumn<String>(
+    'canonical_url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _titleKeyMeta = const VerificationMeta(
+    'titleKey',
+  );
+  @override
+  late final GeneratedColumn<String> titleKey = GeneratedColumn<String>(
+    'title_key',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
   static const VerificationMeta _authorMeta = const VerificationMeta('author');
   @override
   late final GeneratedColumn<String> author = GeneratedColumn<String>(
@@ -1057,33 +1139,33 @@ class $ArticlesTable extends Articles
     requiredDuringInsert: false,
     defaultValue: currentDateAndTime,
   );
-  static const VerificationMeta _readInReelMeta = const VerificationMeta(
-    'readInReel',
+  static const VerificationMeta _seenInLingerMeta = const VerificationMeta(
+    'seenInLinger',
   );
   @override
-  late final GeneratedColumn<bool> readInReel = GeneratedColumn<bool>(
-    'read_in_reel',
+  late final GeneratedColumn<bool> seenInLinger = GeneratedColumn<bool>(
+    'seen_in_linger',
     aliasedName,
     false,
     type: DriftSqlType.bool,
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("read_in_reel" IN (0, 1))',
+      'CHECK ("seen_in_linger" IN (0, 1))',
     ),
     defaultValue: const Constant(false),
   );
-  static const VerificationMeta _readInFullMeta = const VerificationMeta(
-    'readInFull',
+  static const VerificationMeta _readFullMeta = const VerificationMeta(
+    'readFull',
   );
   @override
-  late final GeneratedColumn<bool> readInFull = GeneratedColumn<bool>(
-    'read_in_full',
+  late final GeneratedColumn<bool> readFull = GeneratedColumn<bool>(
+    'read_full',
     aliasedName,
     false,
     type: DriftSqlType.bool,
     requiredDuringInsert: false,
     defaultConstraints: GeneratedColumn.constraintIsAlways(
-      'CHECK ("read_in_full" IN (0, 1))',
+      'CHECK ("read_full" IN (0, 1))',
     ),
     defaultValue: const Constant(false),
   );
@@ -1097,12 +1179,14 @@ class $ArticlesTable extends Articles
     contentSnippet,
     fullContentHtml,
     link,
+    canonicalUrl,
+    titleKey,
     author,
     publishedAt,
     imageUrl,
     fetchedAt,
-    readInReel,
-    readInFull,
+    seenInLinger,
+    readFull,
   ];
   @override
   String get aliasedName => _alias ?? actualTableName;
@@ -1175,6 +1259,21 @@ class $ArticlesTable extends Articles
     } else if (isInserting) {
       context.missing(_linkMeta);
     }
+    if (data.containsKey('canonical_url')) {
+      context.handle(
+        _canonicalUrlMeta,
+        canonicalUrl.isAcceptableOrUnknown(
+          data['canonical_url']!,
+          _canonicalUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('title_key')) {
+      context.handle(
+        _titleKeyMeta,
+        titleKey.isAcceptableOrUnknown(data['title_key']!, _titleKeyMeta),
+      );
+    }
     if (data.containsKey('author')) {
       context.handle(
         _authorMeta,
@@ -1204,22 +1303,19 @@ class $ArticlesTable extends Articles
         fetchedAt.isAcceptableOrUnknown(data['fetched_at']!, _fetchedAtMeta),
       );
     }
-    if (data.containsKey('read_in_reel')) {
+    if (data.containsKey('seen_in_linger')) {
       context.handle(
-        _readInReelMeta,
-        readInReel.isAcceptableOrUnknown(
-          data['read_in_reel']!,
-          _readInReelMeta,
+        _seenInLingerMeta,
+        seenInLinger.isAcceptableOrUnknown(
+          data['seen_in_linger']!,
+          _seenInLingerMeta,
         ),
       );
     }
-    if (data.containsKey('read_in_full')) {
+    if (data.containsKey('read_full')) {
       context.handle(
-        _readInFullMeta,
-        readInFull.isAcceptableOrUnknown(
-          data['read_in_full']!,
-          _readInFullMeta,
-        ),
+        _readFullMeta,
+        readFull.isAcceptableOrUnknown(data['read_full']!, _readFullMeta),
       );
     }
     return context;
@@ -1267,6 +1363,14 @@ class $ArticlesTable extends Articles
         DriftSqlType.string,
         data['${effectivePrefix}link'],
       )!,
+      canonicalUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}canonical_url'],
+      )!,
+      titleKey: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title_key'],
+      )!,
       author: attachedDatabase.typeMapping.read(
         DriftSqlType.string,
         data['${effectivePrefix}author'],
@@ -1283,13 +1387,13 @@ class $ArticlesTable extends Articles
         DriftSqlType.dateTime,
         data['${effectivePrefix}fetched_at'],
       )!,
-      readInReel: attachedDatabase.typeMapping.read(
+      seenInLinger: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
-        data['${effectivePrefix}read_in_reel'],
+        data['${effectivePrefix}seen_in_linger'],
       )!,
-      readInFull: attachedDatabase.typeMapping.read(
+      readFull: attachedDatabase.typeMapping.read(
         DriftSqlType.bool,
-        data['${effectivePrefix}read_in_full'],
+        data['${effectivePrefix}read_full'],
       )!,
     );
   }
@@ -1314,14 +1418,28 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
   /// it. Null means the Reader must extract, or degrade to the publisher.
   final String? fullContentHtml;
   final String link;
+
+  /// The link reduced to the story's identity — tracking parameters stripped,
+  /// aggregator redirects unwrapped. Two feeds carrying the same article agree
+  /// on this, which is what makes cross-feed dedup and shared read state work.
+  final String canonicalUrl;
+
+  /// A loose fingerprint of the headline, for the same story filed under two
+  /// slightly different titles. Empty when the title is too short to be sure.
+  final String titleKey;
   final String? author;
   final DateTime publishedAt;
   final String? imageUrl;
   final DateTime fetchedAt;
 
-  /// Silent read state. Never surfaced as a count.
-  final bool readInReel;
-  final bool readInFull;
+  /// The card settled as the active card in Linger. Set there and nowhere
+  /// else: it keeps an item from coming back round in Linger, and has no
+  /// effect on Today at all.
+  final bool seenInLinger;
+
+  /// The reader opened the full article, from Today or from Linger. The only
+  /// thing that counts as having read something.
+  final bool readFull;
   const ArticleRow({
     required this.id,
     required this.sourceId,
@@ -1331,12 +1449,14 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
     this.contentSnippet,
     this.fullContentHtml,
     required this.link,
+    required this.canonicalUrl,
+    required this.titleKey,
     this.author,
     required this.publishedAt,
     this.imageUrl,
     required this.fetchedAt,
-    required this.readInReel,
-    required this.readInFull,
+    required this.seenInLinger,
+    required this.readFull,
   });
   @override
   Map<String, Expression> toColumns(bool nullToAbsent) {
@@ -1355,6 +1475,8 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
       map['full_content_html'] = Variable<String>(fullContentHtml);
     }
     map['link'] = Variable<String>(link);
+    map['canonical_url'] = Variable<String>(canonicalUrl);
+    map['title_key'] = Variable<String>(titleKey);
     if (!nullToAbsent || author != null) {
       map['author'] = Variable<String>(author);
     }
@@ -1363,8 +1485,8 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
       map['image_url'] = Variable<String>(imageUrl);
     }
     map['fetched_at'] = Variable<DateTime>(fetchedAt);
-    map['read_in_reel'] = Variable<bool>(readInReel);
-    map['read_in_full'] = Variable<bool>(readInFull);
+    map['seen_in_linger'] = Variable<bool>(seenInLinger);
+    map['read_full'] = Variable<bool>(readFull);
     return map;
   }
 
@@ -1384,6 +1506,8 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
           ? const Value.absent()
           : Value(fullContentHtml),
       link: Value(link),
+      canonicalUrl: Value(canonicalUrl),
+      titleKey: Value(titleKey),
       author: author == null && nullToAbsent
           ? const Value.absent()
           : Value(author),
@@ -1392,8 +1516,8 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
           ? const Value.absent()
           : Value(imageUrl),
       fetchedAt: Value(fetchedAt),
-      readInReel: Value(readInReel),
-      readInFull: Value(readInFull),
+      seenInLinger: Value(seenInLinger),
+      readFull: Value(readFull),
     );
   }
 
@@ -1411,12 +1535,14 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
       contentSnippet: serializer.fromJson<String?>(json['contentSnippet']),
       fullContentHtml: serializer.fromJson<String?>(json['fullContentHtml']),
       link: serializer.fromJson<String>(json['link']),
+      canonicalUrl: serializer.fromJson<String>(json['canonicalUrl']),
+      titleKey: serializer.fromJson<String>(json['titleKey']),
       author: serializer.fromJson<String?>(json['author']),
       publishedAt: serializer.fromJson<DateTime>(json['publishedAt']),
       imageUrl: serializer.fromJson<String?>(json['imageUrl']),
       fetchedAt: serializer.fromJson<DateTime>(json['fetchedAt']),
-      readInReel: serializer.fromJson<bool>(json['readInReel']),
-      readInFull: serializer.fromJson<bool>(json['readInFull']),
+      seenInLinger: serializer.fromJson<bool>(json['seenInLinger']),
+      readFull: serializer.fromJson<bool>(json['readFull']),
     );
   }
   @override
@@ -1431,12 +1557,14 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
       'contentSnippet': serializer.toJson<String?>(contentSnippet),
       'fullContentHtml': serializer.toJson<String?>(fullContentHtml),
       'link': serializer.toJson<String>(link),
+      'canonicalUrl': serializer.toJson<String>(canonicalUrl),
+      'titleKey': serializer.toJson<String>(titleKey),
       'author': serializer.toJson<String?>(author),
       'publishedAt': serializer.toJson<DateTime>(publishedAt),
       'imageUrl': serializer.toJson<String?>(imageUrl),
       'fetchedAt': serializer.toJson<DateTime>(fetchedAt),
-      'readInReel': serializer.toJson<bool>(readInReel),
-      'readInFull': serializer.toJson<bool>(readInFull),
+      'seenInLinger': serializer.toJson<bool>(seenInLinger),
+      'readFull': serializer.toJson<bool>(readFull),
     };
   }
 
@@ -1449,12 +1577,14 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
     Value<String?> contentSnippet = const Value.absent(),
     Value<String?> fullContentHtml = const Value.absent(),
     String? link,
+    String? canonicalUrl,
+    String? titleKey,
     Value<String?> author = const Value.absent(),
     DateTime? publishedAt,
     Value<String?> imageUrl = const Value.absent(),
     DateTime? fetchedAt,
-    bool? readInReel,
-    bool? readInFull,
+    bool? seenInLinger,
+    bool? readFull,
   }) => ArticleRow(
     id: id ?? this.id,
     sourceId: sourceId ?? this.sourceId,
@@ -1468,12 +1598,14 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
         ? fullContentHtml.value
         : this.fullContentHtml,
     link: link ?? this.link,
+    canonicalUrl: canonicalUrl ?? this.canonicalUrl,
+    titleKey: titleKey ?? this.titleKey,
     author: author.present ? author.value : this.author,
     publishedAt: publishedAt ?? this.publishedAt,
     imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
     fetchedAt: fetchedAt ?? this.fetchedAt,
-    readInReel: readInReel ?? this.readInReel,
-    readInFull: readInFull ?? this.readInFull,
+    seenInLinger: seenInLinger ?? this.seenInLinger,
+    readFull: readFull ?? this.readFull,
   );
   ArticleRow copyWithCompanion(ArticlesCompanion data) {
     return ArticleRow(
@@ -1489,18 +1621,20 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
           ? data.fullContentHtml.value
           : this.fullContentHtml,
       link: data.link.present ? data.link.value : this.link,
+      canonicalUrl: data.canonicalUrl.present
+          ? data.canonicalUrl.value
+          : this.canonicalUrl,
+      titleKey: data.titleKey.present ? data.titleKey.value : this.titleKey,
       author: data.author.present ? data.author.value : this.author,
       publishedAt: data.publishedAt.present
           ? data.publishedAt.value
           : this.publishedAt,
       imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
       fetchedAt: data.fetchedAt.present ? data.fetchedAt.value : this.fetchedAt,
-      readInReel: data.readInReel.present
-          ? data.readInReel.value
-          : this.readInReel,
-      readInFull: data.readInFull.present
-          ? data.readInFull.value
-          : this.readInFull,
+      seenInLinger: data.seenInLinger.present
+          ? data.seenInLinger.value
+          : this.seenInLinger,
+      readFull: data.readFull.present ? data.readFull.value : this.readFull,
     );
   }
 
@@ -1515,12 +1649,14 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
           ..write('contentSnippet: $contentSnippet, ')
           ..write('fullContentHtml: $fullContentHtml, ')
           ..write('link: $link, ')
+          ..write('canonicalUrl: $canonicalUrl, ')
+          ..write('titleKey: $titleKey, ')
           ..write('author: $author, ')
           ..write('publishedAt: $publishedAt, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('fetchedAt: $fetchedAt, ')
-          ..write('readInReel: $readInReel, ')
-          ..write('readInFull: $readInFull')
+          ..write('seenInLinger: $seenInLinger, ')
+          ..write('readFull: $readFull')
           ..write(')'))
         .toString();
   }
@@ -1535,12 +1671,14 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
     contentSnippet,
     fullContentHtml,
     link,
+    canonicalUrl,
+    titleKey,
     author,
     publishedAt,
     imageUrl,
     fetchedAt,
-    readInReel,
-    readInFull,
+    seenInLinger,
+    readFull,
   );
   @override
   bool operator ==(Object other) =>
@@ -1554,12 +1692,14 @@ class ArticleRow extends DataClass implements Insertable<ArticleRow> {
           other.contentSnippet == this.contentSnippet &&
           other.fullContentHtml == this.fullContentHtml &&
           other.link == this.link &&
+          other.canonicalUrl == this.canonicalUrl &&
+          other.titleKey == this.titleKey &&
           other.author == this.author &&
           other.publishedAt == this.publishedAt &&
           other.imageUrl == this.imageUrl &&
           other.fetchedAt == this.fetchedAt &&
-          other.readInReel == this.readInReel &&
-          other.readInFull == this.readInFull);
+          other.seenInLinger == this.seenInLinger &&
+          other.readFull == this.readFull);
 }
 
 class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
@@ -1571,12 +1711,14 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
   final Value<String?> contentSnippet;
   final Value<String?> fullContentHtml;
   final Value<String> link;
+  final Value<String> canonicalUrl;
+  final Value<String> titleKey;
   final Value<String?> author;
   final Value<DateTime> publishedAt;
   final Value<String?> imageUrl;
   final Value<DateTime> fetchedAt;
-  final Value<bool> readInReel;
-  final Value<bool> readInFull;
+  final Value<bool> seenInLinger;
+  final Value<bool> readFull;
   const ArticlesCompanion({
     this.id = const Value.absent(),
     this.sourceId = const Value.absent(),
@@ -1586,12 +1728,14 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
     this.contentSnippet = const Value.absent(),
     this.fullContentHtml = const Value.absent(),
     this.link = const Value.absent(),
+    this.canonicalUrl = const Value.absent(),
+    this.titleKey = const Value.absent(),
     this.author = const Value.absent(),
     this.publishedAt = const Value.absent(),
     this.imageUrl = const Value.absent(),
     this.fetchedAt = const Value.absent(),
-    this.readInReel = const Value.absent(),
-    this.readInFull = const Value.absent(),
+    this.seenInLinger = const Value.absent(),
+    this.readFull = const Value.absent(),
   });
   ArticlesCompanion.insert({
     this.id = const Value.absent(),
@@ -1602,12 +1746,14 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
     this.contentSnippet = const Value.absent(),
     this.fullContentHtml = const Value.absent(),
     required String link,
+    this.canonicalUrl = const Value.absent(),
+    this.titleKey = const Value.absent(),
     this.author = const Value.absent(),
     required DateTime publishedAt,
     this.imageUrl = const Value.absent(),
     this.fetchedAt = const Value.absent(),
-    this.readInReel = const Value.absent(),
-    this.readInFull = const Value.absent(),
+    this.seenInLinger = const Value.absent(),
+    this.readFull = const Value.absent(),
   }) : sourceId = Value(sourceId),
        guid = Value(guid),
        title = Value(title),
@@ -1622,12 +1768,14 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
     Expression<String>? contentSnippet,
     Expression<String>? fullContentHtml,
     Expression<String>? link,
+    Expression<String>? canonicalUrl,
+    Expression<String>? titleKey,
     Expression<String>? author,
     Expression<DateTime>? publishedAt,
     Expression<String>? imageUrl,
     Expression<DateTime>? fetchedAt,
-    Expression<bool>? readInReel,
-    Expression<bool>? readInFull,
+    Expression<bool>? seenInLinger,
+    Expression<bool>? readFull,
   }) {
     return RawValuesInsertable({
       if (id != null) 'id': id,
@@ -1638,12 +1786,14 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
       if (contentSnippet != null) 'content_snippet': contentSnippet,
       if (fullContentHtml != null) 'full_content_html': fullContentHtml,
       if (link != null) 'link': link,
+      if (canonicalUrl != null) 'canonical_url': canonicalUrl,
+      if (titleKey != null) 'title_key': titleKey,
       if (author != null) 'author': author,
       if (publishedAt != null) 'published_at': publishedAt,
       if (imageUrl != null) 'image_url': imageUrl,
       if (fetchedAt != null) 'fetched_at': fetchedAt,
-      if (readInReel != null) 'read_in_reel': readInReel,
-      if (readInFull != null) 'read_in_full': readInFull,
+      if (seenInLinger != null) 'seen_in_linger': seenInLinger,
+      if (readFull != null) 'read_full': readFull,
     });
   }
 
@@ -1656,12 +1806,14 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
     Value<String?>? contentSnippet,
     Value<String?>? fullContentHtml,
     Value<String>? link,
+    Value<String>? canonicalUrl,
+    Value<String>? titleKey,
     Value<String?>? author,
     Value<DateTime>? publishedAt,
     Value<String?>? imageUrl,
     Value<DateTime>? fetchedAt,
-    Value<bool>? readInReel,
-    Value<bool>? readInFull,
+    Value<bool>? seenInLinger,
+    Value<bool>? readFull,
   }) {
     return ArticlesCompanion(
       id: id ?? this.id,
@@ -1672,12 +1824,14 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
       contentSnippet: contentSnippet ?? this.contentSnippet,
       fullContentHtml: fullContentHtml ?? this.fullContentHtml,
       link: link ?? this.link,
+      canonicalUrl: canonicalUrl ?? this.canonicalUrl,
+      titleKey: titleKey ?? this.titleKey,
       author: author ?? this.author,
       publishedAt: publishedAt ?? this.publishedAt,
       imageUrl: imageUrl ?? this.imageUrl,
       fetchedAt: fetchedAt ?? this.fetchedAt,
-      readInReel: readInReel ?? this.readInReel,
-      readInFull: readInFull ?? this.readInFull,
+      seenInLinger: seenInLinger ?? this.seenInLinger,
+      readFull: readFull ?? this.readFull,
     );
   }
 
@@ -1708,6 +1862,12 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
     if (link.present) {
       map['link'] = Variable<String>(link.value);
     }
+    if (canonicalUrl.present) {
+      map['canonical_url'] = Variable<String>(canonicalUrl.value);
+    }
+    if (titleKey.present) {
+      map['title_key'] = Variable<String>(titleKey.value);
+    }
     if (author.present) {
       map['author'] = Variable<String>(author.value);
     }
@@ -1720,11 +1880,11 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
     if (fetchedAt.present) {
       map['fetched_at'] = Variable<DateTime>(fetchedAt.value);
     }
-    if (readInReel.present) {
-      map['read_in_reel'] = Variable<bool>(readInReel.value);
+    if (seenInLinger.present) {
+      map['seen_in_linger'] = Variable<bool>(seenInLinger.value);
     }
-    if (readInFull.present) {
-      map['read_in_full'] = Variable<bool>(readInFull.value);
+    if (readFull.present) {
+      map['read_full'] = Variable<bool>(readFull.value);
     }
     return map;
   }
@@ -1740,12 +1900,14 @@ class ArticlesCompanion extends UpdateCompanion<ArticleRow> {
           ..write('contentSnippet: $contentSnippet, ')
           ..write('fullContentHtml: $fullContentHtml, ')
           ..write('link: $link, ')
+          ..write('canonicalUrl: $canonicalUrl, ')
+          ..write('titleKey: $titleKey, ')
           ..write('author: $author, ')
           ..write('publishedAt: $publishedAt, ')
           ..write('imageUrl: $imageUrl, ')
           ..write('fetchedAt: $fetchedAt, ')
-          ..write('readInReel: $readInReel, ')
-          ..write('readInFull: $readInFull')
+          ..write('seenInLinger: $seenInLinger, ')
+          ..write('readFull: $readFull')
           ..write(')'))
         .toString();
   }
@@ -2299,6 +2461,7 @@ typedef $$SourcesTableCreateCompanionBuilder = SourcesCompanion Function({
   required SourceType type,
   Value<bool> enabled,
   Value<int> sortOrder,
+  Value<bool> mutedInLatest,
   Value<String?> etag,
   Value<String?> lastModified,
   Value<DateTime?> lastFetchedAt,
@@ -2317,6 +2480,7 @@ typedef $$SourcesTableUpdateCompanionBuilder = SourcesCompanion Function({
   Value<SourceType> type,
   Value<bool> enabled,
   Value<int> sortOrder,
+  Value<bool> mutedInLatest,
   Value<String?> etag,
   Value<String?> lastModified,
   Value<DateTime?> lastFetchedAt,
@@ -2405,6 +2569,11 @@ class $$SourcesTableFilterComposer
 
   ColumnFilters<int> get sortOrder => $composableBuilder(
     column: $table.sortOrder,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<bool> get mutedInLatest => $composableBuilder(
+    column: $table.mutedInLatest,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2523,6 +2692,11 @@ class $$SourcesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<bool> get mutedInLatest => $composableBuilder(
+    column: $table.mutedInLatest,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get etag => $composableBuilder(
     column: $table.etag,
     builder: (column) => ColumnOrderings(column),
@@ -2596,6 +2770,11 @@ class $$SourcesTableAnnotationComposer
 
   GeneratedColumn<int> get sortOrder =>
       $composableBuilder(column: $table.sortOrder, builder: (column) => column);
+
+  GeneratedColumn<bool> get mutedInLatest => $composableBuilder(
+    column: $table.mutedInLatest,
+    builder: (column) => column,
+  );
 
   GeneratedColumn<String> get etag =>
       $composableBuilder(column: $table.etag, builder: (column) => column);
@@ -2685,6 +2864,7 @@ class $$SourcesTableTableManager
                 Value<SourceType> type = const Value.absent(),
                 Value<bool> enabled = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<bool> mutedInLatest = const Value.absent(),
                 Value<String?> etag = const Value.absent(),
                 Value<String?> lastModified = const Value.absent(),
                 Value<DateTime?> lastFetchedAt = const Value.absent(),
@@ -2702,6 +2882,7 @@ class $$SourcesTableTableManager
                 type: type,
                 enabled: enabled,
                 sortOrder: sortOrder,
+                mutedInLatest: mutedInLatest,
                 etag: etag,
                 lastModified: lastModified,
                 lastFetchedAt: lastFetchedAt,
@@ -2721,6 +2902,7 @@ class $$SourcesTableTableManager
                 required SourceType type,
                 Value<bool> enabled = const Value.absent(),
                 Value<int> sortOrder = const Value.absent(),
+                Value<bool> mutedInLatest = const Value.absent(),
                 Value<String?> etag = const Value.absent(),
                 Value<String?> lastModified = const Value.absent(),
                 Value<DateTime?> lastFetchedAt = const Value.absent(),
@@ -2738,6 +2920,7 @@ class $$SourcesTableTableManager
                 type: type,
                 enabled: enabled,
                 sortOrder: sortOrder,
+                mutedInLatest: mutedInLatest,
                 etag: etag,
                 lastModified: lastModified,
                 lastFetchedAt: lastFetchedAt,
@@ -2806,12 +2989,14 @@ typedef $$ArticlesTableCreateCompanionBuilder = ArticlesCompanion Function({
   Value<String?> contentSnippet,
   Value<String?> fullContentHtml,
   required String link,
+  Value<String> canonicalUrl,
+  Value<String> titleKey,
   Value<String?> author,
   required DateTime publishedAt,
   Value<String?> imageUrl,
   Value<DateTime> fetchedAt,
-  Value<bool> readInReel,
-  Value<bool> readInFull,
+  Value<bool> seenInLinger,
+  Value<bool> readFull,
 });
 typedef $$ArticlesTableUpdateCompanionBuilder = ArticlesCompanion Function({
   Value<int> id,
@@ -2822,12 +3007,14 @@ typedef $$ArticlesTableUpdateCompanionBuilder = ArticlesCompanion Function({
   Value<String?> contentSnippet,
   Value<String?> fullContentHtml,
   Value<String> link,
+  Value<String> canonicalUrl,
+  Value<String> titleKey,
   Value<String?> author,
   Value<DateTime> publishedAt,
   Value<String?> imageUrl,
   Value<DateTime> fetchedAt,
-  Value<bool> readInReel,
-  Value<bool> readInFull,
+  Value<bool> seenInLinger,
+  Value<bool> readFull,
 });
 
 final class $$ArticlesTableReferences
@@ -2914,6 +3101,16 @@ class $$ArticlesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
+  ColumnFilters<String> get canonicalUrl => $composableBuilder(
+    column: $table.canonicalUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get titleKey => $composableBuilder(
+    column: $table.titleKey,
+    builder: (column) => ColumnFilters(column),
+  );
+
   ColumnFilters<String> get author => $composableBuilder(
     column: $table.author,
     builder: (column) => ColumnFilters(column),
@@ -2934,13 +3131,13 @@ class $$ArticlesTableFilterComposer
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<bool> get readInReel => $composableBuilder(
-    column: $table.readInReel,
+  ColumnFilters<bool> get seenInLinger => $composableBuilder(
+    column: $table.seenInLinger,
     builder: (column) => ColumnFilters(column),
   );
 
-  ColumnFilters<bool> get readInFull => $composableBuilder(
-    column: $table.readInFull,
+  ColumnFilters<bool> get readFull => $composableBuilder(
+    column: $table.readFull,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -3037,6 +3234,16 @@ class $$ArticlesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get canonicalUrl => $composableBuilder(
+    column: $table.canonicalUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get titleKey => $composableBuilder(
+    column: $table.titleKey,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<String> get author => $composableBuilder(
     column: $table.author,
     builder: (column) => ColumnOrderings(column),
@@ -3057,13 +3264,13 @@ class $$ArticlesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<bool> get readInReel => $composableBuilder(
-    column: $table.readInReel,
+  ColumnOrderings<bool> get seenInLinger => $composableBuilder(
+    column: $table.seenInLinger,
     builder: (column) => ColumnOrderings(column),
   );
 
-  ColumnOrderings<bool> get readInFull => $composableBuilder(
-    column: $table.readInFull,
+  ColumnOrderings<bool> get readFull => $composableBuilder(
+    column: $table.readFull,
     builder: (column) => ColumnOrderings(column),
   );
 
@@ -3125,6 +3332,14 @@ class $$ArticlesTableAnnotationComposer
   GeneratedColumn<String> get link =>
       $composableBuilder(column: $table.link, builder: (column) => column);
 
+  GeneratedColumn<String> get canonicalUrl => $composableBuilder(
+    column: $table.canonicalUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get titleKey =>
+      $composableBuilder(column: $table.titleKey, builder: (column) => column);
+
   GeneratedColumn<String> get author =>
       $composableBuilder(column: $table.author, builder: (column) => column);
 
@@ -3139,15 +3354,13 @@ class $$ArticlesTableAnnotationComposer
   GeneratedColumn<DateTime> get fetchedAt =>
       $composableBuilder(column: $table.fetchedAt, builder: (column) => column);
 
-  GeneratedColumn<bool> get readInReel => $composableBuilder(
-    column: $table.readInReel,
+  GeneratedColumn<bool> get seenInLinger => $composableBuilder(
+    column: $table.seenInLinger,
     builder: (column) => column,
   );
 
-  GeneratedColumn<bool> get readInFull => $composableBuilder(
-    column: $table.readInFull,
-    builder: (column) => column,
-  );
+  GeneratedColumn<bool> get readFull =>
+      $composableBuilder(column: $table.readFull, builder: (column) => column);
 
   $$SourcesTableAnnotationComposer get sourceId {
     final $$SourcesTableAnnotationComposer composer = $composerBuilder(
@@ -3234,12 +3447,14 @@ class $$ArticlesTableTableManager
                 Value<String?> contentSnippet = const Value.absent(),
                 Value<String?> fullContentHtml = const Value.absent(),
                 Value<String> link = const Value.absent(),
+                Value<String> canonicalUrl = const Value.absent(),
+                Value<String> titleKey = const Value.absent(),
                 Value<String?> author = const Value.absent(),
                 Value<DateTime> publishedAt = const Value.absent(),
                 Value<String?> imageUrl = const Value.absent(),
                 Value<DateTime> fetchedAt = const Value.absent(),
-                Value<bool> readInReel = const Value.absent(),
-                Value<bool> readInFull = const Value.absent(),
+                Value<bool> seenInLinger = const Value.absent(),
+                Value<bool> readFull = const Value.absent(),
               }) => ArticlesCompanion(
                 id: id,
                 sourceId: sourceId,
@@ -3249,12 +3464,14 @@ class $$ArticlesTableTableManager
                 contentSnippet: contentSnippet,
                 fullContentHtml: fullContentHtml,
                 link: link,
+                canonicalUrl: canonicalUrl,
+                titleKey: titleKey,
                 author: author,
                 publishedAt: publishedAt,
                 imageUrl: imageUrl,
                 fetchedAt: fetchedAt,
-                readInReel: readInReel,
-                readInFull: readInFull,
+                seenInLinger: seenInLinger,
+                readFull: readFull,
               ),
           createCompanionCallback:
               ({
@@ -3266,12 +3483,14 @@ class $$ArticlesTableTableManager
                 Value<String?> contentSnippet = const Value.absent(),
                 Value<String?> fullContentHtml = const Value.absent(),
                 required String link,
+                Value<String> canonicalUrl = const Value.absent(),
+                Value<String> titleKey = const Value.absent(),
                 Value<String?> author = const Value.absent(),
                 required DateTime publishedAt,
                 Value<String?> imageUrl = const Value.absent(),
                 Value<DateTime> fetchedAt = const Value.absent(),
-                Value<bool> readInReel = const Value.absent(),
-                Value<bool> readInFull = const Value.absent(),
+                Value<bool> seenInLinger = const Value.absent(),
+                Value<bool> readFull = const Value.absent(),
               }) => ArticlesCompanion.insert(
                 id: id,
                 sourceId: sourceId,
@@ -3281,12 +3500,14 @@ class $$ArticlesTableTableManager
                 contentSnippet: contentSnippet,
                 fullContentHtml: fullContentHtml,
                 link: link,
+                canonicalUrl: canonicalUrl,
+                titleKey: titleKey,
                 author: author,
                 publishedAt: publishedAt,
                 imageUrl: imageUrl,
                 fetchedAt: fetchedAt,
-                readInReel: readInReel,
-                readInFull: readInFull,
+                seenInLinger: seenInLinger,
+                readFull: readFull,
               ),
           withReferenceMapper: (p0) => p0
               .map(

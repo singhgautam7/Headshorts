@@ -84,6 +84,26 @@ class SourceRepository {
         SourcesCompanion(category: Value(category)),
       );
 
+  /// Keeps a source out of the merged Latest list while leaving it in its own
+  /// category. For a firehose the reader wants, but not in with everything
+  /// else.
+  Future<void> setMutedInLatest(int id, {required bool muted}) =>
+      (_db.update(_db.sources)..where((s) => s.id.equals(id))).write(
+        SourcesCompanion(mutedInLatest: Value(muted)),
+      );
+
+  /// Renames a category across every source in it, and returns how many moved.
+  ///
+  /// A category is only ever a label on a source, so this is the whole model:
+  /// renaming onto a name that already exists merges the two, and a name that
+  /// does not exist yet is created by using it.
+  Future<int> renameCategory(String from, String to) {
+    final name = to.trim();
+    if (name.isEmpty || name == from) return Future.value(0);
+    return (_db.update(_db.sources)..where((s) => s.category.equals(from)))
+        .write(SourcesCompanion(category: Value(name)));
+  }
+
   Future<void> reorder(List<int> idsInOrder) => _db.batch((b) {
     for (var i = 0; i < idsInOrder.length; i++) {
       b.update(

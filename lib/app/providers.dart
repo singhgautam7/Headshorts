@@ -11,6 +11,7 @@ import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/data/readability/extraction_service.dart';
 import 'package:headshorts/data/sources/rss_source_adapter.dart';
 import 'package:headshorts/data/sources/source_adapter.dart';
+import 'package:headshorts/data/sources/source_catalog.dart';
 
 /// Overridden in `main` once the store has loaded, so no screen ever has to
 /// wait on preferences.
@@ -64,4 +65,12 @@ final feedDiscoveryProvider = Provider<FeedDiscovery>(
 
 final extractionServiceProvider = Provider<ExtractionService>(
   (ref) => ExtractionService(ref.watch(httpClientProvider)),
+);
+
+/// The bundled catalog, parsed once per launch.
+///
+/// Nothing in it is subscribed: it is a directory to search, not a starting
+/// state. Subscribing happens in Sources, and only there.
+final sourceCatalogProvider = FutureProvider<SourceCatalog>(
+  (ref) => SourceCatalog.load(),
 );

@@ -11,8 +11,10 @@ import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
+import 'package:headshorts/core/widgets/info_button.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/data/feed/feed_discovery.dart';
+import 'package:headshorts/features/sources/opml_explainer.dart';
 import 'package:headshorts/features/today/today_controller.dart';
 
 /// Add a source by pasting a *site*, not a feed.
@@ -30,7 +32,7 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
   final _input = TextEditingController();
   List<DiscoveredFeed> _found = const [];
   Set<String> _chosen = {};
-  String _category = 'India';
+  String _category = defaultCategories.first;
   bool _searching = false;
   bool _searched = false;
 
@@ -89,7 +91,7 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
     }.toList();
 
     return PushedScreen(
-      title: 'Add a source',
+      title: 'Add by URL',
       onBack: () => context.pop(),
       child: ListView(
         padding: const EdgeInsets.fromLTRB(
@@ -110,6 +112,28 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
             _searching ? 'Looking…' : 'Find the feed',
             onPressed: _searching ? null : _search,
             kind: HsButtonKind.secondary,
+          ),
+          const SizedBox(height: HsSpace.x5),
+          // Always reachable: a reader who came here to bulk-import should
+          // not have to search for a site first.
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Pressable(
+                onTap: () => context.pushReplacement('/sources/opml'),
+                child: Text(
+                  'Or import an OPML file',
+                  style: HsType.timestamp.copyWith(color: palette.textMuted),
+                ),
+              ),
+              InfoButton(
+                semanticLabel: 'About OPML',
+                onTap: () => showOpmlExplainer(
+                  context,
+                  onImport: () => context.pushReplacement('/sources/opml'),
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: HsSpace.x5),
           if (_searched && !_searching && _found.isEmpty)
@@ -168,15 +192,6 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
               onPressed: _chosen.isEmpty ? null : _add,
             ),
             const SizedBox(height: HsSpace.x3),
-            Center(
-              child: Pressable(
-                onTap: () => context.pushReplacement('/sources/opml'),
-                child: Text(
-                  'Or import an OPML file',
-                  style: HsType.timestamp.copyWith(color: palette.textMuted),
-                ),
-              ),
-            ),
           ],
         ],
       ),

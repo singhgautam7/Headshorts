@@ -3,6 +3,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
+import 'package:headshorts/core/tokens/oklab.dart';
 import 'package:headshorts/core/tokens/palette.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
@@ -279,16 +280,16 @@ class HsChip extends StatelessWidget {
 
 /// The accent wash: 15% over black, 7% over paper. Restrained by design — it
 /// tints a ground, it never becomes one.
-Color accentWash(Color accent, HsPalette palette) => Color.alphaBlend(
-  accent.withValues(alpha: palette.isDark ? 0.15 : 0.07),
-  palette.background,
-);
+///
+/// Mixed in oklab, as the design board writes it. In sRGB the same 15% comes
+/// out about three times brighter on black, which is the difference between a
+/// whisper of hue and a coloured card.
+Color accentWash(Color accent, HsPalette palette) =>
+    Oklab.mix(accent, palette.background, palette.isDark ? 0.15 : 0.07);
 
 /// The softer wash, used where two accented surfaces sit next to each other.
-Color accentWashSoft(Color accent, HsPalette palette) => Color.alphaBlend(
-  accent.withValues(alpha: palette.isDark ? 0.08 : 0.04),
-  palette.background,
-);
+Color accentWashSoft(Color accent, HsPalette palette) =>
+    Oklab.mix(accent, palette.background, palette.isDark ? 0.08 : 0.04);
 
 /// A hairline rule at divider strength.
 class HsDivider extends StatelessWidget {

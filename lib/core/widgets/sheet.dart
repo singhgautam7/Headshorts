@@ -80,5 +80,8 @@ Future<T?> showHsSheet<T>(BuildContext context, WidgetBuilder builder) =>
       barrierColor: context.hs.scrim,
       elevation: 0,
       isScrollControlled: true,
+      // Above the shell, so the floating nav pill does not sit on top of the
+      // sheet's own actions.
+      useRootNavigator: true,
       builder: builder,
     );

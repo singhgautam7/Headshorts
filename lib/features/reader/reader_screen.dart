@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_widget_from_html_core/flutter_widget_from_html_core.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
@@ -19,8 +18,8 @@ import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/db/tables.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/data/readability/extraction_service.dart';
+import 'package:headshorts/features/reader/article_body.dart';
 import 'package:headshorts/features/reader/reader_controller.dart';
-import 'package:html/dom.dart' as dom;
 
 /// The in-app full article.
 ///
@@ -45,10 +44,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      // Opening the full article is the only thing in the app that counts as
+      // reading it — from Today or from Linger alike.
       unawaited(
         ref
             .read(articleRepositoryProvider)
-            .markRead(widget.articleId, mode: ReadMode.full),
+            .mark(widget.articleId, mode: ReadMode.full),
       );
     });
   }
@@ -60,7 +61,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     unawaited(
       ref
           .read(articleRepositoryProvider)
-          .markRead(
+          .mark(
             widget.articleId,
             mode: ReadMode.full,
             dwell: DateTime.now().difference(_opened),
@@ -127,6 +128,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                     const SizedBox(height: 18),
                     const HsDivider(),
                     const SizedBox(height: 18),
+                    // A lead image from the feed. Extraction does not always
+                    // carry a publisher's figures into the article body, and
+                    // an article that had a picture should still show one.
+                    if (article.imageUrl != null &&
+                        !_bodyHasImage(extraction.value))
+                      _LeadImage(
+                        url: article.imageUrl!,
+                        articleUrl: article.link,
+                      ),
                     ...switch (extraction) {
                       AsyncData(:final value) => _body(
                         context,
@@ -171,20 +181,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     String link,
   ) {
     final palette = context.hs;
+    final linkMode = ref.read(settingsProvider).linkOpenMode;
 
     return switch (extraction) {
       ExtractedArticle(:final html) => [
-        HtmlWidget(
-          html,
-          textStyle: HsType.readerBody(size.fontSize)
-              .copyWith(color: palette.textPrimary),
-          onTapUrl: openInWeb,
-          customWidgetBuilder: _inlineImage,
-          customStylesBuilder: (element) => switch (element.localName) {
-            'a' => {'color': _hex(palette.textSecondary)},
-            'blockquote' => {'margin': '16px 0', 'padding-left': '16px'},
-            _ => null,
-          },
+        ArticleBody(
+          html: html,
+          articleUrl: link,
+          bodySize: size.fontSize,
+          linkMode: linkMode,
         ),
       ],
       // Graceful degradation: keep whatever the feed gave, say plainly that
@@ -230,34 +235,34 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     };
   }
 
-  /// Renders an inline article image, and collapses it entirely when the
-  /// publisher will not serve it. A blank rectangle where a photograph should
-  /// be is worse than no photograph.
-  Widget? _inlineImage(dom.Element element) {
-    if (element.localName != 'img') return null;
-    final src = element.attributes['src'];
-    if (src == null || src.isEmpty || src.startsWith('data:')) {
-      return const SizedBox.shrink();
-    }
+  /// Whether the extracted body already carries a picture of its own.
+  static bool _bodyHasImage(Extraction? extraction) =>
+      extraction is ExtractedArticle && extraction.html.contains('<img');
+}
 
-    return Builder(
-      builder: (context) => Padding(
-        padding: const EdgeInsets.symmetric(vertical: HsSpace.x2),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: CachedNetworkImage(
-            imageUrl: src,
-            fit: BoxFit.cover,
-            placeholder: (_, _) => const SizedBox.shrink(),
-            errorWidget: (_, _, _) => const SizedBox.shrink(),
-          ),
-        ),
+/// The article's own picture, above the body.
+///
+/// Fails quietly: a publisher that will not serve its image leaves the article
+/// looking like an article without one, rather than like a broken page.
+class _LeadImage extends StatelessWidget {
+  const new({required this.url, required this.articleUrl});
+
+  final String url;
+  final String articleUrl;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(bottom: 18),
+    child: ClipRRect(
+      borderRadius: BorderRadius.circular(14),
+      child: CachedNetworkImage(
+        imageUrl: url,
+        httpHeaders: ExtractionService.imageHeaders(articleUrl),
+        placeholder: (_, _) => const SizedBox.shrink(),
+        errorWidget: (_, _, _) => const SizedBox.shrink(),
       ),
-    );
-  }
-
-  static String _hex(Color color) =>
-      '#${color.toARGB32().toRadixString(16).padLeft(8, '0').substring(2)}';
+    ),
+  );
 }
 
 class _Bar extends StatelessWidget {

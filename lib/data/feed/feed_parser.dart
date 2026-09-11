@@ -101,7 +101,7 @@ abstract final class FeedParser {
           summary: _snippet(item.summary),
           contentSnippet: _snippet(content ?? item.summary),
           fullContentHtml: _fullContent(content),
-          author: item.authors.isEmpty ? null : item.authors.first.name,
+          author: _text(item.authors.firstOrNull?.name),
           imageUrl: item.media?.thumbnails.firstOrNull?.url,
         ),
       );
@@ -146,19 +146,36 @@ abstract final class FeedParser {
     return text.isEmpty ? null : text;
   }
 
-  /// Strips markup and collapses whitespace — feeds routinely put HTML in
-  /// fields that are meant to be plain text.
-  static String plainText(String html) =>
-      html_parser
-          .parseFragment(html)
-          .text
-          ?.replaceAll(RegExp(r'\s+'), ' ')
-          .trim() ??
-      '';
+  /// Strips markup, decodes entities and collapses whitespace — feeds
+  /// routinely put HTML in fields that are meant to be plain text.
+  ///
+  /// Entities are decoded until the text stops changing, at most [_maxDecodes]
+  /// times. Publishers that escape an already-escaped field ship `&amp;amp;`,
+  /// and one pass leaves a visible `&amp;` in the headline.
+  static String plainText(String html) {
+    var text = html;
+    for (var pass = 0; pass < _maxDecodes; pass++) {
+      final decoded = html_parser.parseFragment(text).text ?? '';
+      if (decoded == text) break;
+      text = decoded;
+      if (!_entity.hasMatch(text)) break;
+    }
+    return text.replaceAll(RegExp(r'\s+'), ' ').trim();
+  }
 
+  /// Two rounds handles single and double encoding. A third would only ever
+  /// mangle prose that legitimately contains something entity-shaped.
+  static const _maxDecodes = 2;
+
+  static final _entity = RegExp(
+    r'&(#\d+|#[xX][0-9a-fA-F]+|[a-zA-Z][a-zA-Z0-9]{1,31});',
+  );
+
+  /// A plain-text field: markup out, entities decoded, empty means absent.
   static String? _text(String? value) {
-    final trimmed = value?.trim();
-    return (trimmed == null || trimmed.isEmpty) ? null : trimmed;
+    if (value == null) return null;
+    final text = plainText(value);
+    return text.isEmpty ? null : text;
   }
 
   static String? _firstNonEmpty(List<String?> candidates) {

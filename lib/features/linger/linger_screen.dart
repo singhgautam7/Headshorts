@@ -9,6 +9,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
+import 'package:headshorts/core/tokens/oklab.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/relative_time.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
@@ -17,10 +18,8 @@ import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/db/tables.dart';
-
-final lingerQueueProvider = StreamProvider<List<Headline>>(
-  (ref) => ref.watch(articleRepositoryProvider).watchLinger(),
-);
+import 'package:headshorts/features/linger/linger_controller.dart';
+import 'package:headshorts/features/linger/linger_filter_sheet.dart';
 
 /// Linger — one item per screen, moved by a deliberate vertical swipe.
 ///
@@ -37,8 +36,20 @@ class LingerScreen extends ConsumerStatefulWidget {
 class _LingerScreenState extends ConsumerState<LingerScreen> {
   late final PageController _controller = PageController();
 
+  /// A card has to hold still this long before it counts as seen, so a fast
+  /// flick through the stack does not consume the whole queue.
+  static const _dwellBeforeSeen = Duration(milliseconds: 500);
+
+  Timer? _dwell;
+
+  /// Whether Linger was on screen last build. The shell keeps every branch
+  /// mounted, so leaving the tab does not dispose this — but it does stop the
+  /// branch's tickers, which is a dependable signal that it is hidden.
+  bool _visible = true;
+
   @override
   void dispose() {
+    _dwell?.cancel();
     _controller.dispose();
     super.dispose();
   }
@@ -47,67 +58,212 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
 
   void _onPage(int index, List<Headline> queue) {
     unawaited(HapticFeedback.selectionClick());
-    if (index < queue.length) {
-      // Seeing a card marks it read in Linger, silently.
+    ref.read(lingerQueueProvider.notifier).moveTo(index);
+    _dwell?.cancel();
+
+    if (index >= queue.length) {
+      // The one haptic that is not a direct echo of a tap.
+      unawaited(HapticFeedback.mediumImpact());
+      return;
+    }
+
+    // Settling on a card marks it *seen*, never read, and never touches
+    // Today. It only stops the card coming round again in Linger.
+    _dwell = Timer(_dwellBeforeSeen, () {
       unawaited(
         ref
             .read(articleRepositoryProvider)
-            .markRead(queue[index].article.id, mode: ReadMode.linger),
+            .mark(queue[index].article.id, mode: ReadMode.linger),
       );
-    } else {
-      // The one haptic that is not a direct echo of a tap.
-      unawaited(HapticFeedback.mediumImpact());
-    }
+    });
+  }
+
+  /// Coming back to Linger is "the next open": the cards worked through last
+  /// time drop out now, rather than being yanked away mid-session.
+  void _onReentry() {
+    final controller = ref.read(lingerQueueProvider.notifier);
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await controller.rebuild();
+      if (mounted && _controller.hasClients) _controller.jumpToPage(0);
+    });
   }
 
   @override
   Widget build(BuildContext context) {
-    final queue = ref.watch(lingerQueueProvider).value ?? const [];
+    final visible = TickerMode.valuesOf(context).enabled;
+    if (visible && !_visible) _onReentry();
+    _visible = visible;
+
+    final state = ref.watch(lingerQueueProvider);
+    final queue = state.items;
+    final filter = ref.watch(lingerFilterProvider);
+
+    // A new filter is a new set; start it from the top.
+    ref.listen(lingerFilterProvider, (_, _) {
+      if (_controller.hasClients) _controller.jumpToPage(0);
+    });
 
     return ColoredBox(
       color: context.hs.background,
       child: SafeArea(
         bottom: false,
-        child: queue.isEmpty
-            ? Padding(
-                padding: const EdgeInsets.fromLTRB(
-                  HsSpace.x4,
-                  HsSpace.x2,
-                  HsSpace.x4,
-                  96,
-                ),
-                child: _HardStop(total: 0, onBackToToday: _backToToday),
-              )
-            : PageView.builder(
-                controller: _controller,
-                scrollDirection: Axis.vertical,
-                // A deliberate swipe: one card at a time, and it settles.
-                physics: const PageScrollPhysics(
-                  parent: ClampingScrollPhysics(),
-                ),
-                itemCount: queue.length + 1,
-                onPageChanged: (i) => _onPage(i, queue),
-                itemBuilder: (context, i) => Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    HsSpace.x4,
-                    HsSpace.x2,
-                    HsSpace.x4,
-                    96,
-                  ),
-                  child: i == queue.length
-                      ? _HardStop(
-                          total: queue.length,
-                          onBackToToday: _backToToday,
-                        )
-                      : LingerCard(
-                          headline: queue[i],
-                          position: i,
-                          total: queue.length,
-                          onReadFull: () =>
-                              context.push('/reader/${queue[i].article.id}'),
+        child: Column(
+          children: [
+            _FilterBar(
+              filter: filter,
+              onTap: () => showLingerFilterSheet(context),
+            ),
+            Expanded(
+              child: state.loading
+                  ? const _QueueSkeleton()
+                  : queue.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.fromLTRB(
+                        HsSpace.x4,
+                        HsSpace.x2,
+                        HsSpace.x4,
+                        HsSpace.navClearance,
+                      ),
+                      child: _HardStop(total: 0, onBackToToday: _backToToday),
+                    )
+                  : PageView.builder(
+                      controller: _controller,
+                      scrollDirection: Axis.vertical,
+                      // A deliberate swipe: one card at a time, and it settles.
+                      physics: const PageScrollPhysics(
+                        parent: ClampingScrollPhysics(),
+                      ),
+                      itemCount: queue.length + 1,
+                      onPageChanged: (i) => _onPage(i, queue),
+                      itemBuilder: (context, i) => Padding(
+                        padding: const EdgeInsets.fromLTRB(
+                          HsSpace.x4,
+                          HsSpace.x2,
+                          HsSpace.x4,
+                          HsSpace.navClearance,
                         ),
+                        child: i == queue.length
+                            ? _HardStop(
+                                total: queue.length,
+                                onBackToToday: _backToToday,
+                              )
+                            : LingerCard(
+                                headline: queue[i],
+                                position: i,
+                                total: queue.length,
+                                onReadFull: () => context.push(
+                                  '/reader/${queue[i].article.id}',
+                                ),
+                              ),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Linger's one piece of chrome: a filter pill, in the same dress as Today's
+/// "All sources" chip, saying what the queue is currently scoped to.
+class _FilterBar extends StatelessWidget {
+  const new({required this.filter, required this.onTap});
+
+  final LingerFilter filter;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+    final chosen = filter.sourceIds;
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        HsSpace.x4,
+        HsSpace.x2,
+        HsSpace.x4,
+        HsSpace.x2,
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              filter.isDefault ? 'Latest' : filter.category,
+              style: HsType.timestamp.copyWith(color: palette.textMuted),
+            ),
+          ),
+          Pressable(
+            onTap: onTap,
+            semanticLabel: 'Filter this queue',
+            child: Container(
+              height: 32,
+              padding: const EdgeInsets.symmetric(horizontal: HsSpace.x3),
+              decoration: BoxDecoration(
+                border: Border.all(
+                  color: filter.isDefault ? palette.stroke : palette.textMuted,
                 ),
+                borderRadius: HsRadius.pillBorder,
               ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    chosen == null
+                        ? 'Filter'
+                        : 'Filter · ${chosen.length} '
+                              '${chosen.length == 1 ? 'source' : 'sources'}',
+                    style: HsType.chipSelected.copyWith(
+                      color: palette.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(width: HsSpace.x2),
+                  HsGlyph.chevron(
+                    palette.textSecondary,
+                    direction: AxisDirection.down,
+                    size: 6,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// The card-shaped placeholder Linger shows while a queue is being built —
+/// after a filter is applied, and on the first open. Flat, like every other
+/// skeleton in the app: nothing shimmers.
+class _QueueSkeleton extends StatelessWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(
+        HsSpace.x4,
+        HsSpace.x2,
+        HsSpace.x4,
+        HsSpace.navClearance,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          color: palette.surface,
+          borderRadius: const BorderRadius.all(HsRadius.sheet),
+          border: Border.all(color: palette.stroke),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 30),
+        child: const Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            HeadlineSkeleton(widths: [0.82, 0.4]),
+            SizedBox(height: HsSpace.x6),
+            HeadlineSkeleton(widths: [0.64, 0.5]),
+          ],
+        ),
       ),
     );
   }
@@ -194,9 +350,10 @@ class LingerCard extends StatelessWidget {
                             headline.article.title,
                             style: HsType.lingerHeadline.copyWith(
                               // On black the headline takes a little of the
-                              // accent; on paper it stays near-black.
+                              // accent; on paper it stays near-black. Mixed in
+                              // oklab, as the design board writes it.
                               color: dark
-                                  ? Color.lerp(palette.textPrimary, accent, 0.4)
+                                  ? Oklab.mix(accent, palette.textPrimary, 0.4)
                                   : palette.textPrimary,
                             ),
                           ),
@@ -288,7 +445,7 @@ class _Header extends StatelessWidget {
             ),
           ),
           const SizedBox(width: HsSpace.x3),
-          Flexible(
+          Expanded(
             child: Text(
               source.toUpperCase(),
               maxLines: 1,
@@ -297,8 +454,9 @@ class _Header extends StatelessWidget {
             ),
           ),
         ] else
-          Flexible(
+          Expanded(
             child: Container(
+              alignment: Alignment.centerLeft,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(
                 color: accentWash(accent, palette),
@@ -312,7 +470,7 @@ class _Header extends StatelessWidget {
               ),
             ),
           ),
-        const Spacer(),
+        const SizedBox(width: HsSpace.x2),
         // Leave room for the ruler.
         Padding(
           padding: const EdgeInsets.only(right: HsSpace.x4),

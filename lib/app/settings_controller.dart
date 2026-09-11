@@ -23,6 +23,15 @@ class SettingsController extends Notifier<Settings> {
 
   Future<void> completeOnboarding() => _save(state.copyWith(onboarded: true));
 
+  Future<void> setLinkOpenMode(LinkOpenMode mode) =>
+      _save(state.copyWith(linkOpenMode: mode));
+
+  Future<void> setRefreshCadence(RefreshCadence cadence) =>
+      _save(state.copyWith(refreshCadence: cadence));
+
+  Future<void> setMaxConsecutivePerSource(int max) =>
+      _save(state.copyWith(maxConsecutivePerSource: max));
+
   Future<void> setAiProvider(String provider) =>
       _save(state.copyWith(aiProvider: provider));
 

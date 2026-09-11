@@ -6,13 +6,13 @@ import 'package:headshorts/features/linger/linger_screen.dart';
 import 'package:headshorts/features/more/ai_summaries_screen.dart';
 import 'package:headshorts/features/more/info_screens.dart';
 import 'package:headshorts/features/more/more_screen.dart';
+import 'package:headshorts/features/more/settings_screen.dart';
 import 'package:headshorts/features/onboarding/onboarding_screen.dart';
 import 'package:headshorts/features/reader/reader_screen.dart';
 import 'package:headshorts/features/sources/add_source_screen.dart';
 import 'package:headshorts/features/sources/opml_import_screen.dart';
 import 'package:headshorts/features/sources/source_detail_screen.dart';
 import 'package:headshorts/features/sources/sources_screen.dart';
-import 'package:headshorts/features/sources/starter_set_screen.dart';
 import 'package:headshorts/features/stats/stats_screen.dart';
 import 'package:headshorts/features/today/today_screen.dart';
 
@@ -29,12 +29,47 @@ CustomTransitionPage<void> _page(Widget child) => CustomTransitionPage<void>(
 );
 
 /// Tab switches cross-fade rather than slide — there is no left or right
-/// relationship between destinations.
-CustomTransitionPage<void> _tab(Widget child) => CustomTransitionPage<void>(
-  child: child,
-  transitionsBuilder: (context, animation, _, child) =>
-      FadeTransition(opacity: animation, child: child),
-);
+/// relationship between destinations. The fade lives in [_BranchSwitcher];
+/// the branch's own route does not animate on top of it.
+NoTransitionPage<void> _tab(Widget child) =>
+    NoTransitionPage<void>(child: child);
+
+/// Holds every branch alive and cross-fades between them on motion-page.
+///
+/// `StatefulShellRoute.indexedStack` swaps branches instantly, so a page
+/// transition on the branch route never plays. Building the container here
+/// keeps each branch's navigator and scroll position exactly as the indexed
+/// stack would, and animates the swap.
+class _BranchSwitcher extends StatelessWidget {
+  const new({required this.index, required this.branches});
+
+  final int index;
+  final List<Widget> branches;
+
+  @override
+  Widget build(BuildContext context) => Stack(
+    children: [
+      for (var i = 0; i < branches.length; i++)
+        AnimatedOpacity(
+          opacity: i == index ? 1 : 0,
+          duration: HsMotion.page,
+          curve: HsMotion.pageCurve,
+          child: IgnorePointer(
+            // The outgoing branch stays mounted, and so keeps its state, but
+            // must not be touchable, tick, or be read out once it is off.
+            ignoring: i != index,
+            child: TickerMode(
+              enabled: i == index,
+              child: ExcludeSemantics(
+                excluding: i != index,
+                child: branches[i],
+              ),
+            ),
+          ),
+        ),
+    ],
+  );
+}
 
 GoRouter buildRouter({required bool onboarded}) {
   final shellKey = GlobalKey<NavigatorState>();
@@ -46,8 +81,13 @@ GoRouter buildRouter({required bool onboarded}) {
         path: '/onboarding',
         pageBuilder: (context, state) => _page(const OnboardingScreen()),
       ),
-      StatefulShellRoute.indexedStack(
+      StatefulShellRoute(
         builder: (context, state, shell) => AppShell(shell),
+        // An IndexedStack swaps branches with no transition at all, so a page
+        // animation on the branch routes never plays. Building the container
+        // ourselves keeps every branch alive and cross-fades between them.
+        navigatorContainerBuilder: (context, shell, children) =>
+            _BranchSwitcher(index: shell.currentIndex, branches: children),
         branches: [
           StatefulShellBranch(
             navigatorKey: shellKey,
@@ -94,7 +134,7 @@ GoRouter buildRouter({required bool onboarded}) {
         pageBuilder: (context, state) => _page(const StatsScreen()),
       ),
       GoRoute(
-        path: '/sources/add',
+        path: '/sources/add-url',
         pageBuilder: (context, state) => _page(const AddSourceScreen()),
       ),
       GoRoute(
@@ -102,13 +142,13 @@ GoRouter buildRouter({required bool onboarded}) {
         pageBuilder: (context, state) => _page(const OpmlImportScreen()),
       ),
       GoRoute(
-        path: '/sources/starter',
-        pageBuilder: (context, state) => _page(const StarterSetScreen()),
-      ),
-      GoRoute(
         path: '/sources/:id',
         pageBuilder: (context, state) =>
             _page(SourceDetailScreen(int.parse(state.pathParameters['id']!))),
+      ),
+      GoRoute(
+        path: '/more/settings',
+        pageBuilder: (context, state) => _page(const SettingsScreen()),
       ),
       GoRoute(
         path: '/more/ai',

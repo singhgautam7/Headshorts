@@ -1,5 +1,14 @@
 import 'package:dio/dio.dart';
 
+/// A desktop browser's user agent.
+///
+/// Used for every request the app makes — feeds included. Several publishers
+/// serve a 403, or a stripped image-free document, to anything that does not
+/// look like a browser.
+const browserUserAgent =
+    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 '
+    '(KHTML, like Gecko) Chrome/124.0 Safari/537.36';
+
 /// The one HTTP client in the app.
 ///
 /// Conditional GET is the whole point: a refresh normally costs a 304 and no
@@ -14,7 +23,10 @@ Dio buildHttpClient() {
       maxRedirects: 5,
       responseType: ResponseType.plain,
       headers: const {
-        'User-Agent': 'HeadShorts/1.0 (+https://github.com/grs/headshorts)',
+        // A browser's user agent, not ours. Publishers routinely refuse an
+        // unknown client outright: Business Standard answered our own string
+        // with a 403 and this one with the feed.
+        'User-Agent': browserUserAgent,
         'Accept':
             'application/rss+xml, application/atom+xml, application/xml;q=0.9, '
             'text/xml;q=0.9, text/html;q=0.8, */*;q=0.5',

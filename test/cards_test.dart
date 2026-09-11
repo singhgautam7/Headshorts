@@ -22,6 +22,7 @@ SourceRow _source() => SourceRow(
   type: SourceType.rss,
   enabled: true,
   sortOrder: 0,
+  mutedInLatest: false,
   addedAt: DateTime(2026, 3, 4),
 );
 
@@ -33,12 +34,14 @@ ArticleRow _article({
   id: 7,
   sourceId: 1,
   guid: 'g',
+  canonicalUrl: 'example.com/rail',
+  titleKey: 'cap fare operators rail regions single',
   title: 'Rail operators trial a single tap-in fare cap across three regions',
   link: 'https://example.com/rail',
   publishedAt: DateTime.now().subtract(const Duration(hours: 5)),
   fetchedAt: DateTime.now(),
-  readInReel: read,
-  readInFull: read,
+  seenInLinger: read,
+  readFull: read,
   summary: summary,
   contentSnippet:
       'The pilot covers about forty stations and runs '

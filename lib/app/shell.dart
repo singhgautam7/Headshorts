@@ -1,8 +1,10 @@
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:headshorts/app/nav_visibility.dart';
 import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
+import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/widgets/nav_pill.dart';
 
 /// The four destinations, with the pill floating over them.
@@ -18,6 +20,7 @@ class AppShell extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final blur = ref.watch(settingsProvider).blurBehindNav;
+    final visible = ref.watch(navVisibilityProvider);
 
     return ColoredBox(
       color: context.hs.background,
@@ -32,13 +35,23 @@ class AppShell extends ConsumerWidget {
               top: false,
               child: Align(
                 alignment: Alignment.bottomCenter,
-                child: NavPill(
-                  destinations: NavPill.destinationsForApp,
-                  selectedIndex: navigationShell.currentIndex,
-                  blur: blur,
-                  onSelected: (index) => navigationShell.goBranch(
-                    index,
-                    initialLocation: index == navigationShell.currentIndex,
+                child: AnimatedSlide(
+                  // Detached, so sliding it past the bottom inset costs no
+                  // layout — the content underneath does not move at all.
+                  offset: visible ? Offset.zero : const Offset(0, 1.5),
+                  duration: HsMotion.page,
+                  curve: HsMotion.pageCurve,
+                  child: NavPill(
+                    destinations: NavPill.destinationsForApp,
+                    selectedIndex: navigationShell.currentIndex,
+                    blur: blur,
+                    onSelected: (index) {
+                      ref.read(navVisibilityProvider.notifier).show();
+                      navigationShell.goBranch(
+                        index,
+                        initialLocation: index == navigationShell.currentIndex,
+                      );
+                    },
                   ),
                 ),
               ),

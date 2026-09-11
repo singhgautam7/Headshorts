@@ -29,6 +29,7 @@ SourceRow _source(String title, String category) => SourceRow(
   type: SourceType.rss,
   enabled: true,
   sortOrder: 0,
+  mutedInLatest: false,
   addedAt: DateTime(2026),
 );
 

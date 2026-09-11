@@ -93,7 +93,7 @@ class StatsRepository {
       final prior = perSource[article.sourceId] ?? (0, 0);
       perSource[article.sourceId] = (
         prior.$1 + 1,
-        prior.$2 + (article.readInFull ? 1 : 0),
+        prior.$2 + (article.readFull ? 1 : 0),
       );
     }
 
@@ -108,8 +108,8 @@ class StatsRepository {
 
     return StatsSummary(
       arrived: articles.length,
-      readInFull: articles.where((a) => a.readInFull).length,
-      seenInLinger: articles.where((a) => a.readInReel && !a.readInFull).length,
+      readInFull: articles.where((a) => a.readFull).length,
+      seenInLinger: articles.where((a) => a.seenInLinger && !a.readFull).length,
       perSource: readThrough,
       minutesByDay: await _minutesByDay(),
       caughtUpDays: await _caughtUpDays(windowDays),

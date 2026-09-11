@@ -1,8 +1,9 @@
 import 'package:dio/dio.dart';
 import 'package:headshorts/data/feed/feed_parser.dart';
-import 'package:html/dom.dart' as dom;
-import 'package:html/parser.dart' as html_parser;
+import 'package:headshorts/data/feed/http_client.dart';
+import 'package:headshorts/data/readability/article_cleaner.dart';
 import 'package:html_readability/html_readability.dart';
+import 'package:markdown/markdown.dart' as markdown;
 
 /// What the Reader has to work with.
 sealed class Extraction {
@@ -51,13 +52,18 @@ class ExtractionService {
   /// whole article.
   Future<Extraction> extract({required String link, String? feedHtml}) async {
     if (feedHtml != null && feedHtml.trim().isNotEmpty) {
-      final fromFeed = _assess(feedHtml, sourceUrl: link);
+      final fromFeed = _assess(normaliseToHtml(feedHtml), sourceUrl: link);
       if (fromFeed is ExtractedArticle) return fromFeed;
     }
 
     final String page;
     try {
-      final response = await _dio.get<String>(link);
+      // Ask as a desktop browser: several publishers serve a stripped,
+      // image-free document to anything that looks like a crawler.
+      final response = await _dio.get<String>(
+        link,
+        options: Options(headers: {'User-Agent': userAgent}),
+      );
       if (response.statusCode != 200 || response.data == null) {
         return const ThinExtraction('The publisher did not return the page.');
       }
@@ -93,91 +99,46 @@ class ExtractionService {
       );
     }
     return ExtractedArticle(
-      html: normaliseArticleHtml(html, base: Uri.parse(sourceUrl)),
+      html: ArticleCleaner.clean(html, base: Uri.parse(sourceUrl)),
       byline: null,
       wordCount: words,
     );
   }
 
-  /// Attributes publishers hide the real image behind while a 1×1 spacer sits
-  /// in `src`. Promoting one of these is what makes lazy-loaded article
-  /// images appear at all.
-  static const _lazyAttributes = [
-    'data-original',
-    'data-src',
-    'data-lazy-src',
-    'data-original-src',
-  ];
+  /// The same user agent the feed client sends, so a publisher sees one
+  /// consistent visitor rather than two.
+  static const userAgent = browserUserAgent;
 
-  /// Markup a publisher serves is not markup a reader can lay out.
+  /// Headers an article image has to be asked for with. Publishers routinely
+  /// refuse an image whose request carries no `Referer` from their own page.
+  static Map<String, String> imageHeaders(String articleUrl) => {
+    'Referer': articleUrl,
+    'User-Agent': userAgent,
+    'Accept': 'image/avif,image/webp,image/*,*/*;q=0.8',
+  };
+
+  /// Normalises whatever a source gave us into one HTML string.
   ///
-  /// This resolves relative URLs against the article, promotes lazy-loaded
-  /// images into `src`, unwraps `<picture>` (which has no layout meaning
-  /// here), and drops the spacer images that would otherwise be stretched to
-  /// full width and leave a page-high hole in the middle of the article.
-  static String normaliseArticleHtml(String html, {required Uri base}) {
-    final fragment = html_parser.parseFragment(html);
+  /// Feeds are overwhelmingly HTML, but a handful carry Markdown. Converting
+  /// it up front means there is exactly one pipeline after this point rather
+  /// than a second path that drifts.
+  static String normaliseToHtml(String content) =>
+      _looksLikeMarkdown(content) ? markdown.markdownToHtml(content) : content;
 
-    for (final picture in fragment.querySelectorAll('picture')) {
-      final image = picture.querySelector('img');
-      if (image == null) {
-        picture.remove();
-      } else {
-        picture.replaceWith(image);
-      }
+  static bool _looksLikeMarkdown(String content) {
+    final trimmed = content.trimLeft();
+    if (trimmed.startsWith('<')) return false;
+    // A tag anywhere means the publisher is speaking HTML, however scrappy.
+    if (RegExp(
+      r'<(p|div|h[1-6]|br|img|a|ul|ol)\b',
+      caseSensitive: false,
+    ).hasMatch(content)) {
+      return false;
     }
-
-    for (final image in fragment.querySelectorAll('img')) {
-      for (final attribute in _lazyAttributes) {
-        final value = image.attributes[attribute];
-        if (value != null && value.isNotEmpty && !_isSpacer(value)) {
-          image.attributes['src'] = value;
-          break;
-        }
-      }
-
-      final src = image.attributes['src'];
-      if (src == null || src.isEmpty || _isSpacer(src)) {
-        // A spacer carries no information, and laying it out costs a screen.
-        image.remove();
-      }
-    }
-
-    for (final element in fragment.querySelectorAll('img, a, source')) {
-      for (final attribute in const ['src', 'href', 'srcset']) {
-        final value = element.attributes[attribute];
-        if (value == null || value.isEmpty || value.startsWith('data:')) {
-          continue;
-        }
-        element.attributes[attribute] = attribute == 'srcset'
-            ? value
-                  .split(',')
-                  .map((part) => _resolveCandidate(part, base))
-                  .join(', ')
-            : base.resolve(value).toString();
-      }
-    }
-
-    return _serialise(fragment);
+    return RegExp(
+          r'^\s{0,3}(#{1,6}\s|[*-]\s|>\s)',
+          multiLine: true,
+        ).hasMatch(content) ||
+        RegExp(r'\[[^\]]+\]\([^)]+\)').hasMatch(content);
   }
-
-  static bool _isSpacer(String url) {
-    final lower = url.toLowerCase();
-    return lower.startsWith('data:') ||
-        lower.contains('spacer') ||
-        lower.contains('1x1') ||
-        lower.contains('blank.gif') ||
-        lower.contains('placeholder');
-  }
-
-  static String _resolveCandidate(String candidate, Uri base) {
-    final parts = candidate.trim().split(RegExp(r'\s+'));
-    if (parts.isEmpty || parts.first.isEmpty) return candidate;
-    parts[0] = base.resolve(parts.first).toString();
-    return parts.join(' ');
-  }
-
-  static String _serialise(dom.DocumentFragment fragment) => fragment.nodes
-      .map((n) => n is dom.Element ? n.outerHtml : n.text ?? '')
-      .join();
 }

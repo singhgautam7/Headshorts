@@ -4,8 +4,11 @@ import 'package:drift/drift.dart';
 /// a value here plus one `SourceAdapter` implementation — nothing else.
 enum SourceType { rss }
 
-/// How an article was seen. Kept as events so Stats can answer questions the
+/// How an article was met. Kept as events so Stats can answer questions the
 /// article row alone cannot ("how long", "how often").
+///
+/// These are two different things, not two degrees of the same thing: seeing a
+/// card in Linger is not reading the article.
 enum ReadMode { linger, full }
 
 @DataClassName('SourceRow')
@@ -23,6 +26,12 @@ class Sources extends Table {
   TextColumn get type => textEnum<SourceType>()();
   BoolColumn get enabled => boolean().withDefault(const Constant(true))();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+
+  /// Kept out of the merged Latest list, while still appearing under its own
+  /// category. For a firehose the reader wants, but not in with everything
+  /// else.
+  BoolColumn get mutedInLatest =>
+      boolean().withDefault(const Constant(false))();
 
   /// Conditional-GET validators, so a refresh usually costs a 304.
   TextColumn get etag => text().nullable()();
@@ -54,14 +63,28 @@ class Articles extends Table {
   TextColumn get fullContentHtml => text().nullable()();
 
   TextColumn get link => text()();
+
+  /// The link reduced to the story's identity — tracking parameters stripped,
+  /// aggregator redirects unwrapped. Two feeds carrying the same article agree
+  /// on this, which is what makes cross-feed dedup and shared read state work.
+  TextColumn get canonicalUrl => text().withDefault(const Constant(''))();
+
+  /// A loose fingerprint of the headline, for the same story filed under two
+  /// slightly different titles. Empty when the title is too short to be sure.
+  TextColumn get titleKey => text().withDefault(const Constant(''))();
   TextColumn get author => text().nullable()();
   DateTimeColumn get publishedAt => dateTime()();
   TextColumn get imageUrl => text().nullable()();
   DateTimeColumn get fetchedAt => dateTime().withDefault(currentDateAndTime)();
 
-  /// Silent read state. Never surfaced as a count.
-  BoolColumn get readInReel => boolean().withDefault(const Constant(false))();
-  BoolColumn get readInFull => boolean().withDefault(const Constant(false))();
+  /// The card settled as the active card in Linger. Set there and nowhere
+  /// else: it keeps an item from coming back round in Linger, and has no
+  /// effect on Today at all.
+  BoolColumn get seenInLinger => boolean().withDefault(const Constant(false))();
+
+  /// The reader opened the full article, from Today or from Linger. The only
+  /// thing that counts as having read something.
+  BoolColumn get readFull => boolean().withDefault(const Constant(false))();
 
   @override
   List<Set<Column<Object>>> get uniqueKeys => [

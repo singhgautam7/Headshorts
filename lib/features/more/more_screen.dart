@@ -1,131 +1,108 @@
-import 'dart:convert';
-import 'dart:typed_data';
-
-import 'package:file_selector/file_selector.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:headshorts/app/providers.dart';
-import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/screen.dart';
-import 'package:headshorts/data/prefs/settings.dart';
-import 'package:headshorts/data/sources/opml.dart';
+import 'package:headshorts/features/today/today_controller.dart';
 
-/// More — the settings hub.
+/// More — a hub, not a settings page.
+///
+/// Five destinations and a sign-off. Settings is one of them rather than the
+/// whole tab, so Stats, AI summaries and the two text pages are not buried
+/// under a heading that does not describe them.
 class MoreScreen extends ConsumerWidget {
   const new({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final settings = ref.watch(settingsProvider);
-    final controller = ref.read(settingsProvider.notifier);
-
-    return HsScreen(
-      title: 'More',
-      titlePadding: const EdgeInsets.fromLTRB(HsSpace.x5, 6, HsSpace.x5, 20),
-      child: ListView(
-        padding: const EdgeInsets.only(bottom: HsSpace.navClearance),
-        children: [
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: HsSpace.x5),
-            child: SectionLabel('Appearance'),
+  Widget build(BuildContext context, WidgetRef ref) => HsScreen(
+    title: 'More',
+    titlePadding: const EdgeInsets.fromLTRB(HsSpace.x5, 6, HsSpace.x5, 20),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: ListView(
+            padding: const EdgeInsets.only(bottom: HsSpace.x5),
+            children: [
+              SettingsRow(
+                label: 'Stats',
+                sub: 'What you have read, with nothing to beat',
+                chevron: true,
+                onTap: () => context.push('/stats'),
+              ),
+              SettingsRow(
+                label: 'Settings',
+                sub: _settingsSummary(ref),
+                chevron: true,
+                onTap: () => context.push('/more/settings'),
+              ),
+              SettingsRow(
+                label: 'AI summaries',
+                sub: 'Beta · bring your own key',
+                chevron: true,
+                onTap: () => context.push('/more/ai'),
+              ),
+              SettingsRow(
+                label: 'About',
+                value: '1.0',
+                chevron: true,
+                onTap: () => context.push('/more/about'),
+              ),
+              SettingsRow(
+                label: 'Privacy',
+                sub: 'No account, no analytics, no server',
+                chevron: true,
+                divider: false,
+                onTap: () => context.push('/more/privacy'),
+              ),
+            ],
           ),
-          const SizedBox(height: HsSpace.x3),
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
-            child: SegmentedControl<HsThemeChoice>(
-              value: settings.theme,
-              options: const {
-                HsThemeChoice.amoled: 'AMOLED',
-                HsThemeChoice.white: 'White',
-                HsThemeChoice.system: 'System',
-              },
-              onChanged: controller.setTheme,
-            ),
-          ),
-          const SizedBox(height: HsSpace.x3),
-          SettingsRow(
-            label: 'Blur behind the nav',
-            sub: settings.blurBehindNav
-                ? 'On — costs battery'
-                : 'Off — costs battery, opaque by default',
-            trailing: HsToggle(
-              value: settings.blurBehindNav,
-              onChanged: (v) => controller.setBlurBehindNav(enabled: v),
-            ),
-          ),
-          const SizedBox(height: 26),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: HsSpace.x5),
-            child: SectionLabel('Reading'),
-          ),
-          const SizedBox(height: HsSpace.x3),
-          SettingsRow(
-            label: 'Stats',
-            chevron: true,
-            onTap: () => context.push('/stats'),
-          ),
-          SettingsRow(
-            label: 'Text size',
-            value: settings.textSize.label,
-            chevron: true,
-            onTap: () => context.push('/more/text-size'),
-          ),
-          SettingsRow(
-            label: 'AI summaries',
-            sub: 'Later phase · bring your own key',
-            chevron: true,
-            onTap: () => context.push('/more/ai'),
-          ),
-          const SizedBox(height: 26),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: HsSpace.x5),
-            child: SectionLabel('About'),
-          ),
-          const SizedBox(height: HsSpace.x3),
-          SettingsRow(
-            label: 'Privacy',
-            chevron: true,
-            onTap: () => context.push('/more/privacy'),
-          ),
-          SettingsRow(
-            label: 'Export OPML',
-            chevron: true,
-            onTap: () => _exportOpml(context, ref),
-          ),
-          SettingsRow(
-            label: 'About HeadShorts',
-            value: '1.0',
-            divider: false,
-            onTap: () => context.push('/more/about'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _exportOpml(BuildContext context, WidgetRef ref) async {
-    final sources = await ref.read(sourceRepositoryProvider).all();
-    final location = await getSaveLocation(
-      suggestedName: 'headshorts.opml',
-      acceptedTypeGroups: const [
-        XTypeGroup(label: 'OPML', extensions: ['opml']),
+        ),
+        const _MadeIn(),
       ],
-    );
-    if (location == null) return;
-    await XFile.fromData(
-      Uint8List.fromList(utf8.encode(Opml.write(sources))),
-      mimeType: 'text/xml',
-    ).saveTo(location.path);
+    ),
+  );
+
+  /// One line of what Settings currently holds, so the row says something
+  /// rather than only pointing somewhere.
+  static String _settingsSummary(WidgetRef ref) {
+    final sources = ref.watch(sourcesProvider).value ?? const [];
+    final enabled = sources.where((s) => s.enabled).length;
+    return enabled == 0
+        ? 'Appearance, reading, sources and data'
+        : 'Appearance, reading, data · $enabled '
+              '${enabled == 1 ? 'source' : 'sources'} on';
   }
 }
 
-/// A row on the More screen.
+/// Pinned at the foot of the hub. Muted, centred, and the only decoration in
+/// the app that is not doing a job.
+class _MadeIn extends StatelessWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(
+      top: HsSpace.x4,
+      bottom: HsSpace.navClearance,
+    ),
+    child: Text(
+      'Made with \u2764\ufe0f in India',
+      textAlign: TextAlign.center,
+      style: HsType.note.copyWith(color: context.hs.textMuted),
+    ),
+  );
+}
+
+const clearCacheExplainer =
+    'Every article currently stored on the device is removed, along with what '
+    'you have read. Your sources and settings stay exactly as they are, and '
+    'the next refresh fills the briefing again.';
+
 class SettingsRow extends StatelessWidget {
   const new({
     required this.label,

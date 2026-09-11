@@ -139,6 +139,12 @@ class _Thumbnail extends StatelessWidget {
           child: CachedNetworkImage(
             imageUrl: url,
             fit: BoxFit.cover,
+            // Decoded at the size it is drawn. A publisher's 2000px hero
+            // behind a 76dp thumbnail costs ~16MB of bitmap for nothing, and
+            // a screen of them is what makes Today scroll badly.
+            memCacheWidth:
+                (HsSize.thumbnail * MediaQuery.devicePixelRatioOf(context))
+                    .round(),
             // Flat fills, never a shimmer sweep.
             placeholder: (_, _) => placeholder,
             errorWidget: (_, _, _) => placeholder,

@@ -3,9 +3,11 @@ import 'dart:async';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:headshorts/app/nav_visibility.dart';
 import 'package:headshorts/app/refresh_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
+import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/relative_time.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
@@ -31,26 +33,61 @@ class TodayScreen extends ConsumerStatefulWidget {
 }
 
 class _TodayScreenState extends ConsumerState<TodayScreen> {
+  /// The category strip and the pages are one control: tapping a tab and
+  /// swiping a page are the same gesture, and this keeps them in step.
+  final _pages = PageController();
+
   @override
   void initState() {
     super.initState();
     // Refresh behind whatever is already on screen — never in front of it.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(ref.read(refreshProvider.notifier).refresh());
+      unawaited(ref.read(refreshProvider.notifier).refreshIfDue());
     });
+  }
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  /// Brings the pages to [index] when the strip, or a vanished category,
+  /// moved the selection out from under them.
+  void _syncPages(int index) {
+    if (!_pages.hasClients || _pages.positions.length != 1) return;
+    final showing = (_pages.page ?? _pages.initialPage.toDouble()).round();
+    if (showing == index) return;
+    // Adjacent tabs slide; a jump across the strip would blur half the
+    // categories on the way past.
+    if ((showing - index).abs() > 1) {
+      _pages.jumpToPage(index);
+    } else {
+      _pages.animateToPage(
+        index,
+        duration: HsMotion.page,
+        curve: HsMotion.pageCurve,
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final categories = ref.watch(categoriesProvider).value ?? const ['Top'];
-    final selected = ref.watch(selectedCategoryProvider);
-    final briefing = ref.watch(briefingProvider);
-    final refreshing = ref.watch(refreshProvider).isRunning;
+    final categories =
+        ref.watch(categoriesProvider).value ?? const [latestScope];
+    final selected = ref.watch(activeCategoryProvider);
+    // Selected, not watched whole: a refresh emits one progress event per
+    // feed, and Today has no business rebuilding forty-five times for a word
+    // that only changes twice.
+    final refreshing = ref.watch(refreshProvider.select((p) => p.isRunning));
     final offline = ref.watch(offlineProvider);
     final lastUpdated = ref.watch(lastUpdatedProvider).value;
 
     final index = categories.indexOf(selected).clamp(0, categories.length - 1);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _syncPages(index);
+    });
 
     return HsScreen(
       title: 'Today',
@@ -93,16 +130,44 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
           ),
           if (offline) const _OfflineNote(),
           Expanded(
-            child: briefing.when(
-              loading: () => const _RefreshingSkeleton(),
-              error: (_, _) => const _RefreshingSkeleton(),
-              data: (headlines) =>
-                  _Briefing(headlines: headlines, offline: offline),
+            child: PageView.builder(
+              controller: _pages,
+              itemCount: categories.length,
+              onPageChanged: (i) => ref
+                  .read(selectedCategoryProvider.notifier)
+                  .select(categories[i]),
+              // Only the category in front of the reader is queried. The one
+              // arriving under their thumb shows the skeleton until the swipe
+              // settles and it becomes the selection.
+              itemBuilder: (context, i) => i == index
+                  ? const _BriefingPage()
+                  : const _RefreshingSkeleton(),
             ),
           ),
         ],
       ),
     );
+  }
+}
+
+/// One category page: the briefing, or the skeleton that stands in for it.
+class _BriefingPage extends ConsumerWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final offline = ref.watch(offlineProvider);
+    return ref
+        .watch(briefingProvider)
+        .when(
+          loading: () => const _RefreshingSkeleton(),
+          error: (_, _) => const _RefreshingSkeleton(),
+          data: (headlines) =>
+              // An empty cache mid-first-fetch is not an empty briefing.
+              headlines.isEmpty && ref.watch(awaitingFirstFetchProvider)
+              ? const _RefreshingSkeleton()
+              : _Briefing(headlines: headlines, offline: offline),
+        );
   }
 }
 
@@ -115,71 +180,99 @@ class _Briefing extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
-    final category = ref.watch(selectedCategoryProvider);
+    final category = ref.watch(activeCategoryProvider);
     final sources = ref.watch(sourcesProvider).value ?? const [];
     final muted = ref.watch(mutedSourcesProvider);
 
     final scoped = sources
         .where(
-          (s) => s.enabled && (category == 'Top' || s.category == category),
+          (s) =>
+              s.enabled &&
+              (category == latestScope
+                  ? !s.mutedInLatest
+                  : s.category == category),
         )
         .toList();
     final visible = scoped.where((s) => !muted.contains(s.id)).length;
 
-    return PullToRefresh(
-      onRefresh: () => ref.read(refreshProvider.notifier).refresh(),
-      padding: const EdgeInsets.only(
-        left: HsSpace.x5,
-        right: HsSpace.x5,
-        bottom: HsSpace.navClearance,
-      ),
-      children: [
-        Padding(
-          padding: const EdgeInsets.only(top: 14),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  headlines.isEmpty
-                      ? 'Nothing here yet'
-                      : '${headlines.length} '
-                            '${headlines.length == 1 ? 'headline' : 'headlines'} '
-                            '· newest first',
-                  style: HsType.timestamp.copyWith(color: palette.textMuted),
+    return NotificationListener<ScrollNotification>(
+      // Today is the only place the pill gets out of the way. Linger keeps
+      // its chrome, per the design board.
+      onNotification: (notification) {
+        final metrics = notification.metrics;
+        // The category pager scrolls horizontally through this same listener;
+        // only the list itself pages and moves the pill.
+        if (metrics.axis != Axis.vertical) return false;
+        // Load the next page as the reader nears the end of this one.
+        if (metrics.hasContentDimensions &&
+            metrics.extentAfter < metrics.viewportDimension) {
+          unawaited(ref.read(todayPaginationProvider.notifier).loadMore());
+        }
+        ref
+            .read(navVisibilityProvider.notifier)
+            .onScroll(
+              notification.metrics,
+              delta: notification is ScrollUpdateNotification
+                  ? notification.scrollDelta ?? 0
+                  : 0,
+            );
+        return false;
+      },
+      child: PullToRefresh(
+        onRefresh: () => ref.read(refreshProvider.notifier).refresh(),
+        padding: const EdgeInsets.only(
+          left: HsSpace.x5,
+          right: HsSpace.x5,
+          bottom: HsSpace.navClearance,
+        ),
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(top: 14),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    headlines.isEmpty
+                        ? 'Nothing here yet'
+                        : '${headlines.length} '
+                              '${headlines.length == 1 ? 'headline' : 'headlines'} '
+                              '· newest first',
+                    style: HsType.timestamp.copyWith(color: palette.textMuted),
+                  ),
                 ),
-              ),
-              _ScopePill(
-                label: category == 'Top'
-                    ? (visible == scoped.length
-                          ? 'All sources'
-                          : '$visible of ${scoped.length} sources')
-                    : '$category · $visible '
-                          '${visible == 1 ? 'source' : 'sources'}',
-                onTap: () => showSourceFilterSheet(context, scoped),
-              ),
-            ],
+                _ScopePill(
+                  label: category == latestScope
+                      ? (visible == scoped.length
+                            ? 'All sources'
+                            : '$visible of ${scoped.length} sources')
+                      : '$category · $visible '
+                            '${visible == 1 ? 'source' : 'sources'}',
+                  onTap: () => showSourceFilterSheet(context, scoped),
+                ),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 20),
-        for (var i = 0; i < headlines.length; i++) ...[
-          if (i > 0) const SizedBox(height: 30),
-          HeadlineCard(
-            headlines[i],
-            offline: offline,
-            // The optional lead-card wash: paper only, unread only.
-            washed: i == 0 && !palette.isDark && !headlines[i].isRead,
-            onTap: () => context.push('/reader/${headlines[i].article.id}'),
+          const SizedBox(height: 20),
+          for (var i = 0; i < headlines.length; i++) ...[
+            if (i > 0) const SizedBox(height: 30),
+            HeadlineCard(
+              headlines[i],
+              offline: offline,
+              // The optional lead-card wash: paper only, unread only.
+              washed: i == 0 && !palette.isDark && !headlines[i].isRead,
+              onTap: () => context.push('/reader/${headlines[i].article.id}'),
+            ),
+          ],
+          if (headlines.isNotEmpty) ...[
+            const SizedBox(height: 30),
+            const HsDivider(),
+          ],
+          Padding(
+            padding: const EdgeInsets.only(top: 40),
+            child: _CaughtUp(count: headlines.length, sources: visible),
           ),
         ],
-        if (headlines.isNotEmpty) ...[
-          const SizedBox(height: 30),
-          const HsDivider(),
-        ],
-        Padding(
-          padding: const EdgeInsets.only(top: 40),
-          child: _CaughtUp(count: headlines.length, sources: visible),
-        ),
-      ],
+      ),
     );
   }
 }

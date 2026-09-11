@@ -9,10 +9,14 @@ import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
+import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
+import 'package:headshorts/core/widgets/info_button.dart';
+import 'package:headshorts/core/widgets/search_field.dart';
 import 'package:headshorts/data/db/source_repository.dart';
-import 'package:headshorts/data/sources/starter_set.dart';
+import 'package:headshorts/data/sources/source_catalog.dart';
+import 'package:headshorts/features/sources/opml_explainer.dart';
 import 'package:headshorts/features/sources/source_picker.dart';
 import 'package:headshorts/features/today/today_controller.dart';
 
@@ -28,14 +32,34 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   _Step _step = _Step.welcome;
-  late final Set<String> _chosen = starterSet
-      .take(5)
-      .map((s) => s.feedUrl)
-      .toSet();
+  final _chosen = <String>{};
+  var _query = '';
+
+  SourceCatalog get _catalog =>
+      ref.read(sourceCatalogProvider).value ?? SourceCatalog.empty;
+
+  var _seeded = false;
+
+  /// Calm defaults: a couple from each of the first few categories, rather
+  /// than everything. Two or three good ones beat twenty you skim.
+  ///
+  /// Seeded when the catalog actually arrives, not when the step changes —
+  /// the asset is read asynchronously and may not be parsed yet.
+  void _seedDefaults() {
+    if (_seeded || _catalog.sources.isEmpty) return;
+    _seeded = true;
+    for (final entry in _catalog.grouped('').entries.take(3)) {
+      for (final source in entry.value.take(2)) {
+        _chosen.add(source.feedUrl);
+      }
+    }
+  }
 
   Future<void> _continue() async {
     final repository = ref.read(sourceRepositoryProvider);
-    for (final source in starterSet.where((s) => _chosen.contains(s.feedUrl))) {
+    for (final source in _catalog.sources.where(
+      (s) => _chosen.contains(s.feedUrl),
+    )) {
       await repository.add(
         title: source.title,
         feedUrl: source.feedUrl,
@@ -52,6 +76,25 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     if (mounted) context.go('/today');
   }
 
+  /// Skipping is allowed: an empty briefing that says so beats a set of feeds
+  /// nobody chose.
+  Future<void> _skip() async {
+    await ref.read(settingsProvider.notifier).completeOnboarding();
+    if (mounted) context.go('/today');
+  }
+
+  void _toggleCategory(String category, {required bool selected}) {
+    final urls = (_catalog.grouped(_query)[category] ?? const <CatalogSource>[])
+        .map((s) => s.feedUrl);
+    setState(() {
+      if (selected) {
+        _chosen.addAll(urls);
+      } else {
+        _chosen.removeAll(urls);
+      }
+    });
+  }
+
   /// Leaves onboarding for a screen that adds sources directly. The reader
   /// has made their choice about how to start, so the walkthrough is done.
   Future<void> _leaveTo(String location) async {
@@ -62,7 +105,15 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => ColoredBox(
+  Widget build(BuildContext context) {
+    // Watched, not read, so the asset starts loading on the welcome step and
+    // the picker has something to show the moment it opens.
+    ref.watch(sourceCatalogProvider);
+    if (_step == _Step.pick) _seedDefaults();
+    return _build(context);
+  }
+
+  Widget _build(BuildContext context) => ColoredBox(
     color: context.hs.background,
     child: SafeArea(
       child: switch (_step) {
@@ -71,12 +122,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
           onImport: () => _leaveTo('/sources/opml'),
         ),
         _Step.pick => _Pick(
+          grouped: _catalog.grouped(_query),
           chosen: _chosen,
+          onSearch: (query) => setState(() => _query = query),
+          onToggleCategory: _toggleCategory,
+          onSkip: _skip,
           onToggle: (url) => setState(() {
             if (!_chosen.remove(url)) _chosen.add(url);
           }),
           onContinue: _chosen.isEmpty ? null : _continue,
-          onAddOwn: () => _leaveTo('/sources/add'),
+          onAddOwn: () => _leaveTo('/sources/add-url'),
           onImport: () => _leaveTo('/sources/opml'),
         ),
         _Step.fetch => const InitialFetch(),
@@ -225,16 +280,25 @@ class FadingBriefingMark extends StatelessWidget {
 
 class _Pick extends StatelessWidget {
   const new({
+    required this.grouped,
     required this.chosen,
     required this.onToggle,
+    required this.onToggleCategory,
+    required this.onSearch,
     required this.onContinue,
+    required this.onSkip,
     required this.onAddOwn,
     required this.onImport,
   });
 
+  final Map<String, List<CatalogSource>> grouped;
   final Set<String> chosen;
   final ValueChanged<String> onToggle;
+  final void Function(String category, {required bool selected})
+  onToggleCategory;
+  final ValueChanged<String> onSearch;
   final VoidCallback? onContinue;
+  final VoidCallback onSkip;
   final VoidCallback onAddOwn;
   final VoidCallback onImport;
 
@@ -268,9 +332,17 @@ class _Pick extends StatelessWidget {
         ),
         Expanded(
           child: SourcePicker(
-            sources: starterSet,
+            grouped: grouped,
             chosen: chosen,
             onToggle: onToggle,
+            onToggleCategory: onToggleCategory,
+            leading: Padding(
+              padding: const EdgeInsets.only(top: HsSpace.x4),
+              child: HsSearchField(
+                hint: 'Search publishers and categories',
+                onChanged: onSearch,
+              ),
+            ),
           ),
         ),
         FadingFooter(
@@ -303,12 +375,26 @@ class _Pick extends StatelessWidget {
                         height: HsSize.buttonCompact,
                       ),
                     ),
+                    InfoButton(
+                      semanticLabel: 'About OPML',
+                      onTap: () =>
+                          showOpmlExplainer(context, onImport: onImport),
+                    ),
                   ],
                 ),
                 const SizedBox(height: HsSpace.x3),
                 HsButton(
-                  'Continue with ${chosen.length}',
+                  chosen.isEmpty
+                      ? 'Choose at least one'
+                      : 'Continue with ${chosen.length}',
                   onPressed: onContinue,
+                ),
+                const SizedBox(height: HsSpace.x2),
+                HsButton(
+                  'Skip for now',
+                  onPressed: onSkip,
+                  kind: HsButtonKind.tertiary,
+                  height: HsSize.buttonSmall,
                 ),
               ],
             ),
@@ -338,7 +424,12 @@ class InitialFetch extends ConsumerWidget {
         children: [
           for (var i = 0; i < enabled.length; i++) ...[
             if (i > 0) const SizedBox(height: 10),
-            Container(
+            AnimatedContainer(
+              // Each bar takes its source's colour as that feed lands. The
+              // motion is the arrival, not a loop — nothing here animates on
+              // its own.
+              duration: HsMotion.page,
+              curve: HsMotion.pageCurve,
               height: 2,
               decoration: BoxDecoration(
                 color: progress.pending.contains(enabled[i].id)

@@ -35,9 +35,16 @@ abstract final class HsRadius {
 
 /// Fixed sizes the design board calls out by number.
 abstract final class HsSize {
-  /// Floating nav pill: 60 tall, 22 from the bottom, hugging its four items.
+  /// Floating nav pill: 60 tall, hugging its four items, and resting just
+  /// clear of the gesture inset.
+  ///
+  /// The board draws it 22 above the frame's edge; on a real phone that inset
+  /// sits *on top of* the system's own gesture area, and the pill ends up
+  /// floating in the middle of the screen's bottom margin — most visible in
+  /// Linger, where it eats into the card. The SafeArea already provides the
+  /// distance the mock was drawing.
   static const navPillHeight = 60.0;
-  static const navPillInset = 22.0;
+  static const navPillInset = 8.0;
   static const navItem = 44.0;
   static const navPillPadding = 8.0;
 
