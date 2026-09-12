@@ -1,8 +1,7 @@
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart';
+import 'package:headshorts/core/tokens/theme_family.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-
-/// Theme choice, as offered on the Settings screen.
-enum HsThemeChoice { amoled, white, system }
 
 /// Where a link goes when the reader taps it.
 enum LinkOpenMode {
@@ -68,7 +67,9 @@ enum TextSizeStep {
 @immutable
 class Settings {
   const new({
-    this.theme = HsThemeChoice.amoled,
+    this.familyId = 'paper',
+    this.themeMode = ThemeMode.dark,
+    this.amoled = true,
     this.blurBehindNav = false,
     this.textSize = TextSizeStep.small,
     this.onboarded = false,
@@ -80,7 +81,14 @@ class Settings {
     this.aiFullTextOnly = true,
   });
 
-  final HsThemeChoice theme;
+  /// Which [ThemeFamily] is in force; unknown ids fall back to the board's.
+  final String familyId;
+  final ThemeMode themeMode;
+
+  /// True black while dark is in effect. A toggle, not a mode.
+  final bool amoled;
+
+  ThemeFamily get family => ThemeFamily.byId(familyId);
 
   /// Opaque by default — blur costs battery for no legibility gain.
   final bool blurBehindNav;
@@ -103,7 +111,9 @@ class Settings {
   final bool aiFullTextOnly;
 
   Settings copyWith({
-    HsThemeChoice? theme,
+    String? familyId,
+    ThemeMode? themeMode,
+    bool? amoled,
     bool? blurBehindNav,
     TextSizeStep? textSize,
     bool? onboarded,
@@ -114,10 +124,16 @@ class Settings {
     bool? aiOnRequestOnly,
     bool? aiFullTextOnly,
   }) => Settings(
-    theme: theme ?? this.theme,
+    familyId: familyId ?? this.familyId,
+    themeMode: themeMode ?? this.themeMode,
+    amoled: amoled ?? this.amoled,
     blurBehindNav: blurBehindNav ?? this.blurBehindNav,
     textSize: textSize ?? this.textSize,
     onboarded: onboarded ?? this.onboarded,
+    linkOpenMode: linkOpenMode ?? this.linkOpenMode,
+    refreshCadence: refreshCadence ?? this.refreshCadence,
+    maxConsecutivePerSource:
+        maxConsecutivePerSource ?? this.maxConsecutivePerSource,
     aiProvider: aiProvider ?? this.aiProvider,
     aiOnRequestOnly: aiOnRequestOnly ?? this.aiOnRequestOnly,
     aiFullTextOnly: aiFullTextOnly ?? this.aiFullTextOnly,
@@ -130,7 +146,13 @@ class SettingsStore {
 
   final SharedPreferences _prefs;
 
-  static const _theme = 'theme';
+  static const _familyId = 'familyId';
+  static const _themeMode = 'themeMode';
+  static const _amoled = 'amoled';
+
+  /// The pre-family setting: `amoled` / `white` / `system`. Read once so an
+  /// existing install keeps its look, never written again.
+  static const _legacyTheme = 'theme';
   static const _blur = 'blurBehindNav';
   static const _textSize = 'textSize';
   static const _onboarded = 'onboarded';
@@ -144,9 +166,15 @@ class SettingsStore {
   Settings read() {
     const fallback = Settings();
     return Settings(
-      theme:
-          HsThemeChoice.values.asNameMap()[_prefs.getString(_theme)] ??
-          fallback.theme,
+      familyId: _prefs.getString(_familyId) ?? fallback.familyId,
+      themeMode:
+          ThemeMode.values.asNameMap()[_prefs.getString(_themeMode)] ??
+          switch (_prefs.getString(_legacyTheme)) {
+            'white' => ThemeMode.light,
+            'system' => ThemeMode.system,
+            _ => fallback.themeMode,
+          },
+      amoled: _prefs.getBool(_amoled) ?? fallback.amoled,
       blurBehindNav: _prefs.getBool(_blur) ?? fallback.blurBehindNav,
       textSize:
           TextSizeStep.values.asNameMap()[_prefs.getString(_textSize)] ??
@@ -167,7 +195,9 @@ class SettingsStore {
   }
 
   Future<void> write(Settings s) async {
-    await _prefs.setString(_theme, s.theme.name);
+    await _prefs.setString(_familyId, s.familyId);
+    await _prefs.setString(_themeMode, s.themeMode.name);
+    await _prefs.setBool(_amoled, s.amoled);
     await _prefs.setBool(_blur, s.blurBehindNav);
     await _prefs.setString(_textSize, s.textSize.name);
     await _prefs.setBool(_onboarded, s.onboarded);

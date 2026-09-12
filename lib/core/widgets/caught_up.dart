@@ -83,8 +83,39 @@ class CaughtUp extends StatelessWidget {
   }
 }
 
-/// A flat placeholder card. Skeletons never shimmer — only the arriving
-/// content replaces them.
+/// A flat block standing in for a line of text while something loads.
+///
+/// Every skeleton in the app — Today, Linger, the Reader body, a source row —
+/// is built from this and nothing else. It never shimmers: only the arriving
+/// content replaces it.
+class SkeletonBar extends StatelessWidget {
+  const new({this.widthFactor = 1, this.width, this.height = 14, super.key});
+
+  /// Fraction of the available width; ignored when [width] is given.
+  final double widthFactor;
+  final double? width;
+  final double height;
+
+  @override
+  Widget build(BuildContext context) {
+    final block = Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: context.hs.skeleton,
+        borderRadius: BorderRadius.circular(4),
+      ),
+    );
+    if (width != null) return block;
+    return FractionallySizedBox(
+      alignment: Alignment.centerLeft,
+      widthFactor: widthFactor,
+      child: block,
+    );
+  }
+}
+
+/// A flat placeholder card in the shape of a headline.
 class HeadlineSkeleton extends StatelessWidget {
   const new({
     this.widths = const [0.78, 0.52],
@@ -98,18 +129,6 @@ class HeadlineSkeleton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final fill = context.hs.skeleton;
-
-    Widget bar(double factor, double height) => FractionallySizedBox(
-      alignment: Alignment.centerLeft,
-      widthFactor: factor,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(4),
-        ),
-      ),
-    );
 
     return IntrinsicHeight(
       child: Row(
@@ -128,13 +147,13 @@ class HeadlineSkeleton extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                bar(0.25, 8),
+                const SkeletonBar(widthFactor: 0.25, height: 8),
                 const SizedBox(height: 9),
-                bar(1, 14),
+                const SkeletonBar(),
                 const SizedBox(height: 9),
-                bar(widths.first, 14),
+                SkeletonBar(widthFactor: widths.first),
                 const SizedBox(height: 9),
-                bar(widths.last, 9),
+                SkeletonBar(widthFactor: widths.last, height: 9),
               ],
             ),
           ),

@@ -11,6 +11,9 @@ import 'package:headshorts/core/tokens/palette.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 
+export 'app_icon_button.dart';
+export 'menu.dart';
+
 /// A press state that dips opacity on motion-micro. The only feedback any
 /// tappable surface in the app gives.
 class Pressable extends StatefulWidget {
@@ -100,12 +103,8 @@ class HsButton extends StatelessWidget {
         palette.textMuted,
         Border.fromBorderSide(BorderSide(color: palette.divider)),
       ),
-      HsButtonKind.primary => (
-        palette.textPrimary,
-        palette.onPrimaryFill,
-        null,
-      ),
-      HsButtonKind.accent => (accent, palette.onPrimaryFill, null),
+      HsButtonKind.primary => (palette.primary, palette.onPrimary, null),
+      HsButtonKind.accent => (accent, palette.onPrimary, null),
       HsButtonKind.secondary => (
         null,
         palette.textPrimary,
@@ -162,7 +161,7 @@ class HsToggle extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 3),
           alignment: value ? Alignment.centerRight : Alignment.centerLeft,
           decoration: BoxDecoration(
-            color: value ? palette.textPrimary : null,
+            color: value ? palette.primary : null,
             border: value ? null : Border.all(color: palette.stroke),
             borderRadius: HsRadius.pillBorder,
           ),
@@ -172,7 +171,7 @@ class HsToggle extends StatelessWidget {
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: value
-                  ? palette.onPrimaryFill
+                  ? palette.onPrimary
                   : (palette.isDark ? palette.surfaceVariant : palette.surface),
             ),
           ),
@@ -201,13 +200,13 @@ class HsCheckbox extends StatelessWidget {
           height: HsSize.checkbox,
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: value ? palette.textPrimary : null,
+            color: value ? palette.primary : null,
             border: value
                 ? null
                 : Border.all(color: palette.stroke, width: HsSize.glyphStroke),
             borderRadius: BorderRadius.circular(5),
           ),
-          child: value ? HsGlyph.tick(palette.onPrimaryFill) : null,
+          child: value ? HsGlyph.tick(palette.onPrimary) : null,
         ),
       ),
     );
@@ -250,7 +249,7 @@ class HsChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: accentDot
               ? accentWash(accent, palette)
-              : (selected ? palette.textPrimary : null),
+              : (selected ? palette.primary : null),
           border: (selected || accentDot)
               ? null
               : Border.all(color: palette.stroke),
@@ -277,7 +276,7 @@ class HsChip extends StatelessWidget {
                     color: accentDot
                         ? accent
                         : (selected
-                              ? palette.onPrimaryFill
+                              ? palette.onPrimary
                               : palette.textSecondary),
                   ),
             ),

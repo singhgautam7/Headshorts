@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
@@ -11,12 +10,12 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
-import 'package:headshorts/core/tokens/palette.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/open_in_web.dart';
 import 'package:headshorts/core/util/relative_time.dart';
+import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
-import 'package:headshorts/core/widgets/glyphs.dart';
+import 'package:headshorts/core/widgets/nav_pill.dart';
 import 'package:headshorts/core/widgets/notice.dart';
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/database.dart';
@@ -210,18 +209,23 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   ],
                 ),
               ),
+              // The actions and the fade beneath them leave together on a
+              // scroll down and return together on a scroll up, so the prose
+              // gets the whole screen while the reader is reading.
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: SafeArea(
-                  top: false,
-                  child: Align(
-                    alignment: Alignment.bottomCenter,
+                child: IgnorePointer(
+                  ignoring: !_pillVisible,
+                  child: AnimatedOpacity(
+                    opacity: _pillVisible ? 1 : 0,
+                    duration: HsMotion.of(context, HsMotion.navHide),
+                    curve: HsMotion.curveOf(context, HsMotion.pageCurve),
                     child: AnimatedSlide(
-                      offset: _pillVisible ? Offset.zero : const Offset(0, 1.8),
-                      duration: HsMotion.page,
-                      curve: HsMotion.pageCurve,
+                      offset: _pillVisible ? Offset.zero : const Offset(0, 1),
+                      duration: HsMotion.of(context, HsMotion.navHide),
+                      curve: HsMotion.curveOf(context, HsMotion.pageCurve),
                       child: _ReaderFloatingButtons(
                         article: article,
                         sourceTitle: headline.source.title,
@@ -389,17 +393,13 @@ class _Bar extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
             children: [
-              Pressable(
-                onTap: () {
+              HsIconButton(
+                icon: Icons.arrow_back_rounded,
+                onPressed: () {
                   FocusManager.instance.primaryFocus?.unfocus();
                   Navigator.of(context).maybePop();
                 },
                 semanticLabel: 'Back',
-                child: SizedBox(
-                  width: HsSize.navItem,
-                  height: HsSize.navItem,
-                  child: Center(child: HsGlyph.back(palette.textPrimary)),
-                ),
               ),
               Expanded(
                 child: Center(
@@ -411,25 +411,13 @@ class _Bar extends StatelessWidget {
                   ),
                 ),
               ),
-              Pressable(
-                onTap: onToggleSizePanel,
+              HsIconButton(
                 semanticLabel: 'Text size',
-                child: Container(
-                  width: HsSize.navItem,
-                  height: HsSize.navItem,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: sizePanelOpen ? palette.surfaceVariant : null,
-                    borderRadius: HsRadius.pillBorder,
-                  ),
-                  child: Text(
-                    'Aa',
-                    style: HsType.buttonSmall.copyWith(
-                      color: sizePanelOpen
-                          ? palette.textPrimary
-                          : palette.textSecondary,
-                    ),
-                  ),
+                onPressed: onToggleSizePanel,
+                active: sizePanelOpen,
+                child: (color) => Text(
+                  'Aa',
+                  style: HsType.buttonSmall.copyWith(color: color),
                 ),
               ),
             ],
@@ -617,78 +605,21 @@ Future<void> _showReaderMenu({
   required ArticleRow article,
   required VoidCallback onToggleSizePanel,
 }) async {
-  final palette = context.hs;
-  final overlay =
-      Navigator.of(context, rootNavigator: true).overlay?.context
-              .findRenderObject() as RenderBox?;
-  if (overlay == null) return;
-
-  final anchor = anchorContext.findRenderObject() as RenderBox?;
-  final topLeft = anchor != null
-      ? anchor.localToGlobal(Offset.zero, ancestor: overlay)
-      : Offset.zero;
-  final size = anchor?.size ?? const Size(HsSize.navItem, HsSize.navItem);
-
-  final position = RelativeRect.fromLTRB(
-    topLeft.dx - 140,
-    topLeft.dy - 170,
-    overlay.size.width - (topLeft.dx + size.width),
-    overlay.size.height - topLeft.dy,
-  );
-
-  final selected = await showMenu<String>(
+  final selected = await showHsMenu<String>(
     context: context,
-    position: position,
-    useRootNavigator: true,
-    color: palette.surface,
-    elevation: 8,
-    shadowColor: palette.navShadow.color,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-      side: BorderSide(color: palette.stroke),
-    ),
-    items: [
-      PopupMenuItem<String>(
-        value: 'copy',
-        height: 44,
-        child: Row(
-          children: [
-            Icon(Icons.copy_rounded, size: 18, color: palette.textPrimary),
-            const SizedBox(width: 12),
-            Text(
-              'Copy link',
-              style: HsType.buttonSmall.copyWith(color: palette.textPrimary),
-            ),
-          ],
-        ),
-      ),
-      PopupMenuItem<String>(
+    anchorContext: anchorContext,
+    above: true,
+    entries: const [
+      HsMenuEntry(value: 'copy', label: 'Copy link', icon: Icons.link_rounded),
+      HsMenuEntry(
         value: 'web',
-        height: 44,
-        child: Row(
-          children: [
-            Icon(Icons.open_in_browser_rounded, size: 18, color: palette.textPrimary),
-            const SizedBox(width: 12),
-            Text(
-              'Open in browser',
-              style: HsType.buttonSmall.copyWith(color: palette.textPrimary),
-            ),
-          ],
-        ),
+        label: 'Open in browser',
+        icon: Icons.open_in_browser_rounded,
       ),
-      PopupMenuItem<String>(
+      HsMenuEntry(
         value: 'text_size',
-        height: 44,
-        child: Row(
-          children: [
-            Icon(Icons.format_size_rounded, size: 18, color: palette.textPrimary),
-            const SizedBox(width: 12),
-            Text(
-              'Text size',
-              style: HsType.buttonSmall.copyWith(color: palette.textPrimary),
-            ),
-          ],
-        ),
+        label: 'Text size',
+        icon: Icons.format_size_rounded,
       ),
     ],
   );
@@ -721,170 +652,117 @@ class _ReaderFloatingButtons extends ConsumerWidget {
   final VoidCallback? onRetry;
   final VoidCallback onToggleSizePanel;
 
-  Widget _buildSurface({
-    required Widget child,
-    required HsPalette palette,
-    required bool blur,
-    required BoxShape shape,
-    BorderRadius? borderRadius,
-  }) {
-    final inner = blur
-        ? (shape == BoxShape.circle
-            ? ClipOval(
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      color: palette.navActive.withValues(alpha: 0.86),
-                      border: Border.all(color: palette.stroke),
-                    ),
-                    child: child,
-                  ),
-                ),
-              )
-            : ClipRRect(
-                borderRadius: borderRadius ?? HsRadius.pillBorder,
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                  child: DecoratedBox(
-                    decoration: BoxDecoration(
-                      borderRadius: borderRadius ?? HsRadius.pillBorder,
-                      color: palette.navActive.withValues(alpha: 0.86),
-                      border: Border.all(color: palette.stroke),
-                    ),
-                    child: child,
-                  ),
-                ),
-              ))
-        : DecoratedBox(
-            decoration: BoxDecoration(
-              shape: shape,
-              borderRadius: shape == BoxShape.circle
-                  ? null
-                  : (borderRadius ?? HsRadius.pillBorder),
-              color: palette.navActive,
-              border: Border.all(color: palette.stroke),
-            ),
-            child: child,
-          );
-
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        shape: shape,
-        borderRadius: shape == BoxShape.circle
-            ? null
-            : (borderRadius ?? HsRadius.pillBorder),
-        boxShadow: [palette.navShadow],
-      ),
-      child: inner,
-    );
-  }
-
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
-    final blur = ref.watch(settingsProvider).blurBehindNav;
+    final blur = ref.watch(settingsProvider.select((s) => s.blurBehindNav));
 
-    final webButton = Pressable(
-      onTap: thin && onRetry != null
-          ? onRetry
-          : () => openInWeb(article.link),
-      child: _buildSurface(
-        palette: palette,
-        blur: blur,
-        shape: BoxShape.rectangle,
-        borderRadius: HsRadius.pillBorder,
-        child: Container(
-          height: HsSize.navItem,
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          alignment: Alignment.center,
-          child: Text(
-            thin ? 'Try again' : 'Open in web',
-            style: HsType.buttonSmall.copyWith(
-              color: palette.textPrimary,
-            ),
-          ),
-        ),
-      ),
+    // Three separate objects in the home pill's dress — the nav tone, a
+    // hairline, the one soft shadow — with air between them. The primary
+    // action takes the width; share and more keep their place on the right.
+    Widget pill(Widget child) => NavPillSurface(
+      blur: blur,
+      child: SizedBox(height: HsSize.navItem, child: child),
+    );
+    Widget glyph(IconData icon) => SizedBox(
+      width: HsSize.navItem,
+      child: Center(child: Icon(icon, size: 20, color: palette.textPrimary)),
     );
 
-    final shareButton = Builder(
-      builder: (btnContext) => Pressable(
-        onTap: () {
-          final box = btnContext.findRenderObject() as RenderBox?;
-          final origin = box != null
-              ? (box.localToGlobal(Offset.zero) & box.size)
-              : null;
-          unawaited(
-            SharePlus.instance.share(
-              ShareParams(
-                text: '${article.title}\n\n${article.link}',
-                subject: article.title,
-                sharePositionOrigin: origin,
-              ),
-            ),
-          );
-        },
-        semanticLabel: 'Share',
-        child: _buildSurface(
-          palette: palette,
-          blur: blur,
-          shape: BoxShape.circle,
-          child: SizedBox(
-            width: HsSize.navItem,
-            height: HsSize.navItem,
-            child: Center(
-              child: Icon(
-                Icons.share_rounded,
-                size: 18,
-                color: palette.textPrimary,
+    final actions = Row(
+      children: [
+        // On a thin extraction the card in the body already offers the
+        // publisher, so this becomes the retry instead of a second copy.
+        Expanded(
+          child: Pressable(
+            onTap: thin && onRetry != null
+                ? onRetry
+                : () => openInWeb(article.link),
+            child: pill(
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    Icons.open_in_new_rounded,
+                    size: 16,
+                    color: palette.textPrimary,
+                  ),
+                  const SizedBox(width: HsSpace.x2),
+                  Text(
+                    thin ? 'Try again' : 'Open in web',
+                    style: HsType.buttonSmall.copyWith(
+                      color: palette.textPrimary,
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
         ),
-      ),
-    );
-
-    final moreButton = Builder(
-      builder: (btnContext) => Pressable(
-        onTap: () => _showReaderMenu(
-          context: context,
-          anchorContext: btnContext,
-          article: article,
-          onToggleSizePanel: onToggleSizePanel,
-        ),
-        semanticLabel: 'More options',
-        child: _buildSurface(
-          palette: palette,
-          blur: blur,
-          shape: BoxShape.circle,
-          child: SizedBox(
-            width: HsSize.navItem,
-            height: HsSize.navItem,
-            child: Center(
-              child: Icon(
-                Icons.more_horiz_rounded,
-                size: 20,
-                color: palette.textPrimary,
-              ),
-            ),
+        const SizedBox(width: HsSpace.x3),
+        Builder(
+          builder: (btnContext) => Pressable(
+            onTap: () {
+              final box = btnContext.findRenderObject() as RenderBox?;
+              final origin = box != null
+                  ? (box.localToGlobal(Offset.zero) & box.size)
+                  : null;
+              unawaited(
+                SharePlus.instance.share(
+                  ShareParams(
+                    text: '${article.title}\n\n${article.link}',
+                    subject: article.title,
+                    sharePositionOrigin: origin,
+                  ),
+                ),
+              );
+            },
+            semanticLabel: 'Share',
+            child: pill(glyph(Icons.share_rounded)),
           ),
         ),
-      ),
+        const SizedBox(width: HsSpace.x3),
+        Builder(
+          builder: (btnContext) => Pressable(
+            onTap: () => _showReaderMenu(
+              context: context,
+              anchorContext: btnContext,
+              article: article,
+              onToggleSizePanel: onToggleSizePanel,
+            ),
+            semanticLabel: 'More options',
+            child: pill(glyph(Icons.more_horiz_rounded)),
+          ),
+        ),
+      ],
     );
 
-    return Padding(
-      padding: const EdgeInsets.only(bottom: HsSize.navPillInset),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          webButton,
-          const SizedBox(width: 10),
-          shareButton,
-          const SizedBox(width: 10),
-          moreButton,
-        ],
+    // The page ground rising under the actions, so the last lines of prose
+    // fade out beneath them instead of colliding with a hairline.
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            palette.background.withValues(alpha: 0),
+            palette.background.withValues(alpha: 0.9),
+            palette.background,
+          ],
+          stops: const [0, 0.55, 1],
+        ),
+      ),
+      child: SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(
+            HsSpace.x5,
+            HsSpace.x7,
+            HsSpace.x5,
+            0,
+          ),
+          child: actions,
+        ),
       ),
     );
   }
@@ -895,20 +773,9 @@ class _BodySkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = context.hs.skeleton;
     Widget bar(double factor) => Padding(
       padding: const EdgeInsets.only(bottom: 12),
-      child: FractionallySizedBox(
-        alignment: Alignment.centerLeft,
-        widthFactor: factor,
-        child: Container(
-          height: 14,
-          decoration: BoxDecoration(
-            color: fill,
-            borderRadius: BorderRadius.circular(4),
-          ),
-        ),
-      ),
+      child: SkeletonBar(widthFactor: factor),
     );
 
     return Column(

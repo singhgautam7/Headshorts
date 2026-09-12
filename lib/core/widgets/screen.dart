@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
@@ -7,7 +8,6 @@ import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
-import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/pull_to_refresh.dart';
 
 /// A root destination: the serif screen title, an optional trailing control,
@@ -104,18 +104,13 @@ class PushedScreen extends StatelessWidget {
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(
                     children: [
-                      Pressable(
-                        onTap: onBack ?? () => Navigator.of(context).maybePop(),
+                      HsIconButton(
+                        icon: Icons.arrow_back_rounded,
+                        onPressed:
+                            onBack ?? () => Navigator.of(context).maybePop(),
                         semanticLabel: 'Back',
-                        child: SizedBox(
-                          width: HsSize.navItem,
-                          height: HsSize.navItem,
-                          child: Center(
-                            child: HsGlyph.back(palette.textPrimary),
-                          ),
-                        ),
                       ),
-                      const SizedBox(width: 6),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           title,
@@ -313,7 +308,7 @@ class _SubTab extends StatelessWidget {
         decoration: BoxDecoration(
           border: Border(
             bottom: BorderSide(
-              color: selected ? palette.textPrimary : const Color(0x00000000),
+              color: selected ? palette.primary : const Color(0x00000000),
               width: 2,
             ),
           ),
@@ -329,10 +324,7 @@ class _SubTab extends StatelessWidget {
               ),
               child: Text(label),
             ),
-            if (badge != null) ...[
-              const SizedBox(width: 6),
-              badge,
-            ],
+            if (badge != null) ...[const SizedBox(width: 6), badge],
           ],
         ),
       ),

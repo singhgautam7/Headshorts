@@ -1,4 +1,5 @@
 import 'package:drift/native.dart';
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/database.dart';
@@ -21,7 +22,9 @@ void main() {
     test('defaults are the calm ones', () async {
       final settings = (await store()).read();
 
-      expect(settings.theme, HsThemeChoice.amoled);
+      expect(settings.familyId, 'paper');
+      expect(settings.themeMode, ThemeMode.dark);
+      expect(settings.amoled, isTrue);
       expect(settings.blurBehindNav, isFalse);
       expect(settings.linkOpenMode, LinkOpenMode.inApp);
       expect(settings.refreshCadence, RefreshCadence.hourly);
@@ -35,7 +38,9 @@ void main() {
     test('round-trips every field', () async {
       final written = await store();
       const settings = Settings(
-        theme: HsThemeChoice.white,
+        familyId: 'ember',
+        themeMode: ThemeMode.light,
+        amoled: false,
         blurBehindNav: true,
         textSize: TextSizeStep.large,
         onboarded: true,
@@ -46,7 +51,9 @@ void main() {
       await written.write(settings);
 
       final read = (await store()).read();
-      expect(read.theme, HsThemeChoice.white);
+      expect(read.familyId, 'ember');
+      expect(read.themeMode, ThemeMode.light);
+      expect(read.amoled, isFalse);
       expect(read.blurBehindNav, isTrue);
       expect(read.textSize, TextSizeStep.large);
       expect(read.onboarded, isTrue);

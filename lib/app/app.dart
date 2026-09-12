@@ -8,8 +8,7 @@ import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/router.dart';
 import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
-import 'package:headshorts/core/tokens/palette.dart';
-import 'package:headshorts/data/prefs/settings.dart';
+import 'package:headshorts/core/tokens/theme_family.dart';
 
 class HeadShortsApp extends ConsumerStatefulWidget {
   const new({super.key});
@@ -36,21 +35,28 @@ class _HeadShortsAppState extends ConsumerState<HeadShortsApp> {
 
   @override
   Widget build(BuildContext context) {
-    final choice = ref.watch(settingsProvider).theme;
+    // Only the fields that decide the theme — a text-size change must not
+    // rebuild the whole app.
+    final (familyId, mode, amoled) = ref.watch(
+      settingsProvider.select((s) => (s.familyId, s.themeMode, s.amoled)),
+    );
     final systemDark =
         MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-
-    final palette = switch (choice) {
-      HsThemeChoice.amoled => HsPalette.amoled,
-      HsThemeChoice.white => HsPalette.light,
-      HsThemeChoice.system => systemDark ? HsPalette.amoled : HsPalette.light,
-    };
+    final darkInEffect =
+        mode == ThemeMode.dark || (mode == ThemeMode.system && systemDark);
+    final tone = !darkInEffect
+        ? Tone.light
+        : amoled
+        ? Tone.amoled
+        : Tone.dark;
+    final theme = hsThemeOf(ThemeFamily.byId(familyId), tone);
+    final palette = theme.extension<HsThemeExtension>()!.palette;
 
     // The system bars take the app's ground, so the pill is the only thing
     // that looks like chrome.
     SystemChrome.setSystemUIOverlayStyle(
       SystemUiOverlayStyle(
-        statusBarColor: const Color(0x00000000),
+        statusBarColor: Colors.transparent,
         systemNavigationBarColor: palette.background,
         statusBarIconBrightness: palette.isDark
             ? Brightness.light
@@ -64,7 +70,7 @@ class _HeadShortsAppState extends ConsumerState<HeadShortsApp> {
     return MaterialApp.router(
       title: 'HeadShorts',
       debugShowCheckedModeBanner: false,
-      theme: buildHsTheme(palette),
+      theme: theme,
       routerConfig: _router,
       // Every screen is built from plain widgets rather than Scaffolds, so
       // one Material at the root gives text its ink and gives sheets and

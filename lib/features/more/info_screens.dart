@@ -1,14 +1,12 @@
-import 'package:flutter/widgets.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/screen.dart';
-import 'package:headshorts/features/reader/reader_screen.dart';
+import 'package:headshorts/features/more/settings_widgets.dart';
 
-/// Prose screens: Privacy and About. Both are short on purpose.
+/// Prose screens: About is short on purpose.
 class ProseScreen extends StatelessWidget {
   const new({required this.title, required this.paragraphs, super.key});
 
@@ -37,15 +35,102 @@ class ProseScreen extends StatelessWidget {
   }
 }
 
-const privacyScreen = ProseScreen(
-  title: 'Privacy',
-  paragraphs: [
-    'HeadShorts has no account, no server and no analytics. Nothing about  what you read leaves the device.',
-    'The app makes exactly two kinds of network request: it fetches the feeds  you subscribed to, and — when you open the Reader — it fetches the  article page so it can be laid out for reading here. Both go  directly to the publisher.',
-    'Article extraction runs on the device, using the same heuristics a  browser reader view uses. No page is sent anywhere for processing.',
-    'Your subscriptions, read state and reading times are stored in a local  database and are removed when you uninstall the app.',
-  ],
-);
+/// Rich Privacy screen ported from Perch: leads with the brief statement,
+/// then verifiable claims with success indicators.
+class PrivacyScreen extends StatelessWidget {
+  const new({super.key});
+
+  static const List<(String, String)> _claims = <(String, String)>[
+    ('No account, ever', 'There is nothing to sign in to.'),
+    ('No analytics, no ads', 'No third-party tracking SDKs are bundled.'),
+    (
+      'Direct to publisher',
+      'Feeds and article pages are fetched straight from publishers. No HeadShorts proxy or server exists.',
+    ),
+    (
+      'Device-only storage',
+      'Your subscriptions, read history, and cached stories stay on your device and are wiped upon uninstall.',
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+
+    return SettingsScaffold(
+      title: 'Privacy',
+      children: <Widget>[
+        Text(
+          'HeadShorts stores everything on your device.',
+          style: HsType.screenTitle.copyWith(
+            fontSize: 26,
+            height: 1.2,
+            color: palette.textPrimary,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+          'Feeds and articles are fetched directly from the sources you choose. '
+          'There is no HeadShorts server, so nothing you read is ever tracked or sent anywhere.',
+          style: HsType.bodySans.copyWith(
+            color: palette.textSecondary,
+            height: 1.45,
+          ),
+        ),
+        const SizedBox(height: 24),
+        for (final (String, String) claim in _claims) ...<Widget>[
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: palette.surface,
+              borderRadius: HsRadius.cardBorder,
+              border: Border.all(color: palette.stroke),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Padding(
+                  padding: const EdgeInsets.only(top: 2),
+                  child: Icon(
+                    Icons.check_circle_rounded,
+                    size: 18,
+                    color: palette.textPrimary,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: <Widget>[
+                      Text(
+                        claim.$1,
+                        style: HsType.row.copyWith(
+                          fontWeight: FontWeight.w600,
+                          color: palette.textPrimary,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        claim.$2,
+                        style: HsType.rowSub.copyWith(
+                          height: 1.4,
+                          color: palette.textSecondary,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+}
+
+const privacyScreen = PrivacyScreen();
 
 const aboutScreen = ProseScreen(
   title: 'About HeadShorts',
@@ -53,44 +138,5 @@ const aboutScreen = ProseScreen(
     'A finite briefing. It ends, and then you are done with it.',
     'HeadShorts reads the feeds you choose, in the order they were published.  There is no algorithm, no ranking and no infinite scroll. When you  reach the bottom, that is the news.',
     'There is deliberately no like, save-count, reaction, streak, goal, badge  or red dot anywhere in the app.',
-    'Version 1.0',
   ],
 );
-
-/// The text-size screen reached from More — the same control the Reader uses.
-class TextSizeScreen extends ConsumerWidget {
-  const new({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final palette = context.hs;
-    final step = ref.watch(settingsProvider).textSize;
-
-    return PushedScreen(
-      title: 'Text size',
-      onBack: () => context.pop(),
-      child: ListView(
-        padding: const EdgeInsets.all(HsSpace.x5),
-        children: [
-          Text(
-            'The slider offsets the system setting rather than overriding it.',
-            style: HsType.note.copyWith(color: palette.textMuted),
-          ),
-          const SizedBox(height: 22),
-          TextSizeSlider(
-            step: step,
-            onChanged: (next) =>
-                ref.read(settingsProvider.notifier).setTextSize(next),
-          ),
-          const SizedBox(height: 30),
-          Text(
-            'Generous line-height is the whole point. Reader body sits at 1.7 '
-            'and honours the system text-size setting.',
-            style: HsType.readerBody(step.fontSize)
-                .copyWith(color: palette.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-}

@@ -75,16 +75,10 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.hs;
     final categories =
         ref.watch(categoriesProvider).value ?? const [latestScope];
     final selected = ref.watch(activeCategoryProvider);
-    // Selected, not watched whole: a refresh emits one progress event per
-    // feed, and Today has no business rebuilding forty-five times for a word
-    // that only changes twice.
-    final refreshing = ref.watch(refreshProvider.select((p) => p.isRunning));
     final offline = ref.watch(offlineProvider);
-    final lastUpdated = ref.watch(lastUpdatedProvider).value;
 
     final unreadAsync = ref.watch(unreadCountsProvider);
     final unreadCounts = unreadAsync.value ?? const <String, int>{};
@@ -97,16 +91,6 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
     return HsScreen(
       title: 'Headlines',
-      trailing: offline
-          ? null
-          : Text(
-              refreshing
-                  ? 'updating…'
-                  : lastUpdated == null
-                      ? ''
-                      : 'updated ${clockTime(lastUpdated)}',
-              style: HsType.timestamp.copyWith(color: palette.textMuted),
-            ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -174,6 +158,11 @@ class _Briefing extends ConsumerWidget {
     final category = ref.watch(activeCategoryProvider);
     final sources = ref.watch(sourcesProvider).value ?? const [];
     final muted = ref.watch(mutedSourcesProvider);
+    // Selected, not watched whole: a refresh emits one progress event per
+    // feed, and Today has no business rebuilding forty-five times for a word
+    // that only changes twice.
+    final refreshing = ref.watch(refreshProvider.select((p) => p.isRunning));
+    final lastUpdated = ref.watch(lastUpdatedProvider).value;
 
     final scoped = sources
         .where(
@@ -224,12 +213,18 @@ class _Briefing extends ConsumerWidget {
               child: Row(
                 children: [
                   Expanded(
+                    // When the list was last fetched — not how long it is.
+                    // The tab already says how many; a second count here
+                    // that disagreed with it (the loaded page versus the
+                    // whole category) read as a bug.
                     child: Text(
-                      headlines.isEmpty
-                          ? 'Nothing here yet'
-                          : '${headlines.length} '
-                                '${headlines.length == 1 ? 'headline' : 'headlines'} '
-                                '· newest first',
+                      offline
+                          ? 'Offline · showing what is saved'
+                          : refreshing
+                          ? 'updating…'
+                          : lastUpdated == null
+                          ? 'Not fetched yet'
+                          : 'updated ${clockTime(lastUpdated)} · newest first',
                       style: HsType.timestamp.copyWith(
                         color: palette.textMuted,
                       ),

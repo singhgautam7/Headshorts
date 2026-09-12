@@ -1,3 +1,4 @@
+import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/data/prefs/settings.dart';
@@ -12,8 +13,13 @@ class SettingsController extends Notifier<Settings> {
     await ref.read(settingsStoreProvider).write(next);
   }
 
-  Future<void> setTheme(HsThemeChoice theme) =>
-      _save(state.copyWith(theme: theme));
+  Future<void> setFamily(String id) => _save(state.copyWith(familyId: id));
+
+  Future<void> setThemeMode(ThemeMode mode) =>
+      _save(state.copyWith(themeMode: mode));
+
+  Future<void> setAmoled({required bool value}) =>
+      _save(state.copyWith(amoled: value));
 
   Future<void> setBlurBehindNav({required bool enabled}) =>
       _save(state.copyWith(blurBehindNav: enabled));

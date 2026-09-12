@@ -24,12 +24,14 @@ abstract final class HsRadius {
   static const button = Radius.circular(12);
   static const card = Radius.circular(18);
   static const sheet = Radius.circular(26);
+  static const menu = Radius.circular(20);
   static const pill = Radius.circular(999);
 
   static const chipBorder = BorderRadius.all(chip);
   static const buttonBorder = BorderRadius.all(button);
   static const cardBorder = BorderRadius.all(card);
   static const sheetTop = BorderRadius.vertical(top: sheet);
+  static const menuBorder = BorderRadius.all(menu);
   static const pillBorder = BorderRadius.all(pill);
 }
 

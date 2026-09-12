@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
+import 'package:headshorts/core/tokens/oklab.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 
@@ -53,8 +54,6 @@ class NavPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final palette = context.hs;
-
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: HsSize.navPillPadding),
       child: SizedBox(
@@ -78,6 +77,21 @@ class NavPill extends StatelessWidget {
       ),
     );
 
+    return NavPillSurface(blur: blur, child: content);
+  }
+}
+
+/// The pill's dress, on its own so the Reader's floating actions can wear it:
+/// the nav tone, a hairline, the one soft shadow, and the optional blur.
+class NavPillSurface extends StatelessWidget {
+  const new({required this.child, this.blur = false, super.key});
+
+  final Widget child;
+  final bool blur;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
     final inner = blur
         ? ClipRRect(
             borderRadius: HsRadius.pillBorder,
@@ -89,7 +103,7 @@ class NavPill extends StatelessWidget {
                   borderRadius: HsRadius.pillBorder,
                   border: Border.all(color: palette.stroke),
                 ),
-                child: content,
+                child: child,
               ),
             ),
           )
@@ -99,7 +113,7 @@ class NavPill extends StatelessWidget {
               borderRadius: HsRadius.pillBorder,
               border: Border.all(color: palette.stroke),
             ),
-            child: content,
+            child: child,
           );
 
     return Padding(
@@ -143,30 +157,36 @@ class _NavItem extends StatelessWidget {
         onTap: onTap,
         child: TweenAnimationBuilder<double>(
           tween: Tween(end: selected ? 1 : 0),
-          duration: HsMotion.navMorph,
-          curve: HsMotion.navMorphCurve,
+          duration: HsMotion.of(context, HsMotion.navMorph),
+          curve: HsMotion.curveOf(context, HsMotion.navMorphCurve),
           builder: (context, t, _) {
             // The container width and the label opacity animate together; the
-            // icon itself never scales or bounces.
+            // icon itself never scales or bounces. The spring overshoots, so
+            // the width may briefly pass 1; colour and opacity never do.
             final open = t.clamp(0.0, 1.0);
+            final width = t.clamp(0.0, 1.2);
             // Closed, the item is exactly 44 square. Open, it carries the
             // specified 13/16 padding around icon and label.
             final closedPad = (HsSize.navItem - destination.iconWidth) / 2;
             return Container(
               height: HsSize.navItem,
               padding: EdgeInsets.only(
-                left: closedPad + (13 - closedPad) * open,
-                right: closedPad + (16 - closedPad) * open,
+                left: closedPad + (13 - closedPad) * width,
+                right: closedPad + (16 - closedPad) * width,
               ),
               decoration: BoxDecoration(
-                color: Color.lerp(palette.nav, palette.navActive, open),
+                color: Oklab.mix(palette.primaryContainer, palette.nav, open),
                 borderRadius: HsRadius.pillBorder,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   destination.icon(
-                    Color.lerp(palette.textMuted, palette.textPrimary, open)!,
+                    Oklab.mix(
+                      palette.onPrimaryContainer,
+                      palette.textMuted,
+                      open,
+                    ),
                   ),
                   // The label exists only while it is at least partly
                   // visible: an inactive destination is a glyph, full stop.
@@ -174,7 +194,7 @@ class _NavItem extends StatelessWidget {
                     ClipRect(
                       child: Align(
                         alignment: Alignment.centerLeft,
-                        widthFactor: open,
+                        widthFactor: width,
                         child: Opacity(
                           opacity: open,
                           child: Padding(
@@ -184,7 +204,7 @@ class _NavItem extends StatelessWidget {
                               maxLines: 1,
                               softWrap: false,
                               style: HsType.buttonSmall.copyWith(
-                                color: palette.textPrimary,
+                                color: palette.onPrimaryContainer,
                               ),
                             ),
                           ),

@@ -12,18 +12,31 @@ import 'package:headshorts/core/widgets/nav_pill.dart';
 /// Content is not inset by the pill: it scrolls beneath it and reserves
 /// clearance at the foot of each list, so the pill reads as an object over the
 /// page rather than a bar that owns the bottom of the screen.
+///
+/// The shell owns the ground colour. Linger reads on pure black or pure white
+/// rather than the page ground, and the change is animated here on the same
+/// clock as the branch cross-fade, so it never snaps between tabs.
 class AppShell extends ConsumerWidget {
   const new(this.navigationShell, {super.key});
+
+  /// The branch whose ground is `HsPalette.lingerBackground`.
+  static const lingerIndex = 1;
 
   final StatefulNavigationShell navigationShell;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final blur = ref.watch(settingsProvider).blurBehindNav;
+    final blur = ref.watch(settingsProvider.select((s) => s.blurBehindNav));
     final visible = ref.watch(navVisibilityProvider);
+    final palette = context.hs;
+    final index = navigationShell.currentIndex;
 
-    return ColoredBox(
-      color: context.hs.background,
+    return AnimatedContainer(
+      duration: HsMotion.of(context, HsMotion.page),
+      curve: HsMotion.curveOf(context, HsMotion.pageCurve),
+      color: index == lingerIndex
+          ? palette.lingerBackground
+          : palette.background,
       child: Stack(
         children: [
           Positioned.fill(child: navigationShell),
@@ -39,17 +52,17 @@ class AppShell extends ConsumerWidget {
                   // Detached, so sliding it past the bottom inset costs no
                   // layout — the content underneath does not move at all.
                   offset: visible ? Offset.zero : const Offset(0, 1.5),
-                  duration: HsMotion.page,
-                  curve: HsMotion.pageCurve,
+                  duration: HsMotion.of(context, HsMotion.navHide),
+                  curve: HsMotion.curveOf(context, HsMotion.pageCurve),
                   child: NavPill(
                     destinations: NavPill.destinationsForApp,
-                    selectedIndex: navigationShell.currentIndex,
+                    selectedIndex: index,
                     blur: blur,
-                    onSelected: (index) {
+                    onSelected: (tapped) {
                       ref.read(navVisibilityProvider.notifier).show();
                       navigationShell.goBranch(
-                        index,
-                        initialLocation: index == navigationShell.currentIndex,
+                        tapped,
+                        initialLocation: tapped == index,
                       );
                     },
                   ),

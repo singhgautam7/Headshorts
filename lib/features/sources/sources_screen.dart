@@ -8,6 +8,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/screen.dart';
@@ -32,7 +33,8 @@ class SourcesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
     final grouped = ref.watch(manageableSourcesProvider);
-    final loading = ref.watch(sourceCatalogProvider).isLoading ||
+    final loading =
+        ref.watch(sourceCatalogProvider).isLoading ||
         (ref.watch(sourcesProvider).isLoading && grouped.isEmpty);
     final subscribed = (ref.watch(sourcesProvider).value ?? const [])
         .where((s) => s.enabled)
@@ -173,19 +175,6 @@ class _RowSkeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final fill = context.hs.skeleton;
-    Widget bar(double factor, double height) => FractionallySizedBox(
-      alignment: Alignment.centerLeft,
-      widthFactor: factor,
-      child: Container(
-        height: height,
-        decoration: BoxDecoration(
-          color: fill,
-          borderRadius: BorderRadius.circular(4),
-        ),
-      ),
-    );
-
     return SizedBox(
       height: HsSize.sourceRowHeight,
       child: Row(
@@ -194,17 +183,21 @@ class _RowSkeleton extends StatelessWidget {
             width: HsSize.accentBar,
             height: 28,
             decoration: BoxDecoration(
-              color: fill,
+              color: context.hs.skeleton,
               borderRadius: BorderRadius.circular(2),
             ),
           ),
           const SizedBox(width: 14),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
               mainAxisSize: MainAxisSize.min,
-              children: [bar(0.5, 12), const SizedBox(height: 8), bar(0.2, 8)],
+              children: [
+                SkeletonBar(widthFactor: 0.5, height: 12),
+                SizedBox(height: 8),
+                SkeletonBar(widthFactor: 0.2, height: 8),
+              ],
             ),
           ),
         ],

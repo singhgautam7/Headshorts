@@ -104,126 +104,124 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
       if (_controller.hasClients) _controller.jumpToPage(0);
     });
 
-    return ColoredBox(
-      color: palette.background,
-      child: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            _FilterBar(
-              filter: filter,
-              onTap: () => showLingerFilterSheet(context),
-            ),
-            Expanded(
-              child: state.loading
-                  ? const _QueueSkeleton()
-                  : queue.isEmpty
-                  ? Padding(
-                      padding: const EdgeInsets.fromLTRB(
-                        HsSpace.x4,
-                        HsSpace.x2,
-                        HsSpace.x4,
-                        HsSpace.navClearance,
-                      ),
-                      child: _HardStop(total: 0, onBackToToday: _backToToday),
-                    )
-                  : NotificationListener<ScrollNotification>(
-                      onNotification: (notification) {
-                        if (_controller.hasClients &&
-                            (_controller.page == null ||
-                                _controller.page! <= 0.05)) {
-                          final pixels = notification.metrics.pixels;
-                          if (pixels < 0) {
-                            setState(() {
-                              _pullOffset = -pixels;
-                            });
-                            if (-pixels > 72 && !_refreshing) {
-                              unawaited(_refresh());
-                            }
-                          } else if (_pullOffset != 0 && !_refreshing) {
-                            setState(() {
-                              _pullOffset = 0;
-                            });
+    // No ground of its own: the shell paints Linger's pure black or white and
+    // animates the change, so an opaque box here would snap over it.
+    return SafeArea(
+      bottom: false,
+      child: Column(
+        children: [
+          _FilterBar(
+            filter: filter,
+            onTap: () => showLingerFilterSheet(context),
+          ),
+          Expanded(
+            child: state.loading
+                ? const _QueueSkeleton()
+                : queue.isEmpty
+                ? Padding(
+                    padding: const EdgeInsets.fromLTRB(
+                      HsSpace.x4,
+                      HsSpace.x2,
+                      HsSpace.x4,
+                      HsSpace.navClearance,
+                    ),
+                    child: _HardStop(total: 0, onBackToToday: _backToToday),
+                  )
+                : NotificationListener<ScrollNotification>(
+                    onNotification: (notification) {
+                      if (_controller.hasClients &&
+                          (_controller.page == null ||
+                              _controller.page! <= 0.05)) {
+                        final pixels = notification.metrics.pixels;
+                        if (pixels < 0) {
+                          setState(() {
+                            _pullOffset = -pixels;
+                          });
+                          if (-pixels > 72 && !_refreshing) {
+                            unawaited(_refresh());
                           }
                         } else if (_pullOffset != 0 && !_refreshing) {
                           setState(() {
                             _pullOffset = 0;
                           });
                         }
-                        return false;
-                      },
-                      child: Stack(
-                        children: [
-                          PageView.builder(
-                            controller: _controller,
-                            scrollDirection: Axis.vertical,
-                            physics: const PageScrollPhysics(
-                              parent: BouncingScrollPhysics(),
+                      } else if (_pullOffset != 0 && !_refreshing) {
+                        setState(() {
+                          _pullOffset = 0;
+                        });
+                      }
+                      return false;
+                    },
+                    child: Stack(
+                      children: [
+                        PageView.builder(
+                          controller: _controller,
+                          scrollDirection: Axis.vertical,
+                          physics: const PageScrollPhysics(
+                            parent: BouncingScrollPhysics(),
+                          ),
+                          itemCount: queue.length + 1,
+                          onPageChanged: (i) => _onPage(i, queue),
+                          itemBuilder: (context, i) => Padding(
+                            padding: const EdgeInsets.fromLTRB(
+                              HsSpace.x4,
+                              HsSpace.x2,
+                              HsSpace.x4,
+                              HsSpace.navClearance,
                             ),
-                            itemCount: queue.length + 1,
-                            onPageChanged: (i) => _onPage(i, queue),
-                            itemBuilder: (context, i) => Padding(
-                              padding: const EdgeInsets.fromLTRB(
-                                HsSpace.x4,
-                                HsSpace.x2,
-                                HsSpace.x4,
-                                HsSpace.navClearance,
-                              ),
-                              child: i == queue.length
-                                  ? _HardStop(
-                                      total: queue.length,
-                                      onBackToToday: _backToToday,
-                                    )
-                                  : LingerCard(
-                                      headline: queue[i],
-                                      position: i,
-                                      total: queue.length,
-                                      onNextCard: i < queue.length
-                                          ? () {
-                                              if (_controller.hasClients) {
-                                                _controller.nextPage(
-                                                  duration: HsMotion.page,
-                                                  curve: HsMotion.pageCurve,
-                                                );
-                                              }
+                            child: i == queue.length
+                                ? _HardStop(
+                                    total: queue.length,
+                                    onBackToToday: _backToToday,
+                                  )
+                                : LingerCard(
+                                    headline: queue[i],
+                                    position: i,
+                                    total: queue.length,
+                                    onNextCard: i < queue.length
+                                        ? () {
+                                            if (_controller.hasClients) {
+                                              _controller.nextPage(
+                                                duration: HsMotion.page,
+                                                curve: HsMotion.pageCurve,
+                                              );
                                             }
-                                          : null,
-                                      onPreviousCard: i > 0
-                                          ? () {
-                                              if (_controller.hasClients) {
-                                                _controller.previousPage(
-                                                  duration: HsMotion.page,
-                                                  curve: HsMotion.pageCurve,
-                                                );
-                                              }
+                                          }
+                                        : null,
+                                    onPreviousCard: i > 0
+                                        ? () {
+                                            if (_controller.hasClients) {
+                                              _controller.previousPage(
+                                                duration: HsMotion.page,
+                                                curve: HsMotion.pageCurve,
+                                              );
                                             }
-                                          : _refresh,
-                                      onReadFull: () => context.push(
-                                        '/reader/${queue[i].article.id}',
-                                      ),
+                                          }
+                                        : _refresh,
+                                    onReadFull: () => context.push(
+                                      '/reader/${queue[i].article.id}',
                                     ),
+                                  ),
+                          ),
+                        ),
+                        if (_pullOffset > 0 || _refreshing)
+                          Positioned(
+                            top: HsSpace.x2,
+                            left: 0,
+                            right: 0,
+                            child: Center(
+                              child: HsPullRing(
+                                color: palette.textPrimary,
+                                progress: (_pullOffset / 72).clamp(0.0, 1.0),
+                                spinning: _refreshing,
+                              ),
                             ),
                           ),
-                          if (_pullOffset > 0 || _refreshing)
-                            Positioned(
-                              top: HsSpace.x2,
-                              left: 0,
-                              right: 0,
-                              child: Center(
-                                child: HsPullRing(
-                                  color: palette.textPrimary,
-                                  progress:
-                                      (_pullOffset / 72).clamp(0.0, 1.0),
-                                  spinning: _refreshing,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
+                      ],
                     ),
-            ),
-          ],
-        ),
+                  ),
+          ),
+        ],
       ),
     );
   }
@@ -411,9 +409,7 @@ class _LingerCardState extends ConsumerState<LingerCard> {
           ? Oklab.mix(accent, palette.textPrimary, 0.4)
           : palette.textPrimary,
     );
-    final bodyStyle = HsType.lingerBody.copyWith(
-      color: palette.textSecondary,
-    );
+    final bodyStyle = HsType.lingerBody.copyWith(color: palette.textSecondary);
 
     return AccentScope(
       accent: tone,
@@ -470,10 +466,7 @@ class _LingerCardState extends ConsumerState<LingerCard> {
                         var neededHeight = titlePainter.height;
                         if (extract.isNotEmpty) {
                           final extractPainter = TextPainter(
-                            text: TextSpan(
-                              text: extract,
-                              style: bodyStyle,
-                            ),
+                            text: TextSpan(text: extract, style: bodyStyle),
                             textDirection: textDirection,
                             maxLines: 6,
                           )..layout(maxWidth: constraints.maxWidth);

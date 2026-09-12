@@ -33,9 +33,12 @@ than production code. Recreate the *visual output*, not the DOM structure.
 | Scroll.in at `scroll.in/feed` | `feeds.feedburner.com/ScrollinArticles.rss` | The site path returns an empty document. |
 | A phone status bar in each mock | The real system status bar (`SafeArea`) | The mock frames draw "9:41"; on a device that is the OS's. |
 | The nav pill 22 above the frame edge | 8 above the safe area | The mock measures from the frame; a phone puts the system gesture inset there first, and the pill ends up floating in the bottom margin. |
-| More is the settings screen | More is a hub; Settings is a page in it | Stats, AI summaries, About and Privacy are not settings, and burying them under that heading made the tab describe one fifth of itself. |
+| More is the settings screen | More is one grouped list: settings rows and hub rows side by side, Appearance as its own page | Stats, AI summaries, About and Privacy are not settings, but a second "Settings" page under More was one tap of indirection for four rows. Grouped headings do the sorting instead. |
 | A "Top" sub-tab | "Latest" | "Top" reads as ranking, which the app does not do. Same tab, honest name. |
 | Fixed India / World / Tech tabs | Tabs derived from the reader's own categories | The mock shows one reader's set. Categories are a label on a source, so the tab bar follows whatever they have. |
+| Two themes: AMOLED and White | Five families × Light / Dark / System, with AMOLED as a true-black toggle under dark | Perch's appearance model, by request. The board's own palette is the `paper` family and the default; the other four are Perch's, derived in OKLCh. |
+| Its own motion tokens (300ms page, 420ms spring nav morph, …) | Perch's M3 Expressive set: 150–260ms, `easeOutBack` for anything the finger caused, `easeOutCubic` for anything the system did | One motion vocabulary across the two apps. The board's curves were replaced wholesale rather than mixed, so nothing runs on two clocks. |
+| Linger on the page ground | Linger on pure black / pure white (`HsPalette.lingerBackground`) | Maximum contrast under the one card being read. The card keeps its designed colour; only the ground behind it changes. |
 
 ---
 
@@ -166,11 +169,12 @@ Linger reflect it without anything being told to reload:
 
 | Screen | Does |
 |---|---|
-| **More** | A hub, not a settings page: Stats · Settings · AI summaries (Beta) · About · Privacy, and "Made with ❤️ in India" pinned at the foot |
+| **More** | Grouped rows in Perch's settings dress — General (Appearance, Open links, Text size, Reading fairness, Check for new) · Your data (Stats, Data, Permissions) · About HeadShorts (Privacy, AI summaries, About) — the real version line and "Made with ❤️ in India" at the foot. Every one-of-N row opens `showOptionSheet`; nothing cycles in place |
+| Data | One page inside More: Export OPML (through the system share sheet — Android's save dialog is not available to `file_selector`), Import OPML, Clear cached articles |
 | **Sources** | The **whole catalog** plus the reader's own additions, searchable, grouped by category, one toggle per source. Also renames a category, and opens a source |
 | Sources → Add | Feed discovery from a pasted site address, for anything the catalog does not have |
 | Source detail | Category, accent, Mute in Latest, Unsubscribe |
-| Settings | One page *inside* More: Appearance · Sources · Reading (text size, link open mode, fairness cap) · Data (refresh cadence, export OPML, clear cache) |
+| Appearance | One page *inside* More, in Perch's arrangement: Light / Dark / System, a true-black toggle while dark is in effect, five families drawn as miniatures, and the blur-behind-nav toggle. No dynamic colour — that needs a native wallpaper-seed channel the app does not have |
 
 **Sources shows the same list the onboarding picker showed.** The place a
 reader chose their sources is the place they change them, so there is no
@@ -315,6 +319,10 @@ not been opened yet is an empty cache, not the end of a list — latching there
 is what stopped Today ever paging again after a first run that arrived before
 its items did.
 
+The line above the list says when the briefing was last fetched, not how long
+it is — the category tab already carries the count, and a second number here
+(the loaded page against the whole category) read as a bug.
+
 It stays finite: when the cache is exhausted the list ends in "You're caught
 up". Nothing is ever fetched from the network by scrolling, and nothing says
 "caught up" until a refresh has actually finished
@@ -438,7 +446,31 @@ markup, and decoding it here would destroy the document.
 outside `lib/core/tokens/`. Widgets read colour roles through `context.hs`
 and per-source accent through `AccentScope.of(context)`.
 
-**Two themes:** AMOLED black (default) and warm-paper White, plus System.
+**One theme system.** `HsPalette` is the only colour source, and
+`ThemeFamily.colors(tone)` is the only thing that makes one. The `paper`
+family returns the board's three hand-set constants (`light`, `dark`,
+`amoled` — the board draws the two extremes; `dark` is the step between);
+the four Perch families derive theirs in OKLCh exactly as Perch does and map
+the result onto the board's roles, so nothing downstream knows which it got.
+`hsThemeOf(family, tone)` caches one `ThemeData` per pair and `buildHsTheme`
+maps every Material role onto the palette — a full `ColorScheme` plus card,
+app bar, sheet, popup-menu, switch and selection themes — so a stray Material
+widget cannot introduce an off-spec colour. `HsPalette.lerp` (in oklab) is
+what the theme cross-fade plays. There is no second role map: an earlier pass
+carried Perch's `PerchColors` in beside `HsPalette` and bridged the two with
+lossy converters, which is what made colours drift. One struct, one engine.
+
+**Primary is a role, not ink.** `primary`/`onPrimary` and
+`primaryContainer`/`onPrimaryContainer` are what the primary button, a toggle
+that is on, a selected chip, the sub-tab underline, the active nav item and a
+picker's selected row use. In the board's family they *are* ink and the nav's
+active well, so the design is unchanged; in a Perch family they carry the
+accent. Nothing else in the app takes the family accent — the per-source
+accent rule below is untouched by the theme.
+
+**Themes:** five families × Light / Dark / System, and a true-black toggle
+that applies only while dark is in effect. Default: Paper, dark, true black —
+which is the board's AMOLED.
 The accent rule: a source accent is a **label, a hairline bar, and — in Linger
 only — a wash panel**. Never a saturated card fill. 15% over black, 7% over
 paper.
@@ -477,6 +509,29 @@ changes twice.
 **Motion** fires only from a gesture or a tap. Nothing loops, nothing is
 ambient. Skeletons are flat fills with no shimmer sweep. The single exception
 is the pull-to-refresh ring, which traces with the finger.
+
+`HsMotion` is Perch's M3 Expressive set and the only one: two curves —
+`spring` (`easeOutBack`) for what the finger caused, `decelerate`
+(`easeOutCubic`) for what the system did — and durations from 150 to 260ms.
+Tab cross-fade, route push *and* pop, and the shell's ground colour all run on
+`page`; the pill's hide on `navHide`; the active label on `navMorph`. Every
+shared transition goes through `HsMotion.of`/`curveOf`, which collapse to a
+90ms linear fade under the OS's reduced-motion setting.
+
+**Loading is one primitive.** `SkeletonBar` (`core/widgets/caught_up.dart`)
+is every placeholder in the app; Today, Linger, the Reader body and a source
+row compose it and add nothing of their own.
+
+**A one-of-N setting is `showOptionSheet`** — the shared sheet with the
+option, what it means, and a tick on the one in effect. Open links, text size,
+reading fairness and refresh cadence all go through it; nothing cycles a value
+in place on tap.
+
+**Top-bar actions are `HsIconButton`** — Perch's circular filled button on
+the surface-variant tone, 40 visual inside a 48 target — for back, share,
+overflow and "Aa" alike. **Overflow menus are `showHsMenu`**: the menu's dress
+comes from `popupMenuTheme`, so it is the same object on every screen; pass
+`above: true` for a control at the foot of the screen.
 
 **No engagement mechanics, anywhere.** No like, save-count, reaction or
 share-count. No badge on the nav, no red dot, no notification prompt. No
@@ -560,6 +615,17 @@ Two traps that cost real time, both now covered by tests:
 
 Any image that will not load collapses to nothing. A blank rectangle where a
 photograph should be is worse than no photograph.
+
+**The shell owns the ground.** `AppShell` paints the page colour under every
+branch and animates it on `page`; Linger paints nothing of its own, so its
+pure black / pure white ground (`HsPalette.lingerBackground`) fades in with
+the tab rather than snapping. A branch that paints an opaque ground of its
+own would cover that fade.
+
+**`NavPillSurface` is the pill's dress** — nav tone, hairline, the one soft
+shadow, optional blur — on its own so the Reader's three floating actions
+(Open in web · Share · More) are separate objects wearing exactly it, with air
+between them, rather than a second style of floating control.
 
 **The nav pill** is a floating, detached, content-hugging object: four tabs,
 no FAB, opaque by default (blur is an off-by-default setting), only the
@@ -646,7 +712,8 @@ The launcher icon is generated from the design board's mark by
 | OPML / XML | `xml` |
 | Models | `freezed` |
 | Secure storage | `flutter_secure_storage` |
-| Files | `file_selector` |
+| Files | `file_selector` (import only — export goes through `share_plus`) |
+| Version | `package_info_plus` — the About row and the foot of More read the installed version, never a string |
 | Colour | `Oklab` — ours; no package matches CSS `color-mix(in oklab, …)` |
 | Markdown | `markdown`, for the rare feed that carries it |
 | Lints | `very_good_analysis` |

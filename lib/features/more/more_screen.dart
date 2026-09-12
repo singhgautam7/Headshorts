@@ -1,81 +1,232 @@
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
-import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/screen.dart';
-import 'package:headshorts/features/today/today_controller.dart';
+import 'package:headshorts/core/widgets/sheet.dart';
+import 'package:headshorts/data/prefs/settings.dart';
+import 'package:headshorts/features/more/settings_widgets.dart';
+import 'package:package_info_plus/package_info_plus.dart';
 
-/// More — a hub, not a settings page.
-///
-/// Five destinations and a sign-off. Settings is one of them rather than the
-/// whole tab, so Stats, AI summaries and the two text pages are not buried
-/// under a heading that does not describe them.
+export 'settings_widgets.dart';
+
+/// More — three short groups in Perch's arrangement, each row showing its
+/// current value on the right so most questions are answered without opening
+/// anything. A one-of-N setting opens the shared option sheet; nothing here
+/// cycles in place.
 class MoreScreen extends ConsumerWidget {
   const new({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) => HsScreen(
-    title: 'More',
-    titlePadding: const EdgeInsets.fromLTRB(HsSpace.x5, 6, HsSpace.x5, 20),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        Expanded(
-          child: ListView(
-            padding: const EdgeInsets.only(bottom: HsSpace.x5),
+  Widget build(BuildContext context, WidgetRef ref) {
+    final s = ref.watch(settingsProvider);
+    final controller = ref.read(settingsProvider.notifier);
+    final version = ref.watch(packageInfoProvider).value?.version;
+
+    return HsScreen(
+      title: 'More',
+      titlePadding: const EdgeInsets.fromLTRB(HsSpace.x5, 6, HsSpace.x5, 18),
+      child: ListView(
+        padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
+        children: [
+          SettingsGroup(
+            label: 'General',
             children: [
               SettingsRow(
-                label: 'Stats',
-                sub: 'What you have read, with nothing to beat',
-                chevron: true,
-                onTap: () => context.push('/stats'),
+                icon: Icons.palette_outlined,
+                label: 'Appearance',
+                value: '${s.family.name} · ${_modeLabel(s.themeMode)}',
+                onTap: () => context.push('/more/appearance'),
               ),
               SettingsRow(
-                label: 'Settings',
-                sub: _settingsSummary(ref),
-                chevron: true,
-                onTap: () => context.push('/more/settings'),
+                icon: Icons.open_in_browser_rounded,
+                label: 'Open links',
+                value: s.linkOpenMode.label,
+                onTap: () async {
+                  final picked = await showOptionSheet<LinkOpenMode>(
+                    context,
+                    title: 'Open links',
+                    description:
+                        'Where an article opens when you leave the '
+                        'Reader for the publisher.',
+                    selected: s.linkOpenMode,
+                    options: const [
+                      SheetOption(
+                        value: LinkOpenMode.inApp,
+                        label: 'In the app',
+                        description: 'A Custom Tab over HeadShorts — you come straight back',
+                      ),
+                      SheetOption(
+                        value: LinkOpenMode.browser,
+                        label: 'In your browser',
+                        description:
+                            'Your own browser, extensions and sign-ins',
+                      ),
+                    ],
+                  );
+                  if (picked != null) await controller.setLinkOpenMode(picked);
+                },
               ),
               SettingsRow(
-                label: 'AI summaries',
-                sub: 'Beta · bring your own key',
-                chevron: true,
-                onTap: () => context.push('/more/ai'),
+                icon: Icons.format_size_rounded,
+                label: 'Text size',
+                value: s.textSize.label,
+                onTap: () async {
+                  final picked = await showOptionSheet<TextSizeStep>(
+                    context,
+                    title: 'Text size',
+                    description:
+                        "The Reader's measure. It offsets the system setting "
+                        'rather than overriding it.',
+                    selected: s.textSize,
+                    options: [
+                      for (final step in TextSizeStep.values)
+                        SheetOption(value: step, label: step.label),
+                    ],
+                  );
+                  if (picked != null) await controller.setTextSize(picked);
+                },
               ),
               SettingsRow(
-                label: 'About',
-                value: '1.0',
-                chevron: true,
-                onTap: () => context.push('/more/about'),
+                icon: Icons.balance_rounded,
+                label: 'Reading fairness',
+                value: s.maxConsecutivePerSource == 0
+                    ? 'Off'
+                    : '${s.maxConsecutivePerSource} in a row',
+                onTap: () async {
+                  final picked = await showOptionSheet<int>(
+                    context,
+                    title: 'Reading fairness',
+                    description:
+                        'Caps how many items in a row one source can take. '
+                        'Nothing is dropped or scored — an item that would '
+                        'exceed the run waits for something from elsewhere.',
+                    selected: s.maxConsecutivePerSource,
+                    options: const [
+                      SheetOption(
+                        value: 0,
+                        label: 'Off',
+                        description: 'Strictly newest first',
+                      ),
+                      SheetOption(value: 3, label: 'At most 3 in a row'),
+                      SheetOption(value: 5, label: 'At most 5 in a row'),
+                      SheetOption(value: 8, label: 'At most 8 in a row'),
+                    ],
+                  );
+                  if (picked != null) {
+                    await controller.setMaxConsecutivePerSource(picked);
+                  }
+                },
               ),
               SettingsRow(
-                label: 'Privacy',
-                sub: 'No account, no analytics, no server',
-                chevron: true,
-                divider: false,
-                onTap: () => context.push('/more/privacy'),
+                icon: Icons.update_rounded,
+                label: 'Check for new',
+                value: s.refreshCadence.label,
+                onTap: () async {
+                  final picked = await showOptionSheet<RefreshCadence>(
+                    context,
+                    title: 'Check for new',
+                    description:
+                        'How stale the briefing may be before opening the app '
+                        'or returning to it fetches again. A pull always does.',
+                    selected: s.refreshCadence,
+                    options: [
+                      for (final c in RefreshCadence.values)
+                        SheetOption(value: c, label: c.label),
+                    ],
+                  );
+                  if (picked != null) {
+                    await controller.setRefreshCadence(picked);
+                  }
+                },
               ),
             ],
           ),
-        ),
-        const _MadeIn(),
-      ],
-    ),
-  );
+          SettingsGroup(
+            label: 'Your data',
+            children: [
+              SettingsRow(
+                icon: Icons.bar_chart_rounded,
+                label: 'Stats',
+                sub: 'What you have read, with nothing to beat',
+                onTap: () => context.push('/stats'),
+              ),
+              SettingsRow(
+                icon: Icons.swap_vert_rounded,
+                label: 'Data',
+                sub: 'Export, import and clear',
+                onTap: () => context.push('/more/data'),
+              ),
+              SettingsRow(
+                icon: Icons.key_outlined,
+                label: 'Permissions',
+                sub: 'What HeadShorts asks for, and what it does not',
+                onTap: () => context.push('/more/permissions'),
+              ),
+            ],
+          ),
+          SettingsGroup(
+            label: 'About HeadShorts',
+            children: [
+              SettingsRow(
+                icon: Icons.shield_outlined,
+                label: 'Privacy',
+                value: 'Local only',
+                onTap: () => context.push('/more/privacy'),
+              ),
+              SettingsRow(
+                icon: Icons.auto_awesome_outlined,
+                label: 'AI summaries',
+                value: 'Beta',
+                sub: 'Bring your own API key',
+                onTap: () => context.push('/more/ai'),
+              ),
+              SettingsRow(
+                icon: Icons.info_outline_rounded,
+                label: 'About',
+                value: version,
+                onTap: () => context.push('/more/about'),
+              ),
+            ],
+          ),
+          const VersionLine(),
+          const _MadeIn(),
+        ],
+      ),
+    );
+  }
 
-  /// One line of what Settings currently holds, so the row says something
-  /// rather than only pointing somewhere.
-  static String _settingsSummary(WidgetRef ref) {
-    final sources = ref.watch(sourcesProvider).value ?? const [];
-    final enabled = sources.where((s) => s.enabled).length;
-    return enabled == 0
-        ? 'Appearance, reading, sources and data'
-        : 'Appearance, reading, data · $enabled '
-              '${enabled == 1 ? 'source' : 'sources'} on';
+  static String _modeLabel(ThemeMode mode) => switch (mode) {
+    ThemeMode.light => 'Light',
+    ThemeMode.dark => 'Dark',
+    ThemeMode.system => 'System',
+  };
+}
+
+/// The installed package's version and build, resolved once and cached: a
+/// `FutureBuilder` in `build` would re-read the platform on every rebuild.
+final packageInfoProvider = FutureProvider<PackageInfo>(
+  (ref) => PackageInfo.fromPlatform(),
+);
+
+/// `HeadShorts 0.1.0 · build 1` — never hardcoded.
+class VersionLine extends ConsumerWidget {
+  const new({super.key});
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final info = ref.watch(packageInfoProvider).value;
+    return Text(
+      info == null
+          ? 'HeadShorts'
+          : 'HeadShorts ${info.version} · build ${info.buildNumber}',
+      textAlign: TextAlign.center,
+      style: HsType.note.copyWith(color: context.hs.textMuted),
+    );
   }
 }
 
@@ -87,7 +238,7 @@ class _MadeIn extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Padding(
     padding: const EdgeInsets.only(
-      top: HsSpace.x4,
+      top: HsSpace.x1,
       bottom: HsSpace.navClearance,
     ),
     child: Text(
@@ -96,95 +247,6 @@ class _MadeIn extends StatelessWidget {
       style: HsType.note.copyWith(color: context.hs.textMuted),
     ),
   );
-}
-
-const clearCacheExplainer =
-    'Every article currently stored on the device is removed, along with what '
-    'you have read. Your sources and settings stay exactly as they are, and '
-    'the next refresh fills the briefing again.';
-
-class SettingsRow extends StatelessWidget {
-  const new({
-    required this.label,
-    this.sub,
-    this.value,
-    this.trailing,
-    this.onTap,
-    this.chevron = false,
-    this.divider = true,
-    super.key,
-  });
-
-  final String label;
-  final String? sub;
-  final String? value;
-  final Widget? trailing;
-  final VoidCallback? onTap;
-  final bool chevron;
-  final bool divider;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    final subtitle = sub;
-    final trailingValue = value;
-
-    return Pressable(
-      onTap: onTap,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: divider
-                ? Border(bottom: BorderSide(color: palette.divider))
-                : null,
-          ),
-          child: SizedBox(
-            height: HsSize.settingsRowHeight,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        label,
-                        style: HsType.row.copyWith(color: palette.textPrimary),
-                      ),
-                      if (subtitle != null) ...[
-                        const SizedBox(height: 3),
-                        Text(
-                          subtitle,
-                          style: HsType.rowSub.copyWith(
-                            color: palette.textMuted,
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-                if (trailingValue != null)
-                  Padding(
-                    padding: const EdgeInsets.only(right: 10),
-                    child: Text(
-                      trailingValue,
-                      style: HsType.rowValue.copyWith(color: palette.textMuted),
-                    ),
-                  ),
-                ?trailing,
-                if (chevron)
-                  HsGlyph.chevron(
-                    palette.textMuted,
-                    direction: AxisDirection.right,
-                  ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
 }
 
 /// The three-way segmented control used for theme and AI provider.
