@@ -103,14 +103,21 @@ class LingerQueueController extends Notifier<LingerQueue> {
     return const LingerQueue();
   }
 
-  Future<List<Headline>> _fetch() {
+  Future<List<Headline>> _fetch() async {
     final filter = ref.read(lingerFilterProvider);
-    return ref
+    final items = await ref
         .read(articleRepositoryProvider)
         .buildLingerQueue(
           category: filter.category == latestScope ? null : filter.category,
           sourceIds: filter.sourceIds,
         );
+    return items.where((h) {
+      final a = h.article;
+      return (a.contentSnippet != null &&
+              a.contentSnippet!.trim().isNotEmpty) ||
+          (a.summary != null && a.summary!.trim().isNotEmpty) ||
+          (a.fullContentHtml != null && a.fullContentHtml!.trim().isNotEmpty);
+    }).toList();
   }
 
   Future<void> _load(LingerFilter filter) async {

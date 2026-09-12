@@ -10,80 +10,164 @@ import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/features/today/today_controller.dart';
 
-/// Narrows the current view to some of its sources.
+/// Narrows the Headlines view by category and sources.
 ///
 /// A lens on the briefing, not a subscription change — nothing here alters
 /// what is fetched, only what this list shows.
-Future<void> showSourceFilterSheet(
-  BuildContext context,
-  List<SourceRow> sources,
-) => showHsSheet<void>(
-  context,
-  (context) => _SourceFilterSheet(sources: sources),
-);
+Future<void> showSourceFilterSheet(BuildContext context) =>
+    showHsSheet<void>(context, (context) => const _SourceFilterSheet());
 
-class _SourceFilterSheet extends ConsumerWidget {
-  const new({required this.sources});
-
-  final List<SourceRow> sources;
+class _SourceFilterSheet extends ConsumerStatefulWidget {
+  const new();
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_SourceFilterSheet> createState() => _SourceFilterSheetState();
+}
+
+class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
+  late String _draftCategory = ref.read(activeCategoryProvider);
+  late final Set<int> _draftMuted = {...ref.read(mutedSourcesProvider)};
+
+  List<SourceRow> _inScope(List<SourceRow> sources) => sources
+      .where(
+        (s) =>
+            s.enabled &&
+            (_draftCategory == latestScope
+                ? !s.mutedInLatest
+                : s.category == _draftCategory),
+      )
+      .toList();
+
+  void _selectCategory(String category) {
+    setState(() {
+      _draftCategory = category;
+    });
+  }
+
+  void _toggleSource(int id, {required bool visible}) {
+    setState(() {
+      if (visible) {
+        _draftMuted.remove(id);
+      } else {
+        _draftMuted.add(id);
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final palette = context.hs;
-    final muted = ref.watch(mutedSourcesProvider);
+    final categories =
+        ref.watch(categoriesProvider).value ?? const [latestScope];
+    final sources = ref.watch(sourcesProvider).value ?? const [];
+    final scope = _inScope(sources);
+    final visibleCount = scope.where((s) => !_draftMuted.contains(s.id)).length;
 
     return HsSheet(
-      title: 'Show in this list',
-      subtitle: 'Hiding a source here does not unsubscribe from it.',
+      title: 'Filter',
+      subtitle:
+          'Narrows this briefing. It does not change what you subscribe to.',
       children: [
-        for (final source in sources)
-          AccentScope(
-            accent: source.accent,
-            child: Padding(
-              padding: const EdgeInsets.only(bottom: HsSpace.x1),
-              child: SizedBox(
-                height: HsSize.rowHeight,
-                child: Row(
-                  children: [
-                    Container(
-                      width: 8,
-                      height: 8,
-                      decoration: BoxDecoration(
-                        shape: BoxShape.circle,
-                        color: source.accent.resolve(isDark: palette.isDark),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Text(
-                        source.title,
-                        style: HsType.row.copyWith(color: palette.textPrimary),
-                      ),
-                    ),
-                    HsToggle(
-                      value: !muted.contains(source.id),
-                      onChanged: (visible) => ref
-                          .read(mutedSourcesProvider.notifier)
-                          .toggle(source.id, visible: visible),
-                    ),
-                  ],
-                ),
+        const SectionLabel('Category'),
+        const SizedBox(height: HsSpace.x3),
+        Wrap(
+          spacing: HsSpace.x2,
+          runSpacing: HsSpace.x2,
+          children: [
+            for (final category in categories)
+              HsChip(
+                category,
+                selected: category == _draftCategory,
+                onTap: () => _selectCategory(category),
               ),
+          ],
+        ),
+        const SizedBox(height: 26),
+        SectionLabel(
+          scope.isEmpty
+              ? 'Sources'
+              : 'Sources · $visibleCount of ${scope.length}',
+        ),
+        const SizedBox(height: HsSpace.x3),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOutCubic,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            layoutBuilder: (currentChild, previousChildren) => Stack(
+              alignment: Alignment.topLeft,
+              children: [
+                ...previousChildren,
+                ?currentChild,
+              ],
+            ),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+            child: KeyedSubtree(
+              key: ValueKey(_draftCategory),
+              child: scope.isEmpty
+                  ? Text(
+                      'Nothing is subscribed under this category.',
+                      style: HsType.note.copyWith(color: palette.textMuted),
+                    )
+                  : Wrap(
+                      spacing: HsSpace.x2,
+                      runSpacing: HsSpace.x2,
+                      children: [
+                        for (final source in scope)
+                          AccentScope(
+                            accent: source.accent,
+                            child: HsChip(
+                              source.title,
+                              selected: !_draftMuted.contains(source.id),
+                              onTap: () => _toggleSource(
+                                source.id,
+                                visible: _draftMuted.contains(source.id),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
             ),
           ),
-        const SizedBox(height: HsSpace.x4),
-        HsButton(
-          'Show all',
-          // Disabled when nothing is hidden, and closes on success: behind a
-          // scrim a reset that leaves the sheet open looks like nothing
-          // happened.
-          onPressed: muted.isEmpty
-              ? null
-              : () {
-                  ref.read(mutedSourcesProvider.notifier).showAll();
+        ),
+        const SizedBox(height: 26),
+        Row(
+          children: [
+            Expanded(
+              child: HsButton(
+                'Clear filter',
+                onPressed: _draftMuted.isEmpty &&
+                        ref.read(mutedSourcesProvider).isEmpty &&
+                        _draftCategory == ref.read(activeCategoryProvider)
+                    ? null
+                    : () {
+                        ref.read(mutedSourcesProvider.notifier).showAll();
+                        Navigator.of(context).pop();
+                      },
+                kind: HsButtonKind.secondary,
+              ),
+            ),
+            const SizedBox(width: HsSpace.x3),
+            Expanded(
+              child: HsButton(
+                'Apply',
+                onPressed: () {
+                  if (_draftCategory != ref.read(activeCategoryProvider)) {
+                    ref
+                        .read(selectedCategoryProvider.notifier)
+                        .select(_draftCategory);
+                  }
+                  ref.read(mutedSourcesProvider.notifier).setMuted(_draftMuted);
                   Navigator.of(context).pop();
                 },
-          kind: HsButtonKind.secondary,
+              ),
+            ),
+          ],
         ),
       ],
     );

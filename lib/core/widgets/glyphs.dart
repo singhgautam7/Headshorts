@@ -145,14 +145,35 @@ abstract final class HsGlyph {
     ),
   );
 
-  /// The share mark beside "Open in web".
-  static Widget share(Color color) => Container(
-    width: 12,
-    height: 12,
-    decoration: BoxDecoration(
-      border: Border.all(color: color, width: _stroke),
-      borderRadius: BorderRadius.circular(2),
-    ),
+  /// The share mark: an open tray with an arrow pointing up.
+  static Widget share(Color color) => SizedBox(
+    width: 14,
+    height: 14,
+    child: CustomPaint(painter: _SharePainter(color)),
+  );
+
+  /// The more options mark: three horizontal dots.
+  static Widget moreOptions(Color color) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      Container(
+        width: 3.5,
+        height: 3.5,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 3),
+      Container(
+        width: 3.5,
+        height: 3.5,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+      const SizedBox(width: 3),
+      Container(
+        width: 3.5,
+        height: 3.5,
+        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+      ),
+    ],
   );
 
   /// The two-rule mark above "Swipe up for the next".
@@ -222,4 +243,36 @@ class _RefreshPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_RefreshPainter old) => old.color != color;
+}
+
+class _SharePainter extends CustomPainter {
+  const new(this.color);
+
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = HsSize.glyphStroke
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+
+    final path = Path()
+      ..moveTo(2, 6)
+      ..lineTo(2, size.height - 1)
+      ..lineTo(size.width - 2, size.height - 1)
+      ..lineTo(size.width - 2, 6);
+    canvas.drawPath(path, stroke);
+
+    final midX = size.width / 2;
+    canvas
+      ..drawLine(Offset(midX, size.height - 5), Offset(midX, 1), stroke)
+      ..drawLine(Offset(midX - 3.5, 4.5), Offset(midX, 1), stroke)
+      ..drawLine(Offset(midX + 3.5, 4.5), Offset(midX, 1), stroke);
+  }
+
+  @override
+  bool shouldRepaint(_SharePainter old) => old.color != color;
 }

@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart' show immutable;
 import 'package:headshorts/core/util/canonical_url.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/tables.dart';
+import 'package:headshorts/data/feed/feed_parser.dart';
 import 'package:headshorts/data/sources/source_adapter.dart';
 
 /// How many items Today loads at a time.
@@ -149,10 +150,16 @@ class ArticleRepository {
   /// and `readFull` only de-emphasises.
   Stream<List<Headline>> watchBriefing({
     String? category,
+    Set<int>? sourceIds,
+    Set<int>? mutedSourceIds,
     ArticleCursor? floor,
     int pageSize = todayPageSize,
   }) {
-    final query = _scoped(category: category);
+    final query = _scoped(
+      category: category,
+      sourceIds: sourceIds,
+      mutedSourceIds: mutedSourceIds,
+    );
 
     if (floor == null) {
       // Over-fetch: dedup removes items and the page must still fill.
@@ -170,10 +177,16 @@ class ArticleRepository {
   /// itself arrives through [watchBriefing]'s stream.
   Future<ArticleCursor?> nextFloor({
     String? category,
+    Set<int>? sourceIds,
+    Set<int>? mutedSourceIds,
     ArticleCursor? floor,
     int pageSize = todayPageSize,
   }) async {
-    final query = _scoped(category: category)..limit(pageSize);
+    final query = _scoped(
+      category: category,
+      sourceIds: sourceIds,
+      mutedSourceIds: mutedSourceIds,
+    )..limit(pageSize);
     if (floor != null) query.where(_below(floor));
 
     final page = _headlines(await query.get());
@@ -191,22 +204,20 @@ class ArticleRepository {
     Set<int>? sourceIds,
     int limit = lingerQueueSize,
   }) async {
-    final query = _scoped(category: category)
+    final query = _scoped(category: category, sourceIds: sourceIds)
       ..where(_db.articles.seenInLinger.equals(false))
       ..where(_db.articles.readFull.equals(false))
       ..limit(limit * 2);
-
-    // A null set is "everything in scope"; an empty one is a filter that
-    // matches nothing, and saying so beats quietly showing everything.
-    if (sourceIds != null) {
-      query.where(_db.sources.id.isIn(sourceIds));
-    }
 
     return dedupeStories(_headlines(await query.get())).take(limit).toList();
   }
 
   /// The enabled, in-scope articles, newest first, as a total order.
-  JoinedSelectStatement<HasResultSet, dynamic> _scoped({String? category}) {
+  JoinedSelectStatement<HasResultSet, dynamic> _scoped({
+    String? category,
+    Set<int>? sourceIds,
+    Set<int>? mutedSourceIds,
+  }) {
     final query =
         _db.select(_db.articles).join([
             innerJoin(
@@ -225,7 +236,45 @@ class ArticleRepository {
     } else {
       query.where(_db.sources.mutedInLatest.equals(false));
     }
+
+    if (sourceIds != null) {
+      query.where(_db.sources.id.isIn(sourceIds));
+    }
+    if (mutedSourceIds != null && mutedSourceIds.isNotEmpty) {
+      query.where(_db.sources.id.isNotIn(mutedSourceIds));
+    }
+
     return query;
+  }
+
+  /// Watches unread article count by category and overall ('All').
+  Stream<Map<String, int>> watchUnreadCountByCategory() {
+    final count = _db.articles.id.count();
+    final query = _db.selectOnly(_db.articles).join([
+      innerJoin(
+        _db.sources,
+        _db.sources.id.equalsExp(_db.articles.sourceId),
+      ),
+    ])
+      ..addColumns([_db.sources.category, count])
+      ..where(_db.sources.enabled.equals(true))
+      ..where(_db.articles.readFull.equals(false))
+      ..groupBy([_db.sources.category]);
+
+    return query.watch().map((rows) {
+      final map = <String, int>{};
+      var total = 0;
+      for (final row in rows) {
+        final cat = row.read(_db.sources.category);
+        final cnt = row.read(count) ?? 0;
+        if (cat != null) {
+          map[cat] = cnt;
+          total += cnt;
+        }
+      }
+      map['All'] = total;
+      return map;
+    });
   }
 
   Expression<bool> _atOrAbove(ArticleCursor cursor) =>
@@ -332,10 +381,28 @@ class ArticleRepository {
     return added;
   }
 
-  Future<void> cacheExtractedHtml(int articleId, String html) =>
-      (_db.update(_db.articles)..where((a) => a.id.equals(articleId))).write(
-        ArticlesCompanion(fullContentHtml: Value(html)),
-      );
+  Future<void> cacheExtractedHtml(
+    int articleId,
+    String html, {
+    String? snippet,
+  }) async {
+    final text = FeedParser.plainText(html);
+    final derivedSnippet =
+        snippet ?? (text.length > 300 ? '${text.substring(0, 300)}…' : text);
+    final prior = await (_db.select(_db.articles)
+      ..where((a) => a.id.equals(articleId))).getSingleOrNull();
+    final needSnippet =
+        prior != null &&
+        (prior.contentSnippet == null || prior.contentSnippet!.isEmpty);
+    await (_db.update(_db.articles)..where((a) => a.id.equals(articleId))).write(
+      ArticlesCompanion(
+        fullContentHtml: Value(html),
+        contentSnippet: needSnippet
+            ? Value(derivedSnippet.isEmpty ? null : derivedSnippet)
+            : const Value.absent(),
+      ),
+    );
+  }
 
   /// Silent read marking. No confirmation, no counter.
   /// Records that the reader met an article, in one of two quite different

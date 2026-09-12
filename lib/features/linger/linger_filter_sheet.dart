@@ -97,52 +97,82 @@ class _LingerFilterSheetState extends ConsumerState<_LingerFilterSheet> {
               : 'Sources · ${chosen?.length ?? scope.length} of ${scope.length}',
         ),
         const SizedBox(height: HsSpace.x3),
-        if (scope.isEmpty)
-          Text(
-            'Nothing is subscribed under this category.',
-            style: HsType.note.copyWith(color: palette.textMuted),
-          )
-        else
-          Wrap(
-            spacing: HsSpace.x2,
-            runSpacing: HsSpace.x2,
-            children: [
-              for (final source in scope)
-                AccentScope(
-                  accent: source.accent,
-                  child: HsChip(
-                    source.title,
-                    selected: chosen == null || chosen.contains(source.id),
-                    onTap: () => _toggleSource(
-                      scope,
-                      source.id,
-                      on: !(chosen == null || chosen.contains(source.id)),
+        AnimatedSize(
+          duration: const Duration(milliseconds: 250),
+          curve: Curves.easeInOutCubic,
+          child: AnimatedSwitcher(
+            duration: const Duration(milliseconds: 200),
+            switchInCurve: Curves.easeOutCubic,
+            switchOutCurve: Curves.easeInCubic,
+            layoutBuilder: (currentChild, previousChildren) => Stack(
+              alignment: Alignment.topLeft,
+              children: [
+                ...previousChildren,
+                ?currentChild,
+              ],
+            ),
+            transitionBuilder: (child, animation) => FadeTransition(
+              opacity: animation,
+              child: child,
+            ),
+            child: KeyedSubtree(
+              key: ValueKey(_draft.category),
+              child: scope.isEmpty
+                  ? Text(
+                      'Nothing is subscribed under this category.',
+                      style: HsType.note.copyWith(color: palette.textMuted),
+                    )
+                  : Wrap(
+                      spacing: HsSpace.x2,
+                      runSpacing: HsSpace.x2,
+                      children: [
+                        for (final source in scope)
+                          AccentScope(
+                            accent: source.accent,
+                            child: HsChip(
+                              source.title,
+                              selected:
+                                  chosen == null || chosen.contains(source.id),
+                              onTap: () => _toggleSource(
+                                scope,
+                                source.id,
+                                on: !(chosen == null ||
+                                    chosen.contains(source.id)),
+                              ),
+                            ),
+                          ),
+                      ],
                     ),
-                  ),
-                ),
-            ],
+            ),
           ),
-        const SizedBox(height: 26),
-        HsButton(
-          'Apply',
-          onPressed: () {
-            ref.read(lingerFilterProvider.notifier).apply(_draft);
-            Navigator.of(context).pop();
-          },
         ),
-        const SizedBox(height: HsSpace.x3),
-        HsButton(
-          'Clear filter',
-          // Behind a scrim, an action that leaves the sheet open looks like it
-          // did nothing.
-          onPressed:
-              _draft.isDefault && ref.read(lingerFilterProvider).isDefault
-              ? null
-              : () {
-                  ref.read(lingerFilterProvider.notifier).clear();
+        const SizedBox(height: 26),
+        Row(
+          children: [
+            Expanded(
+              child: HsButton(
+                'Clear filter',
+                onPressed:
+                    _draft.isDefault && ref.read(lingerFilterProvider).isDefault
+                        ? null
+                        : () {
+                            ref.read(lingerFilterProvider.notifier).clear();
+                            Navigator.of(context).pop();
+                          },
+                kind: HsButtonKind.secondary,
+              ),
+            ),
+            const SizedBox(width: HsSpace.x3),
+            Expanded(
+              child: HsButton(
+                'Apply',
+                onPressed: () {
+                  ref.read(lingerFilterProvider.notifier).apply(_draft);
                   Navigator.of(context).pop();
                 },
-          kind: HsButtonKind.secondary,
+              ),
+            ),
+          ],
         ),
       ],
     );

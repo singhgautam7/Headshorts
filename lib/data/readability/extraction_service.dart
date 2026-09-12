@@ -91,15 +91,16 @@ class ExtractionService {
     required String sourceUrl,
     String? plainText,
   }) {
-    final text = plainText ?? FeedParser.plainText(html);
+    final cleaned = ArticleCleaner.clean(html, base: Uri.parse(sourceUrl));
+    final text = plainText ?? FeedParser.plainText(cleaned);
     final words = text.split(RegExp(r'\s+')).where((w) => w.isNotEmpty).length;
-    if (words < _minimumWords) {
+    if (words < _minimumWords || cleaned.trim().isEmpty) {
       return const ThinExtraction(
         'On-device extraction did not find a clean body.',
       );
     }
     return ExtractedArticle(
-      html: ArticleCleaner.clean(html, base: Uri.parse(sourceUrl)),
+      html: cleaned,
       byline: null,
       wordCount: words,
     );

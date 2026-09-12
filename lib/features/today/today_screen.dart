@@ -1,9 +1,11 @@
 import 'dart:async';
 
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/nav_visibility.dart';
+import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/refresh_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
@@ -84,46 +86,35 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
     final offline = ref.watch(offlineProvider);
     final lastUpdated = ref.watch(lastUpdatedProvider).value;
 
+    final unreadAsync = ref.watch(unreadCountsProvider);
+    final unreadCounts = unreadAsync.value ?? const <String, int>{};
+    final loadingCounts = unreadAsync.isLoading;
+
     final index = categories.indexOf(selected).clamp(0, categories.length - 1);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _syncPages(index);
     });
 
     return HsScreen(
-      title: 'Today',
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (!offline)
-            Text(
+      title: 'Headlines',
+      trailing: offline
+          ? null
+          : Text(
               refreshing
                   ? 'updating…'
                   : lastUpdated == null
-                  ? ''
-                  : 'updated ${clockTime(lastUpdated)}',
+                      ? ''
+                      : 'updated ${clockTime(lastUpdated)}',
               style: HsType.timestamp.copyWith(color: palette.textMuted),
             ),
-          const SizedBox(width: 10),
-          Transform.translate(
-            offset: const Offset(9, 0),
-            child: Pressable(
-              onTap: () => ref.read(refreshProvider.notifier).refresh(),
-              semanticLabel: 'Check for new',
-              child: SizedBox(
-                width: 40,
-                height: 40,
-                child: Center(child: HsGlyph.refresh(palette.textSecondary)),
-              ),
-            ),
-          ),
-        ],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           SubTabs(
             labels: categories,
             selectedIndex: index,
+            counts: unreadCounts,
+            loadingCounts: loadingCounts,
             onSelected: (i) => ref
                 .read(selectedCategoryProvider.notifier)
                 .select(categories[i]),
@@ -218,80 +209,105 @@ class _Briefing extends ConsumerWidget {
             );
         return false;
       },
-      child: PullToRefresh(
+      child: PullToRefresh.builder(
         onRefresh: () => ref.read(refreshProvider.notifier).refresh(),
         padding: const EdgeInsets.only(
           left: HsSpace.x5,
           right: HsSpace.x5,
           bottom: HsSpace.navClearance,
         ),
-        children: [
-          Padding(
-            padding: const EdgeInsets.only(top: 14),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    headlines.isEmpty
-                        ? 'Nothing here yet'
-                        : '${headlines.length} '
-                              '${headlines.length == 1 ? 'headline' : 'headlines'} '
-                              '· newest first',
-                    style: HsType.timestamp.copyWith(color: palette.textMuted),
+        itemCount: headlines.isEmpty ? 2 : headlines.length + 3,
+        itemBuilder: (context, index) {
+          if (index == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 14, bottom: 20),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      headlines.isEmpty
+                          ? 'Nothing here yet'
+                          : '${headlines.length} '
+                                '${headlines.length == 1 ? 'headline' : 'headlines'} '
+                                '· newest first',
+                      style: HsType.timestamp.copyWith(
+                        color: palette.textMuted,
+                      ),
+                    ),
                   ),
-                ),
-                _ScopePill(
-                  label: category == latestScope
-                      ? (visible == scoped.length
-                            ? 'All sources'
-                            : '$visible of ${scoped.length} sources')
-                      : '$category · $visible '
-                            '${visible == 1 ? 'source' : 'sources'}',
-                  onTap: () => showSourceFilterSheet(context, scoped),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          for (var i = 0; i < headlines.length; i++) ...[
-            if (i > 0) const SizedBox(height: 30),
-            HeadlineCard(
-              headlines[i],
-              offline: offline,
-              // The optional lead-card wash: paper only, unread only.
-              washed: i == 0 && !palette.isDark && !headlines[i].isRead,
-              onTap: () => context.push('/reader/${headlines[i].article.id}'),
-            ),
-          ],
-          if (headlines.isNotEmpty) ...[
-            const SizedBox(height: 30),
-            const HsDivider(),
-          ],
-          Padding(
-            padding: const EdgeInsets.only(top: 40),
-            child: _CaughtUp(count: headlines.length, sources: visible),
-          ),
-        ],
+                  _ScopePill(
+                    label: visible == scoped.length
+                        ? 'All sources'
+                        : '$visible of ${scoped.length} sources',
+                    onTap: () => showSourceFilterSheet(context),
+                  ),
+                ],
+              ),
+            );
+          }
+          if (headlines.isEmpty) {
+            return Padding(
+              padding: const EdgeInsets.only(top: 40),
+              child: _CaughtUp(count: 0, sources: visible),
+            );
+          }
+          if (index <= headlines.length) {
+            final i = index - 1;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 30),
+              child: HeadlineCard(
+                headlines[i],
+                offline: offline,
+                // The optional lead-card wash: paper only, unread only.
+                washed: i == 0 && !palette.isDark && !headlines[i].isRead,
+                onTap: () => context.push('/reader/${headlines[i].article.id}'),
+              ),
+            );
+          }
+          if (index == headlines.length + 1) {
+            return const Padding(
+              padding: EdgeInsets.only(bottom: 40),
+              child: HsDivider(),
+            );
+          }
+          return _CaughtUp(count: headlines.length, sources: visible);
+        },
       ),
     );
   }
 }
 
-class _CaughtUp extends ConsumerWidget {
+class _CaughtUp extends ConsumerStatefulWidget {
   const new({required this.count, required this.sources});
 
   final int count;
   final int sources;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<_CaughtUp> createState() => _CaughtUpState();
+}
+
+class _CaughtUpState extends ConsumerState<_CaughtUp> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && widget.count > 0) {
+        unawaited(HapticFeedback.mediumImpact());
+        unawaited(ref.read(statsRepositoryProvider).markCaughtUpToday());
+      }
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final oldest = ref.watch(briefingProvider).value?.lastOrNull;
 
     return CaughtUp(
-      detail: count == 0
+      detail: widget.count == 0
           ? 'Nothing has arrived from your sources yet. Pull down to check.'
           : 'That is everything from your '
-                '$sources ${sources == 1 ? 'source' : 'sources'}'
+                '${widget.sources} ${widget.sources == 1 ? 'source' : 'sources'}'
                 '${oldest == null ? '' : ' since '
                           '${clockTime(oldest.article.publishedAt)}'}. '
                 'Nothing more will load here.',

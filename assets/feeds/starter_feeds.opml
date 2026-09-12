@@ -41,6 +41,8 @@
       <outline type="rss" text="Financial Times" title="Financial Times" xmlUrl="https://www.ft.com/rss/home" htmlUrl="https://www.ft.com" hsAccentDark="#7AC38D" hsAccentLight="#117A3D"/>
       <outline type="rss" text="Business Standard" title="Business Standard" xmlUrl="https://www.business-standard.com/rss/home_page_top_stories.rss" htmlUrl="https://www.business-standard.com" hsAccentDark="#72B2CE" hsAccentLight="#2E6F89"/>
       <outline type="rss" text="Moneycontrol" title="Moneycontrol" xmlUrl="https://www.moneycontrol.com/rss/business.xml" htmlUrl="https://www.moneycontrol.com" hsAccentDark="#D28EC3" hsAccentLight="#924584"/>
+      <outline type="rss" text="Finshots" title="Finshots" xmlUrl="https://finshots.in/archive/rss/" htmlUrl="https://finshots.in" hsAccentDark="#86C0BC" hsAccentLight="#226663"/>
+      <outline type="rss" text="The Economic Times" title="The Economic Times" xmlUrl="https://economictimes.indiatimes.com/rssfeedstopstories.cms" htmlUrl="https://economictimes.indiatimes.com" hsAccentDark="#E4A868" hsAccentLight="#8A5518"/>
     </outline>
     <outline text="Science" title="Science">
       <outline type="rss" text="Nature" title="Nature" xmlUrl="https://www.nature.com/nature.rss" htmlUrl="https://www.nature.com" hsAccentDark="#7CC38A" hsAccentLight="#197A39"/>

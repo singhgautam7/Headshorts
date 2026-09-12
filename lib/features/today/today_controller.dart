@@ -19,9 +19,14 @@ const defaultCategories = [
 
 /// The label for the merged view. Not a category — a category tab filters
 /// `sources.category`, this one is everything.
-const latestScope = 'Latest';
+const latestScope = 'All';
 
-/// The sub-tabs: Latest, then one tab per category that has at least one
+/// Unread headline counts grouped by category, including 'All'.
+final unreadCountsProvider = StreamProvider<Map<String, int>>(
+  (ref) => ref.watch(articleRepositoryProvider).watchUnreadCountByCategory(),
+);
+
+/// The sub-tabs: All, then one tab per category that has at least one
 /// enabled source. Nothing is hard-coded; tabs appear and disappear as sources
 /// are added, removed, disabled or recategorised.
 final categoriesProvider = StreamProvider<List<String>>(
@@ -81,6 +86,10 @@ class MutedSources extends Notifier<Set<int>> {
   }
 
   void showAll() => state = const {};
+
+  // A setter would read as assigning `state` from outside the notifier.
+  // ignore: use_setters_to_change_properties
+  void setMuted(Set<int> muted) => state = muted;
 }
 
 final mutedSourcesProvider = NotifierProvider<MutedSources, Set<int>>(
@@ -110,8 +119,10 @@ class TodayPage {
 class TodayPagination extends Notifier<TodayPage> {
   @override
   TodayPage build() {
-    // A new sub-tab is a new list; start it at the top.
-    ref.watch(activeCategoryProvider);
+    // A new sub-tab or filter change is a new list; start it at the top.
+    ref
+      ..watch(activeCategoryProvider)
+      ..watch(mutedSourcesProvider);
     return const TodayPage();
   }
 
@@ -123,10 +134,12 @@ class TodayPagination extends Notifier<TodayPage> {
     _loading = true;
 
     final category = ref.read(activeCategoryProvider);
+    final muted = ref.read(mutedSourcesProvider);
     final next = await ref
         .read(articleRepositoryProvider)
         .nextFloor(
           category: category == latestScope ? null : category,
+          mutedSourceIds: muted,
           floor: state.floor,
         );
 
@@ -161,14 +174,10 @@ final briefingProvider = StreamProvider<List<Headline>>((ref) {
       .watch(articleRepositoryProvider)
       .watchBriefing(
         category: category == latestScope ? null : category,
+        mutedSourceIds: muted,
         floor: page.floor,
       )
-      .map(
-        (items) => capConsecutive(
-          items.where((h) => !muted.contains(h.source.id)).toList(),
-          maxRun,
-        ),
-      );
+      .map((items) => capConsecutive(items, maxRun));
 });
 
 /// True until a refresh has run to completion this session.

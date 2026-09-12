@@ -5,6 +5,7 @@ import 'package:flutter/services.dart' show TextInputAction;
 import 'package:flutter/widgets.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
+import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 
@@ -86,23 +87,30 @@ class _HsSearchFieldState extends State<HsSearchField> {
               ),
             ),
           ),
-          if (_hasText)
-            Pressable(
-              onTap: _clear,
-              semanticLabel: 'Clear search',
-              child: SizedBox(
-                width: HsSize.navItem,
-                height: HsSize.navItem,
-                child: Center(
-                  child: Text(
-                    '×',
-                    style: HsType.buttonLarge.copyWith(
-                      color: palette.textMuted,
+          AnimatedOpacity(
+            opacity: _hasText ? 1 : 0,
+            duration: HsMotion.micro,
+            curve: HsMotion.microCurve,
+            child: IgnorePointer(
+              ignoring: !_hasText,
+              child: Pressable(
+                onTap: _clear,
+                semanticLabel: 'Clear search',
+                child: SizedBox(
+                  width: HsSize.navItem,
+                  height: HsSize.navItem,
+                  child: Center(
+                    child: Text(
+                      '×',
+                      style: HsType.buttonLarge.copyWith(
+                        color: palette.textMuted,
+                      ),
                     ),
                   ),
                 ),
               ),
             ),
+          ),
         ],
       ),
     );

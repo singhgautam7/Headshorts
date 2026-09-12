@@ -1,3 +1,7 @@
+import 'dart:async';
+import 'dart:ui' as ui;
+
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
@@ -33,7 +37,7 @@ class NavPill extends StatelessWidget {
   });
 
   static const destinationsForApp = [
-    NavDestination(label: 'Today', icon: HsGlyph.today, iconWidth: 16),
+    NavDestination(label: 'Headlines', icon: HsGlyph.today, iconWidth: 16),
     NavDestination(label: 'Linger', icon: HsGlyph.linger, iconWidth: 13),
     NavDestination(label: 'Sources', icon: HsGlyph.sources, iconWidth: 16),
     NavDestination(label: 'More', icon: HsGlyph.more, iconWidth: 16),
@@ -51,6 +55,53 @@ class NavPill extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.hs;
 
+    final content = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: HsSize.navPillPadding),
+      child: SizedBox(
+        height: HsSize.navPillHeight,
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            for (var i = 0; i < destinations.length; i++) ...[
+              if (i > 0) const SizedBox(width: 2),
+              _NavItem(
+                destination: destinations[i],
+                selected: i == selectedIndex,
+                onTap: () {
+                  unawaited(HapticFeedback.selectionClick());
+                  onSelected(i);
+                },
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+
+    final inner = blur
+        ? ClipRRect(
+            borderRadius: HsRadius.pillBorder,
+            child: BackdropFilter(
+              filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: palette.nav.withValues(alpha: 0.86),
+                  borderRadius: HsRadius.pillBorder,
+                  border: Border.all(color: palette.stroke),
+                ),
+                child: content,
+              ),
+            ),
+          )
+        : DecoratedBox(
+            decoration: BoxDecoration(
+              color: palette.nav,
+              borderRadius: HsRadius.pillBorder,
+              border: Border.all(color: palette.stroke),
+            ),
+            child: content,
+          );
+
     return Padding(
       padding: const EdgeInsets.only(bottom: HsSize.navPillInset),
       child: Semantics(
@@ -58,31 +109,10 @@ class NavPill extends StatelessWidget {
         explicitChildNodes: true,
         child: DecoratedBox(
           decoration: BoxDecoration(
-            color: blur ? palette.nav.withValues(alpha: 0.86) : palette.nav,
             borderRadius: HsRadius.pillBorder,
             boxShadow: [palette.navShadow],
           ),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(
-              horizontal: HsSize.navPillPadding,
-            ),
-            child: SizedBox(
-              height: HsSize.navPillHeight,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var i = 0; i < destinations.length; i++) ...[
-                    if (i > 0) const SizedBox(width: 2),
-                    _NavItem(
-                      destination: destinations[i],
-                      selected: i == selectedIndex,
-                      onTap: () => onSelected(i),
-                    ),
-                  ],
-                ],
-              ),
-            ),
-          ),
+          child: inner,
         ),
       ),
     );

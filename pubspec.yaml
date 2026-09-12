@@ -27,6 +27,7 @@ dependencies:
   markdown: ^7.3.1
   riverpod: any
   riverpod_annotation: ^4.0.7
+  share_plus: ^13.3.0
   shared_preferences: ^2.5.5
   url_launcher: ^6.3.2
   xml: ^6.6.1

@@ -18,7 +18,10 @@ class HsDatabase extends _$HsDatabase {
 
   @override
   MigrationStrategy get migration => MigrationStrategy(
-    onCreate: (m) => m.createAll(),
+    onCreate: (m) async {
+      await m.createAll();
+      await _createIndices();
+    },
     onUpgrade: (m, from, to) async {
       if (from < 2) {
         // Cross-feed dedup and per-source muting. Existing rows get empty
@@ -34,8 +37,42 @@ class HsDatabase extends _$HsDatabase {
         await m.renameColumn(articles, 'read_in_reel', articles.seenInLinger);
         await m.renameColumn(articles, 'read_in_full', articles.readFull);
       }
+      await _createIndices();
+    },
+    beforeOpen: (details) async {
+      await customStatement('PRAGMA foreign_keys = ON');
+      await _createIndices();
     },
   );
+
+  /// Creates indexes for fast keyset pagination, deduplication, and
+  /// read-state propagation across multiple feeds.
+  Future<void> _createIndices() async {
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_articles_published_id '
+      'ON articles(published_at DESC, id DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_articles_canonical_url '
+      'ON articles(canonical_url)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_articles_title_key '
+      'ON articles(title_key)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_articles_source_id '
+      'ON articles(source_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_sources_category_enabled '
+      'ON sources(category, enabled)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_articles_unread '
+      'ON articles(source_id, read_full)',
+    );
+  }
 
   /// Empties the article cache, leaving subscriptions and their settings
   /// alone.

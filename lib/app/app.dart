@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/router.dart';
 import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
@@ -21,6 +24,15 @@ class _HeadShortsAppState extends ConsumerState<HeadShortsApp> {
   late final GoRouter _router = buildRouter(
     onboarded: ref.read(settingsProvider).onboarded,
   );
+
+  @override
+  void initState() {
+    super.initState();
+    // Pre-warm the catalog parse in background so Sources screen opens without lag.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(ref.read(sourceCatalogProvider.future));
+    });
+  }
 
   @override
   Widget build(BuildContext context) {

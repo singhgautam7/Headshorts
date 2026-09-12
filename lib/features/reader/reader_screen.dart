@@ -1,25 +1,33 @@
 import 'dart:async';
+import 'dart:ui' as ui;
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
+import 'package:headshorts/core/tokens/motion.dart';
+import 'package:headshorts/core/tokens/palette.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/open_in_web.dart';
 import 'package:headshorts/core/util/relative_time.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
+import 'package:headshorts/core/widgets/notice.dart';
 import 'package:headshorts/data/db/article_repository.dart';
+import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/db/tables.dart';
+import 'package:headshorts/data/feed/feed_parser.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/data/readability/extraction_service.dart';
 import 'package:headshorts/features/reader/article_body.dart';
 import 'package:headshorts/features/reader/reader_controller.dart';
+import 'package:share_plus/share_plus.dart';
 
 /// The in-app full article.
 ///
@@ -39,6 +47,8 @@ class ReaderScreen extends ConsumerStatefulWidget {
 class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   final _opened = DateTime.now();
   bool _sizePanelOpen = false;
+  bool _pillVisible = true;
+  double _scrollTravel = 0;
 
   @override
   void initState() {
@@ -70,6 +80,27 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     super.deactivate();
   }
 
+  void _onScroll(ScrollNotification notification) {
+    if (notification is ScrollUpdateNotification) {
+      final delta = notification.scrollDelta ?? 0;
+      final metrics = notification.metrics;
+      if (!metrics.hasContentDimensions ||
+          metrics.maxScrollExtent <= 0 ||
+          metrics.pixels <= metrics.minScrollExtent) {
+        if (!_pillVisible) setState(() => _pillVisible = true);
+        return;
+      }
+      if (delta == 0) return;
+      if (delta.sign != _scrollTravel.sign) _scrollTravel = 0;
+      _scrollTravel += delta;
+      if (_scrollTravel > 24 && _pillVisible) {
+        setState(() => _pillVisible = false);
+      } else if (_scrollTravel < -24 && !_pillVisible) {
+        setState(() => _pillVisible = true);
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
@@ -91,80 +122,121 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       child: ColoredBox(
         color: palette.background,
         child: SafeArea(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+          bottom: false,
+          child: Stack(
             children: [
-              _Bar(
-                source: headline.source.title,
-                accent: accent,
-                sizePanelOpen: _sizePanelOpen,
-                onToggleSizePanel: () =>
-                    setState(() => _sizePanelOpen = !_sizePanelOpen),
-              ),
-              if (_sizePanelOpen) _TextSizePanel(step: textSize),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(
-                    HsSpace.x5,
-                    26,
-                    HsSpace.x5,
-                    HsSpace.x5,
-                  ),
+              Positioned.fill(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Text(
-                      article.title,
-                      style: HsType.readerTitle.copyWith(
-                        color: palette.textPrimary,
-                      ),
+                    _Bar(
+                      source: headline.source.title,
+                      accent: accent,
+                      sizePanelOpen: _sizePanelOpen,
+                      onToggleSizePanel: () =>
+                          setState(() => _sizePanelOpen = !_sizePanelOpen),
                     ),
-                    const SizedBox(height: 18),
-                    _Attribution(
-                      headline: headline,
-                      minutes: switch (extraction.value) {
-                        final ExtractedArticle a => a.minutes,
-                        _ => null,
-                      },
+                    AnimatedSize(
+                      duration: HsMotion.tabSlide,
+                      curve: HsMotion.tabSlideCurve,
+                      alignment: Alignment.topCenter,
+                      child: _sizePanelOpen
+                          ? _TextSizePanel(step: textSize)
+                          : const SizedBox(width: double.infinity),
                     ),
-                    const SizedBox(height: 18),
-                    const HsDivider(),
-                    const SizedBox(height: 18),
-                    // A lead image from the feed. Extraction does not always
-                    // carry a publisher's figures into the article body, and
-                    // an article that had a picture should still show one.
-                    if (article.imageUrl != null &&
-                        !_bodyHasImage(extraction.value))
-                      _LeadImage(
-                        url: article.imageUrl!,
-                        articleUrl: article.link,
-                      ),
-                    ...switch (extraction) {
-                      AsyncData(:final value) => _body(
-                        context,
-                        value,
-                        article.summary,
-                        textSize,
-                        article.link,
-                      ),
-                      AsyncError() => _body(
-                        context,
-                        const ThinExtraction(
-                          'The article could not be fetched.',
+                    Expanded(
+                      child: NotificationListener<ScrollNotification>(
+                        onNotification: (notification) {
+                          _onScroll(notification);
+                          return false;
+                        },
+                        child: ListView(
+                          padding: const EdgeInsets.fromLTRB(
+                            HsSpace.x5,
+                            26,
+                            HsSpace.x5,
+                            HsSpace.navClearance + 20,
+                          ),
+                          children: [
+                            Text(
+                              article.title,
+                              style: HsType.readerTitle.copyWith(
+                                color: palette.textPrimary,
+                              ),
+                            ),
+                            const SizedBox(height: 18),
+                            _Attribution(
+                              headline: headline,
+                              minutes: switch (extraction.value) {
+                                final ExtractedArticle a => a.minutes,
+                                _ => null,
+                              },
+                            ),
+                            const SizedBox(height: 18),
+                            const HsDivider(),
+                            const SizedBox(height: 18),
+                            // A lead image from the feed. Extraction does not always
+                            // carry a publisher's figures into the article body, and
+                            // an article that had a picture should still show one.
+                            if (article.imageUrl != null &&
+                                !_bodyHasImage(extraction.value))
+                              _LeadImage(
+                                url: article.imageUrl!,
+                                articleUrl: article.link,
+                              ),
+                            ...switch (extraction) {
+                              AsyncData(:final value) => _body(
+                                context,
+                                value,
+                                article.summary,
+                                textSize,
+                                article.link,
+                              ),
+                              AsyncError() => _body(
+                                context,
+                                const ThinExtraction(
+                                  'The article could not be fetched.',
+                                ),
+                                article.summary,
+                                textSize,
+                                article.link,
+                              ),
+                              _ => [const _BodySkeleton()],
+                            },
+                          ],
                         ),
-                        article.summary,
-                        textSize,
-                        article.link,
                       ),
-                      _ => [const _BodySkeleton()],
-                    },
+                    ),
                   ],
                 ),
               ),
-              _Footer(
-                link: article.link,
-                thin: thin,
-                onRetry: thin
-                    ? () => ref.invalidate(extractionProvider(widget.articleId))
-                    : null,
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: SafeArea(
+                  top: false,
+                  child: Align(
+                    alignment: Alignment.bottomCenter,
+                    child: AnimatedSlide(
+                      offset: _pillVisible ? Offset.zero : const Offset(0, 1.8),
+                      duration: HsMotion.page,
+                      curve: HsMotion.pageCurve,
+                      child: _ReaderFloatingButtons(
+                        article: article,
+                        sourceTitle: headline.source.title,
+                        thin: thin,
+                        onRetry: thin
+                            ? () => ref.invalidate(
+                                extractionProvider(widget.articleId),
+                              )
+                            : null,
+                        onToggleSizePanel: () =>
+                            setState(() => _sizePanelOpen = !_sizePanelOpen),
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ],
           ),
@@ -180,59 +252,85 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     TextSizeStep size,
     String link,
   ) {
-    final palette = context.hs;
     final linkMode = ref.read(settingsProvider).linkOpenMode;
 
     return switch (extraction) {
-      ExtractedArticle(:final html) => [
-        ArticleBody(
-          html: html,
-          articleUrl: link,
-          bodySize: size.fontSize,
-          linkMode: linkMode,
-        ),
-      ],
-      // Graceful degradation: keep whatever the feed gave, say plainly that
-      // it is partial, and hand off to the publisher. No error styling.
-      ThinExtraction(:final reason) => [
-        if (summary != null && summary.isNotEmpty) ...[
-          Text(
+      ExtractedArticle(:final html) => () {
+        final text = FeedParser.plainText(html).trim();
+        if (text.isEmpty) {
+          return _thinView(
+            context,
+            'The publisher did not provide readable body text.',
             summary,
-            style: HsType.readerBody(size.fontSize)
-                .copyWith(color: palette.textPrimary),
+            size,
+            link,
+          );
+        }
+        return [
+          ArticleBody(
+            html: html,
+            articleUrl: link,
+            bodySize: size.fontSize,
+            linkMode: linkMode,
           ),
-          const SizedBox(height: 18),
-        ],
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: palette.surface,
-            border: Border.all(color: palette.stroke),
-            borderRadius: HsRadius.cardBorder,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'That is all this feed gives us',
-                style: HsType.statTitle.copyWith(color: palette.textPrimary),
-              ),
-              const SizedBox(height: HsSpace.x3),
-              Text(
-                '$reason The rest is on their page.',
-                style: HsType.note.copyWith(color: palette.textSecondary),
-              ),
-              const SizedBox(height: 14),
-              HsButton(
-                'Open in web',
-                onPressed: () => openInWeb(link),
-                height: HsSize.buttonSmall,
-              ),
-            ],
-          ),
-        ),
-      ],
+        ];
+      }(),
+      ThinExtraction(:final reason) => _thinView(
+        context,
+        reason,
+        summary,
+        size,
+        link,
+      ),
     };
+  }
+
+  List<Widget> _thinView(
+    BuildContext context,
+    String reason,
+    String? summary,
+    TextSizeStep size,
+    String link,
+  ) {
+    final palette = context.hs;
+    return [
+      if (summary != null && summary.isNotEmpty) ...[
+        Text(
+          summary,
+          style: HsType.readerBody(size.fontSize)
+              .copyWith(color: palette.textPrimary),
+        ),
+        const SizedBox(height: 18),
+      ],
+      Container(
+        padding: const EdgeInsets.all(18),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.stroke),
+          borderRadius: HsRadius.cardBorder,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Text(
+              'That is all this feed gives us',
+              style: HsType.statTitle.copyWith(color: palette.textPrimary),
+            ),
+            const SizedBox(height: HsSpace.x3),
+            Text(
+              '$reason The rest is on their page.',
+              style: HsType.note.copyWith(color: palette.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            HsButton(
+              'Open in web',
+              onPressed: () => openInWeb(link),
+              height: HsSize.buttonSmall,
+            ),
+          ],
+        ),
+      ),
+    ];
   }
 
   /// Whether the extracted body already carries a picture of its own.
@@ -292,7 +390,10 @@ class _Bar extends StatelessWidget {
           child: Row(
             children: [
               Pressable(
-                onTap: () => Navigator.of(context).maybePop(),
+                onTap: () {
+                  FocusManager.instance.primaryFocus?.unfocus();
+                  Navigator.of(context).maybePop();
+                },
                 semanticLabel: 'Back',
                 child: SizedBox(
                   width: HsSize.navItem,
@@ -430,7 +531,9 @@ class TextSizeSlider extends StatelessWidget {
                         borderRadius: BorderRadius.circular(1),
                       ),
                     ),
-                    FractionallySizedBox(
+                    AnimatedFractionallySizedBox(
+                      duration: HsMotion.micro,
+                      curve: HsMotion.microCurve,
                       widthFactor: fraction,
                       child: Container(
                         height: 2,
@@ -440,7 +543,9 @@ class TextSizeSlider extends StatelessWidget {
                         ),
                       ),
                     ),
-                    Align(
+                    AnimatedAlign(
+                      duration: HsMotion.micro,
+                      curve: HsMotion.microCurve,
                       alignment: Alignment(fraction * 2 - 1, 0),
                       child: Container(
                         width: 20,
@@ -506,51 +611,280 @@ class _Attribution extends StatelessWidget {
   }
 }
 
-class _Footer extends StatelessWidget {
-  const new({required this.link, required this.thin, required this.onRetry});
+Future<void> _showReaderMenu({
+  required BuildContext context,
+  required BuildContext anchorContext,
+  required ArticleRow article,
+  required VoidCallback onToggleSizePanel,
+}) async {
+  final palette = context.hs;
+  final overlay =
+      Navigator.of(context, rootNavigator: true).overlay?.context
+              .findRenderObject() as RenderBox?;
+  if (overlay == null) return;
 
-  final String link;
-  final bool thin;
-  final VoidCallback? onRetry;
+  final anchor = anchorContext.findRenderObject() as RenderBox?;
+  final topLeft = anchor != null
+      ? anchor.localToGlobal(Offset.zero, ancestor: overlay)
+      : Offset.zero;
+  final size = anchor?.size ?? const Size(HsSize.navItem, HsSize.navItem);
 
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    return FadingFooter(
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(
-          HsSpace.x5,
-          HsSpace.x4,
-          HsSpace.x5,
-          26,
-        ),
+  final position = RelativeRect.fromLTRB(
+    topLeft.dx - 140,
+    topLeft.dy - 170,
+    overlay.size.width - (topLeft.dx + size.width),
+    overlay.size.height - topLeft.dy,
+  );
+
+  final selected = await showMenu<String>(
+    context: context,
+    position: position,
+    useRootNavigator: true,
+    color: palette.surface,
+    elevation: 8,
+    shadowColor: palette.navShadow.color,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(color: palette.stroke),
+    ),
+    items: [
+      PopupMenuItem<String>(
+        value: 'copy',
+        height: 44,
         child: Row(
           children: [
-            Expanded(
-              child: HsButton(
-                thin ? 'Try extraction again' : 'Open in web',
-                onPressed: thin ? onRetry : () => openInWeb(link),
-                kind: HsButtonKind.secondary,
-                height: HsSize.buttonMedium,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Pressable(
-              onTap: () => openInWeb(link),
-              semanticLabel: 'Open in web',
-              child: Container(
-                width: HsSize.buttonMedium,
-                height: HsSize.buttonMedium,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  border: Border.all(color: palette.stroke),
-                  borderRadius: HsRadius.buttonBorder,
-                ),
-                child: HsGlyph.share(palette.textSecondary),
-              ),
+            Icon(Icons.copy_rounded, size: 18, color: palette.textPrimary),
+            const SizedBox(width: 12),
+            Text(
+              'Copy link',
+              style: HsType.buttonSmall.copyWith(color: palette.textPrimary),
             ),
           ],
         ),
+      ),
+      PopupMenuItem<String>(
+        value: 'web',
+        height: 44,
+        child: Row(
+          children: [
+            Icon(Icons.open_in_browser_rounded, size: 18, color: palette.textPrimary),
+            const SizedBox(width: 12),
+            Text(
+              'Open in browser',
+              style: HsType.buttonSmall.copyWith(color: palette.textPrimary),
+            ),
+          ],
+        ),
+      ),
+      PopupMenuItem<String>(
+        value: 'text_size',
+        height: 44,
+        child: Row(
+          children: [
+            Icon(Icons.format_size_rounded, size: 18, color: palette.textPrimary),
+            const SizedBox(width: 12),
+            Text(
+              'Text size',
+              style: HsType.buttonSmall.copyWith(color: palette.textPrimary),
+            ),
+          ],
+        ),
+      ),
+    ],
+  );
+
+  if (selected == 'copy') {
+    await Clipboard.setData(ClipboardData(text: article.link));
+    if (context.mounted) {
+      unawaited(HapticFeedback.selectionClick());
+      showNotice(context, 'Link copied');
+    }
+  } else if (selected == 'web') {
+    unawaited(openInWeb(article.link));
+  } else if (selected == 'text_size') {
+    onToggleSizePanel();
+  }
+}
+
+class _ReaderFloatingButtons extends ConsumerWidget {
+  const new({
+    required this.article,
+    required this.sourceTitle,
+    required this.thin,
+    required this.onRetry,
+    required this.onToggleSizePanel,
+  });
+
+  final ArticleRow article;
+  final String sourceTitle;
+  final bool thin;
+  final VoidCallback? onRetry;
+  final VoidCallback onToggleSizePanel;
+
+  Widget _buildSurface({
+    required Widget child,
+    required HsPalette palette,
+    required bool blur,
+    required BoxShape shape,
+    BorderRadius? borderRadius,
+  }) {
+    final inner = blur
+        ? (shape == BoxShape.circle
+            ? ClipOval(
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: palette.navActive.withValues(alpha: 0.86),
+                      border: Border.all(color: palette.stroke),
+                    ),
+                    child: child,
+                  ),
+                ),
+              )
+            : ClipRRect(
+                borderRadius: borderRadius ?? HsRadius.pillBorder,
+                child: BackdropFilter(
+                  filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: borderRadius ?? HsRadius.pillBorder,
+                      color: palette.navActive.withValues(alpha: 0.86),
+                      border: Border.all(color: palette.stroke),
+                    ),
+                    child: child,
+                  ),
+                ),
+              ))
+        : DecoratedBox(
+            decoration: BoxDecoration(
+              shape: shape,
+              borderRadius: shape == BoxShape.circle
+                  ? null
+                  : (borderRadius ?? HsRadius.pillBorder),
+              color: palette.navActive,
+              border: Border.all(color: palette.stroke),
+            ),
+            child: child,
+          );
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        shape: shape,
+        borderRadius: shape == BoxShape.circle
+            ? null
+            : (borderRadius ?? HsRadius.pillBorder),
+        boxShadow: [palette.navShadow],
+      ),
+      child: inner,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.hs;
+    final blur = ref.watch(settingsProvider).blurBehindNav;
+
+    final webButton = Pressable(
+      onTap: thin && onRetry != null
+          ? onRetry
+          : () => openInWeb(article.link),
+      child: _buildSurface(
+        palette: palette,
+        blur: blur,
+        shape: BoxShape.rectangle,
+        borderRadius: HsRadius.pillBorder,
+        child: Container(
+          height: HsSize.navItem,
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          alignment: Alignment.center,
+          child: Text(
+            thin ? 'Try again' : 'Open in web',
+            style: HsType.buttonSmall.copyWith(
+              color: palette.textPrimary,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final shareButton = Builder(
+      builder: (btnContext) => Pressable(
+        onTap: () {
+          final box = btnContext.findRenderObject() as RenderBox?;
+          final origin = box != null
+              ? (box.localToGlobal(Offset.zero) & box.size)
+              : null;
+          unawaited(
+            SharePlus.instance.share(
+              ShareParams(
+                text: '${article.title}\n\n${article.link}',
+                subject: article.title,
+                sharePositionOrigin: origin,
+              ),
+            ),
+          );
+        },
+        semanticLabel: 'Share',
+        child: _buildSurface(
+          palette: palette,
+          blur: blur,
+          shape: BoxShape.circle,
+          child: SizedBox(
+            width: HsSize.navItem,
+            height: HsSize.navItem,
+            child: Center(
+              child: Icon(
+                Icons.share_rounded,
+                size: 18,
+                color: palette.textPrimary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    final moreButton = Builder(
+      builder: (btnContext) => Pressable(
+        onTap: () => _showReaderMenu(
+          context: context,
+          anchorContext: btnContext,
+          article: article,
+          onToggleSizePanel: onToggleSizePanel,
+        ),
+        semanticLabel: 'More options',
+        child: _buildSurface(
+          palette: palette,
+          blur: blur,
+          shape: BoxShape.circle,
+          child: SizedBox(
+            width: HsSize.navItem,
+            height: HsSize.navItem,
+            child: Center(
+              child: Icon(
+                Icons.more_horiz_rounded,
+                size: 20,
+                color: palette.textPrimary,
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: HsSize.navPillInset),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          webButton,
+          const SizedBox(width: 10),
+          shareButton,
+          const SizedBox(width: 10),
+          moreButton,
+        ],
       ),
     );
   }

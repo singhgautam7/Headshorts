@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
@@ -233,8 +236,15 @@ class HsChip extends StatelessWidget {
     final accent = AccentScope.of(context).resolve(isDark: palette.isDark);
 
     return Pressable(
-      onTap: onTap,
-      child: Container(
+      onTap: onTap == null
+          ? null
+          : () {
+              unawaited(HapticFeedback.selectionClick());
+              onTap!();
+            },
+      child: AnimatedContainer(
+        duration: HsMotion.micro,
+        curve: HsMotion.microCurve,
         height: 36,
         padding: const EdgeInsets.symmetric(horizontal: 14),
         decoration: BoxDecoration(

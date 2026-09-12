@@ -8,15 +8,26 @@ import 'package:headshorts/core/tokens/dimensions.dart';
 /// exception to the rule that nothing moves unless the reader moved it,
 /// because here the reader is literally holding it. It never spins idly.
 class PullToRefresh extends StatelessWidget {
-  const new({
+  new({
     required this.onRefresh,
-    required this.children,
+    required List<Widget> children,
     this.padding = EdgeInsets.zero,
     super.key,
-  });
+  }) : delegate = SliverChildListDelegate(children);
+
+  new builder({
+    required this.onRefresh,
+    required NullableIndexedWidgetBuilder itemBuilder,
+    int? itemCount,
+    this.padding = EdgeInsets.zero,
+    super.key,
+  }) : delegate = SliverChildBuilderDelegate(
+         itemBuilder,
+         childCount: itemCount,
+       );
 
   final Future<void> Function() onRefresh;
-  final List<Widget> children;
+  final SliverChildDelegate delegate;
   final EdgeInsets padding;
 
   static const _extent = 96.0;
@@ -40,7 +51,7 @@ class PullToRefresh extends StatelessWidget {
       ),
       SliverPadding(
         padding: padding,
-        sliver: SliverList(delegate: SliverChildListDelegate(children)),
+        sliver: SliverList(delegate: delegate),
       ),
     ],
   );
@@ -81,7 +92,7 @@ class _Indicator extends StatelessWidget {
     return SizedBox(
       height: extent,
       child: Center(
-        child: _Ring(
+        child: HsPullRing(
           color: fetching ? palette.textPrimary : palette.textSecondary,
           progress: progress,
           spinning: mode == RefreshIndicatorMode.refresh,
@@ -91,11 +102,12 @@ class _Indicator extends StatelessWidget {
   }
 }
 
-class _Ring extends StatefulWidget {
+class HsPullRing extends StatefulWidget {
   const new({
     required this.color,
     required this.progress,
     required this.spinning,
+    super.key,
   });
 
   final Color color;
@@ -103,17 +115,17 @@ class _Ring extends StatefulWidget {
   final bool spinning;
 
   @override
-  State<_Ring> createState() => _RingState();
+  State<HsPullRing> createState() => _HsPullRingState();
 }
 
-class _RingState extends State<_Ring> with SingleTickerProviderStateMixin {
+class _HsPullRingState extends State<HsPullRing> with SingleTickerProviderStateMixin {
   late final AnimationController _turn = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
   );
 
   @override
-  void didUpdateWidget(_Ring old) {
+  void didUpdateWidget(HsPullRing old) {
     super.didUpdateWidget(old);
     // One turn per fetch, then stop. Not a loop.
     if (widget.spinning && !_turn.isAnimating) {

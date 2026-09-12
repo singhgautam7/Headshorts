@@ -50,19 +50,34 @@ class _BranchSwitcher extends StatelessWidget {
   Widget build(BuildContext context) => Stack(
     children: [
       for (var i = 0; i < branches.length; i++)
-        AnimatedOpacity(
-          opacity: i == index ? 1 : 0,
-          duration: HsMotion.page,
-          curve: HsMotion.pageCurve,
-          child: IgnorePointer(
-            // The outgoing branch stays mounted, and so keeps its state, but
-            // must not be touchable, tick, or be read out once it is off.
-            ignoring: i != index,
-            child: TickerMode(
-              enabled: i == index,
-              child: ExcludeSemantics(
-                excluding: i != index,
-                child: branches[i],
+        // Prevent background focus traversal into hidden branches (e.g. search field in Sources)
+        Focus(
+          canRequestFocus: i == index,
+          skipTraversal: i != index,
+          descendantsAreFocusable: i == index,
+          child: RepaintBoundary(
+            child: AnimatedSlide(
+              offset: i == index
+                  ? Offset.zero
+                  : Offset((i - index).sign * 0.08, 0),
+              duration: HsMotion.page,
+              curve: HsMotion.pageCurve,
+              child: AnimatedOpacity(
+                opacity: i == index ? 1 : 0,
+                duration: HsMotion.page,
+                curve: HsMotion.pageCurve,
+                child: IgnorePointer(
+                  // The outgoing branch stays mounted, and so keeps its state, but
+                  // must not be touchable, tick, or be read out once it is off.
+                  ignoring: i != index,
+                  child: TickerMode(
+                    enabled: i == index,
+                    child: ExcludeSemantics(
+                      excluding: i != index,
+                      child: branches[i],
+                    ),
+                  ),
+                ),
               ),
             ),
           ),

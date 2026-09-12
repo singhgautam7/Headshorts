@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/providers.dart';
+import 'package:headshorts/app/refresh_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
@@ -15,9 +16,11 @@ import 'package:headshorts/core/util/relative_time.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
+import 'package:headshorts/core/widgets/pull_to_refresh.dart';
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/db/tables.dart';
+import 'package:headshorts/data/feed/feed_parser.dart';
 import 'package:headshorts/features/linger/linger_controller.dart';
 import 'package:headshorts/features/linger/linger_filter_sheet.dart';
 
@@ -34,7 +37,9 @@ class LingerScreen extends ConsumerStatefulWidget {
 }
 
 class _LingerScreenState extends ConsumerState<LingerScreen> {
-  late final PageController _controller = PageController();
+  late final PageController _controller = PageController(
+    initialPage: ref.read(lingerQueueProvider).index,
+  );
 
   /// A card has to hold still this long before it counts as seen, so a fast
   /// flick through the stack does not consume the whole queue.
@@ -42,10 +47,8 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
 
   Timer? _dwell;
 
-  /// Whether Linger was on screen last build. The shell keeps every branch
-  /// mounted, so leaving the tab does not dispose this — but it does stop the
-  /// branch's tickers, which is a dependable signal that it is hidden.
-  bool _visible = true;
+  double _pullOffset = 0;
+  bool _refreshing = false;
 
   @override
   void dispose() {
@@ -55,6 +58,17 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
   }
 
   void _backToToday() => context.go('/today');
+
+  Future<void> _refresh() async {
+    if (_refreshing) return;
+    setState(() => _refreshing = true);
+    unawaited(HapticFeedback.mediumImpact());
+    try {
+      await ref.read(refreshProvider.notifier).refresh();
+    } finally {
+      if (mounted) setState(() => _refreshing = false);
+    }
+  }
 
   void _onPage(int index, List<Headline> queue) {
     unawaited(HapticFeedback.selectionClick());
@@ -78,25 +92,12 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
     });
   }
 
-  /// Coming back to Linger is "the next open": the cards worked through last
-  /// time drop out now, rather than being yanked away mid-session.
-  void _onReentry() {
-    final controller = ref.read(lingerQueueProvider.notifier);
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await controller.rebuild();
-      if (mounted && _controller.hasClients) _controller.jumpToPage(0);
-    });
-  }
-
   @override
   Widget build(BuildContext context) {
-    final visible = TickerMode.valuesOf(context).enabled;
-    if (visible && !_visible) _onReentry();
-    _visible = visible;
-
     final state = ref.watch(lingerQueueProvider);
     final queue = state.items;
     final filter = ref.watch(lingerFilterProvider);
+    final palette = context.hs;
 
     // A new filter is a new set; start it from the top.
     ref.listen(lingerFilterProvider, (_, _) {
@@ -104,7 +105,7 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
     });
 
     return ColoredBox(
-      color: context.hs.background,
+      color: palette.background,
       child: SafeArea(
         bottom: false,
         child: Column(
@@ -126,35 +127,98 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
                       ),
                       child: _HardStop(total: 0, onBackToToday: _backToToday),
                     )
-                  : PageView.builder(
-                      controller: _controller,
-                      scrollDirection: Axis.vertical,
-                      // A deliberate swipe: one card at a time, and it settles.
-                      physics: const PageScrollPhysics(
-                        parent: ClampingScrollPhysics(),
-                      ),
-                      itemCount: queue.length + 1,
-                      onPageChanged: (i) => _onPage(i, queue),
-                      itemBuilder: (context, i) => Padding(
-                        padding: const EdgeInsets.fromLTRB(
-                          HsSpace.x4,
-                          HsSpace.x2,
-                          HsSpace.x4,
-                          HsSpace.navClearance,
-                        ),
-                        child: i == queue.length
-                            ? _HardStop(
-                                total: queue.length,
-                                onBackToToday: _backToToday,
-                              )
-                            : LingerCard(
-                                headline: queue[i],
-                                position: i,
-                                total: queue.length,
-                                onReadFull: () => context.push(
-                                  '/reader/${queue[i].article.id}',
+                  : NotificationListener<ScrollNotification>(
+                      onNotification: (notification) {
+                        if (_controller.hasClients &&
+                            (_controller.page == null ||
+                                _controller.page! <= 0.05)) {
+                          final pixels = notification.metrics.pixels;
+                          if (pixels < 0) {
+                            setState(() {
+                              _pullOffset = -pixels;
+                            });
+                            if (-pixels > 72 && !_refreshing) {
+                              unawaited(_refresh());
+                            }
+                          } else if (_pullOffset != 0 && !_refreshing) {
+                            setState(() {
+                              _pullOffset = 0;
+                            });
+                          }
+                        } else if (_pullOffset != 0 && !_refreshing) {
+                          setState(() {
+                            _pullOffset = 0;
+                          });
+                        }
+                        return false;
+                      },
+                      child: Stack(
+                        children: [
+                          PageView.builder(
+                            controller: _controller,
+                            scrollDirection: Axis.vertical,
+                            physics: const PageScrollPhysics(
+                              parent: BouncingScrollPhysics(),
+                            ),
+                            itemCount: queue.length + 1,
+                            onPageChanged: (i) => _onPage(i, queue),
+                            itemBuilder: (context, i) => Padding(
+                              padding: const EdgeInsets.fromLTRB(
+                                HsSpace.x4,
+                                HsSpace.x2,
+                                HsSpace.x4,
+                                HsSpace.navClearance,
+                              ),
+                              child: i == queue.length
+                                  ? _HardStop(
+                                      total: queue.length,
+                                      onBackToToday: _backToToday,
+                                    )
+                                  : LingerCard(
+                                      headline: queue[i],
+                                      position: i,
+                                      total: queue.length,
+                                      onNextCard: i < queue.length
+                                          ? () {
+                                              if (_controller.hasClients) {
+                                                _controller.nextPage(
+                                                  duration: HsMotion.page,
+                                                  curve: HsMotion.pageCurve,
+                                                );
+                                              }
+                                            }
+                                          : null,
+                                      onPreviousCard: i > 0
+                                          ? () {
+                                              if (_controller.hasClients) {
+                                                _controller.previousPage(
+                                                  duration: HsMotion.page,
+                                                  curve: HsMotion.pageCurve,
+                                                );
+                                              }
+                                            }
+                                          : _refresh,
+                                      onReadFull: () => context.push(
+                                        '/reader/${queue[i].article.id}',
+                                      ),
+                                    ),
+                            ),
+                          ),
+                          if (_pullOffset > 0 || _refreshing)
+                            Positioned(
+                              top: HsSpace.x2,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: HsPullRing(
+                                  color: palette.textPrimary,
+                                  progress:
+                                      (_pullOffset / 72).clamp(0.0, 1.0),
+                                  spinning: _refreshing,
                                 ),
                               ),
+                            ),
+                        ],
                       ),
                     ),
             ),
@@ -189,7 +253,7 @@ class _FilterBar extends StatelessWidget {
         children: [
           Expanded(
             child: Text(
-              filter.isDefault ? 'Latest' : filter.category,
+              filter.category,
               style: HsType.timestamp.copyWith(color: palette.textMuted),
             ),
           ),
@@ -276,12 +340,14 @@ class _QueueSkeleton extends StatelessWidget {
 /// each swipe lands on a visibly different quiet hue and the gesture keeps its
 /// sense of place. On paper the ground stays neutral and the accent narrows to
 /// an edge bar and a label chip.
-class LingerCard extends StatelessWidget {
+class LingerCard extends ConsumerStatefulWidget {
   const new({
     required this.headline,
     required this.position,
     required this.total,
     required this.onReadFull,
+    this.onNextCard,
+    this.onPreviousCard,
     super.key,
   });
 
@@ -289,17 +355,65 @@ class LingerCard extends StatelessWidget {
   final int position;
   final int total;
   final VoidCallback onReadFull;
+  final VoidCallback? onNextCard;
+  final VoidCallback? onPreviousCard;
+
+  @override
+  ConsumerState<LingerCard> createState() => _LingerCardState();
+}
+
+class _LingerCardState extends ConsumerState<LingerCard> {
+  final ScrollController _scrollController = ScrollController();
+  double _accumulatedOverscroll = 0;
+
+  @override
+  void didUpdateWidget(LingerCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.headline.article.id != widget.headline.article.id) {
+      _accumulatedOverscroll = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  String _resolveExtract() {
+    final article = widget.headline.article;
+    if (article.contentSnippet != null &&
+        article.contentSnippet!.trim().isNotEmpty) {
+      return article.contentSnippet!.trim();
+    }
+    if (article.summary != null && article.summary!.trim().isNotEmpty) {
+      return article.summary!.trim();
+    }
+    if (article.fullContentHtml != null &&
+        article.fullContentHtml!.trim().isNotEmpty) {
+      final text = FeedParser.plainText(article.fullContentHtml!);
+      if (text.isNotEmpty) return text;
+    }
+    return '';
+  }
 
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final tone = headline.source.accent;
+    final tone = widget.headline.source.accent;
     final accent = tone.resolve(isDark: palette.isDark);
     final dark = palette.isDark;
-    final remaining = total - position - 1;
+    final remaining = widget.total - widget.position - 1;
+    final extract = _resolveExtract();
 
-    final extract =
-        headline.article.contentSnippet ?? headline.article.summary ?? '';
+    final titleStyle = HsType.lingerHeadline.copyWith(
+      color: dark
+          ? Oklab.mix(accent, palette.textPrimary, 0.4)
+          : palette.textPrimary,
+    );
+    final bodyStyle = HsType.lingerBody.copyWith(
+      color: palette.textSecondary,
+    );
 
     return AccentScope(
       accent: tone,
@@ -335,47 +449,93 @@ class LingerCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   _Header(
-                    source: headline.source.title,
+                    source: widget.headline.source.title,
                     accent: accent,
                     dark: dark,
-                    when: headline.article.publishedAt,
+                    when: widget.headline.article.publishedAt,
                   ),
                   const SizedBox(height: 22),
                   Expanded(
-                    child: SingleChildScrollView(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            headline.article.title,
-                            style: HsType.lingerHeadline.copyWith(
-                              // On black the headline takes a little of the
-                              // accent; on paper it stays near-black. Mixed in
-                              // oklab, as the design board writes it.
-                              color: dark
-                                  ? Oklab.mix(accent, palette.textPrimary, 0.4)
-                                  : palette.textPrimary,
-                            ),
+                    child: LayoutBuilder(
+                      builder: (context, constraints) {
+                        final textDirection = Directionality.of(context);
+                        final titlePainter = TextPainter(
+                          text: TextSpan(
+                            text: widget.headline.article.title,
+                            style: titleStyle,
                           ),
-                          if (extract.isNotEmpty) ...[
-                            const SizedBox(height: 22),
-                            Text(
-                              extract,
-                              maxLines: 6,
-                              overflow: TextOverflow.ellipsis,
-                              style: HsType.lingerBody.copyWith(
-                                color: palette.textSecondary,
-                              ),
+                          textDirection: textDirection,
+                        )..layout(maxWidth: constraints.maxWidth);
+
+                        var neededHeight = titlePainter.height;
+                        if (extract.isNotEmpty) {
+                          final extractPainter = TextPainter(
+                            text: TextSpan(
+                              text: extract,
+                              style: bodyStyle,
                             ),
+                            textDirection: textDirection,
+                            maxLines: 6,
+                          )..layout(maxWidth: constraints.maxWidth);
+                          neededHeight += 22.0 + extractPainter.height;
+                        }
+
+                        final overflows = neededHeight > constraints.maxHeight;
+
+                        final textColumn = Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              widget.headline.article.title,
+                              style: titleStyle,
+                            ),
+                            if (extract.isNotEmpty) ...[
+                              const SizedBox(height: 22),
+                              Text(
+                                extract,
+                                maxLines: 6,
+                                overflow: TextOverflow.ellipsis,
+                                style: bodyStyle,
+                              ),
+                            ],
                           ],
-                        ],
-                      ),
+                        );
+
+                        if (!overflows) {
+                          return textColumn;
+                        }
+
+                        return NotificationListener<ScrollNotification>(
+                          onNotification: (notification) {
+                            if (notification is ScrollStartNotification) {
+                              _accumulatedOverscroll = 0;
+                            } else if (notification is OverscrollNotification) {
+                              _accumulatedOverscroll += notification.overscroll;
+                              if (_accumulatedOverscroll > 20) {
+                                _accumulatedOverscroll = 0;
+                                widget.onNextCard?.call();
+                              } else if (_accumulatedOverscroll < -20) {
+                                _accumulatedOverscroll = 0;
+                                widget.onPreviousCard?.call();
+                              }
+                            } else if (notification is ScrollEndNotification) {
+                              _accumulatedOverscroll = 0;
+                            }
+                            return false;
+                          },
+                          child: SingleChildScrollView(
+                            controller: _scrollController,
+                            physics: const ClampingScrollPhysics(),
+                            child: textColumn,
+                          ),
+                        );
+                      },
                     ),
                   ),
                   const SizedBox(height: 22),
                   HsButton(
                     'Read full',
-                    onPressed: onReadFull,
+                    onPressed: widget.onReadFull,
                     kind: dark ? HsButtonKind.accent : HsButtonKind.primary,
                   ),
                   const SizedBox(height: HsSpace.x4),
@@ -405,8 +565,8 @@ class LingerCard extends StatelessWidget {
               right: HsSpace.x3,
               top: 34,
               child: PositionRuler(
-                total: total + 1,
-                index: position,
+                total: widget.total + 1,
+                index: widget.position,
                 accent: accent,
               ),
             ),

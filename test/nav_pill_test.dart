@@ -21,7 +21,7 @@ void main() {
       await pumpThemed(tester, _pill(0));
       await tester.pumpAndSettle();
 
-      expect(find.text('Today'), findsOneWidget);
+      expect(find.text('Headlines'), findsOneWidget);
       expect(find.text('Linger'), findsNothing);
       expect(find.text('Sources'), findsNothing);
       expect(find.text('More'), findsNothing);
@@ -35,7 +35,7 @@ void main() {
 
       final pill = tester.getSize(find.byType(NavPill));
       expect(pill.height, HsSize.navPillHeight + HsSize.navPillInset);
-      expect(pill.width, lessThan(372 * 0.75));
+      expect(pill.width, lessThan(372 * 0.9));
     });
 
     testWidgets('reports the tapped destination', (tester) async {
@@ -49,17 +49,17 @@ void main() {
     });
 
     testWidgets('the label morphs in over motion-nav-morph', (tester) async {
-      await pumpThemed(tester, _pill(0));
+      await pumpThemed(tester, _pill(3));
       await tester.pumpAndSettle();
       final closed = tester.getSize(find.byType(NavPill)).width;
 
-      await pumpThemed(tester, _pill(2));
+      await pumpThemed(tester, _pill(0));
       await tester.pump();
       final midMorph = tester.getSize(find.byType(NavPill)).width;
       await tester.pumpAndSettle();
       final open = tester.getSize(find.byType(NavPill)).width;
 
-      // "Sources" is a longer label than "Today", so the pill grows, and it
+      // "Headlines" is a longer label than "More", so the pill grows, and it
       // arrives there over time rather than jumping.
       expect(open, greaterThan(closed));
       expect(midMorph, lessThan(open));

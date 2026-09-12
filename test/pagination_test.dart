@@ -44,6 +44,7 @@ ParsedArticle _article(int n) => ParsedArticle(
       'report$n',
   link: 'https://example.com/story/$n',
   publishedAt: DateTime(2026, 9, 8, 12).subtract(Duration(minutes: n)),
+  contentSnippet: 'Snippet for report$n',
 );
 
 void main() {
@@ -243,6 +244,28 @@ void main() {
       await container.read(lingerQueueProvider.notifier).rebuild();
 
       expect(container.read(lingerQueueProvider).items, hasLength(4));
+    });
+
+    test('skips items with no snippet, summary, or content', () async {
+      await articles.upsert(sourceId, [
+        ParsedArticle(
+          guid: 'has-content',
+          title: 'Has content',
+          link: 'https://example.com/has',
+          publishedAt: DateTime(2026, 9, 8, 12),
+          contentSnippet: 'Valid snippet',
+        ),
+        ParsedArticle(
+          guid: 'no-content',
+          title: 'No content',
+          link: 'https://example.com/none',
+          publishedAt: DateTime(2026, 9, 8, 11),
+        ),
+      ]);
+
+      final queue = await settled();
+      expect(queue.items, hasLength(1));
+      expect(queue.items.first.article.guid, 'has-content');
     });
   });
 }

@@ -32,7 +32,8 @@ class SourcesScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
     final grouped = ref.watch(manageableSourcesProvider);
-    final loading = ref.watch(sourceCatalogProvider).isLoading;
+    final loading = ref.watch(sourceCatalogProvider).isLoading ||
+        (ref.watch(sourcesProvider).isLoading && grouped.isEmpty);
     final subscribed = (ref.watch(sourcesProvider).value ?? const [])
         .where((s) => s.enabled)
         .length;
