@@ -117,6 +117,60 @@ void main() {
     });
   });
 
+  group('inline link stitching', () {
+    const base = 'https://timesofindia.indiatimes.com/sports/cricket';
+
+    test('stitches a paragraph split around an inline link without newlines', () {
+      const html =
+          '<p>NEW DELHI: The </p><a href="/parties/aiadmk">AIADMK</a><p> on Monday took a swipe at DMK.</p>';
+      final cleaned = ArticleCleaner.clean(html, base: Uri.parse(base));
+      expect(
+        cleaned,
+        '<p>NEW DELHI: The <a href="https://timesofindia.indiatimes.com/parties/aiadmk">AIADMK</a> on Monday took a swipe at DMK.</p>',
+      );
+    });
+
+    test('stitches multiple inline links and text within a single sentence', () {
+      const html =
+          '<p>Both </p><a href="/a">Party A</a> and <a href="/b">Party B</a><p> opposed the resolution.</p>';
+      final cleaned = ArticleCleaner.clean(html, base: Uri.parse(base));
+      expect(
+        cleaned,
+        '<p>Both <a href="https://timesofindia.indiatimes.com/a">Party A</a> and <a href="https://timesofindia.indiatimes.com/b">Party B</a> opposed the resolution.</p>',
+      );
+    });
+
+    test('prepends leading inline links to the following paragraph', () {
+      const html =
+          '<a href="/breaking">Exclusive:</a><p> The government announced the committee.</p>';
+      final cleaned = ArticleCleaner.clean(html, base: Uri.parse(base));
+      expect(
+        cleaned,
+        '<p><a href="https://timesofindia.indiatimes.com/breaking">Exclusive:</a> The government announced the committee.</p>',
+      );
+    });
+
+    test('appends trailing inline link to the preceding paragraph', () {
+      const html =
+          '<p>Read more details at </p><a href="/report">our report.</a>';
+      final cleaned = ArticleCleaner.clean(html, base: Uri.parse(base));
+      expect(
+        cleaned,
+        '<p>Read more details at <a href="https://timesofindia.indiatimes.com/report">our report.</a></p>',
+      );
+    });
+
+    test('keeps standalone links between two complete sentences in their own paragraph', () {
+      const html =
+          '<p>First sentence ended here.</p><a href="/promo">Click here for full report</a><p>Second sentence starts afresh.</p>';
+      final cleaned = ArticleCleaner.clean(html, base: Uri.parse(base));
+      expect(
+        cleaned,
+        '<p>First sentence ended here.</p><p><a href="https://timesofindia.indiatimes.com/promo">Click here for full report</a></p><p>Second sentence starts afresh.</p>',
+      );
+    });
+  });
+
   group('cleaning rules', () {
     const base = 'https://example.com/news/story';
     String clean(String html) =>
@@ -189,6 +243,35 @@ void main() {
           '<p>The newsletter industry has grown considerably, and readers '
           'now subscribe to more of them than ever before.</p>';
       expect(clean(prose), contains('newsletter industry'));
+    });
+
+    test('preserves and normalises photo captions to figcaption', () {
+      expect(
+        clean(
+          '<div class="Ta7d_ img_cptn"><span>Pakistan\'s Babar Azam, center. (AP Photo)</span></div> '
+          '<p>NEW DELHI: The match concluded.</p>',
+        ),
+        contains("<figcaption>Pakistan's Babar Azam, center. (AP Photo)</figcaption>"),
+      );
+
+      expect(
+        clean('<p class="wp-caption-text">Photograph: Jane Doe</p><p>Story body.</p>'),
+        contains('<figcaption>Photograph: Jane Doe</figcaption>'),
+      );
+
+      expect(
+        clean(
+          '<figure><img src="https://example.com/pic.jpg" /> '
+          '<div class="caption">A view of the stadium</div></figure>',
+        ),
+        contains('<figcaption>A view of the stadium</figcaption>'),
+      );
+
+      // Promos and share blocks matching caption keywords must NOT become figcaptions
+      expect(
+        clean('<div class="promo-caption">Sign up for our newsletter</div><p>Story body.</p>'),
+        isNot(contains('<figcaption>')),
+      );
     });
 
     test('is registry-driven, so a publisher quirk is data', () {

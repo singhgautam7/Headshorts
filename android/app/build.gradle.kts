@@ -6,7 +6,6 @@ plugins {
 
 android {
     namespace = "com.grs.news"
-    // flutter_secure_storage requires API 37 to compile against.
     compileSdk = maxOf(37, flutter.compileSdkVersion)
     ndkVersion = flutter.ndkVersion
 

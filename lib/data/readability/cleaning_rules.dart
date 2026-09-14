@@ -90,6 +90,33 @@ const perDomainCleaningRules = <String, CleaningRules>{
     selectors: ['[data-component]', '.atom--snippet'],
   ),
   'bbc.co.uk': CleaningRules(exactText: ['getty images', 'watch:', 'listen:']),
+  // The story is in `.Art-exp_wr`, collapsed behind a "Show full article"
+  // toggle by CSS alone — the paragraphs are all in the initial HTML — and
+  // interleaved with ad slots, an AI "Quick Read" box, an "Ask NDTV" widget,
+  // share bars and an SEO footer. Everything here names one of those.
+  'ndtv.com': CleaningRules(
+    containerPatterns: [
+      'AskWg1',
+      'ASum_',
+      'Art-exp_bt',
+      'SoFl_',
+      'ins_instory',
+      'pst-by',
+      'read-tim',
+      'CpyLk',
+      'SSR_',
+      'vuukle',
+      'QukLnk',
+      'LsWg',
+      's-ls_',
+      'stk_cnt',
+      'passbackpixel',
+      '_whtvr',
+      'v-ndtv',
+      'kwry',
+    ],
+    exactText: ['show full article', 'read time:', 'follow us:'],
+  ),
   'nytimes.com': CleaningRules(exactText: ['thank you for your patience']),
   'washingtonpost.com': CleaningRules(exactText: ['end of carousel']),
 };

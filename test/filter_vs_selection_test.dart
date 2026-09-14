@@ -83,13 +83,13 @@ void main() {
     expect((await sources.enabled()).map((s) => s.id), contains(bbc));
   });
 
-  test('hiding a source in Home does not remove its category tab', () async {
+  test('hiding a source in Home does not remove its category', () async {
     final bbc = await seed('BBC', 'World', 'monsoon');
     await seed('Hindu', 'India', 'glacier');
 
     container.read(mutedSourcesProvider.notifier).toggle(bbc, visible: false);
 
-    // The tab bar follows subscriptions, not the view filter.
+    // Categories follow subscriptions, not the view filter.
     expect(
       await sources.watchCategories().first,
       unorderedEquals(['World', 'India']),
@@ -122,7 +122,7 @@ void main() {
     expect((await sources.all()).single.enabled, isTrue);
   });
 
-  test('subscribing makes a new category tab appear', () async {
+  test('subscribing makes a new category appear', () async {
     await seed('Hindu', 'India', 'glacier');
     expect(await sources.watchCategories().first, ['India']);
 
@@ -134,7 +134,7 @@ void main() {
     );
   });
 
-  test('recategorising moves a source between tabs, live', () async {
+  test('recategorising moves a source between categories, live', () async {
     final id = await seed('Hindu', 'India', 'glacier');
     await sources.setCategory(id, 'Asia');
 

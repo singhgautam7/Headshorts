@@ -181,8 +181,7 @@ class MoreScreen extends ConsumerWidget {
               SettingsRow(
                 icon: Icons.auto_awesome_outlined,
                 label: 'AI summaries',
-                value: 'Beta',
-                sub: 'Bring your own API key',
+                value: 'Coming soon',
                 onTap: () => context.push('/more/ai'),
               ),
               SettingsRow(

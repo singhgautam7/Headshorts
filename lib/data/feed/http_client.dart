@@ -1,4 +1,10 @@
+import 'dart:io';
+import 'dart:typed_data';
+
+import 'package:brotli/brotli.dart';
 import 'package:dio/dio.dart';
+import 'package:dio/io.dart';
+import 'package:dio_http2_adapter/dio_http2_adapter.dart';
 
 /// A desktop browser's user agent.
 ///
@@ -35,8 +41,72 @@ Dio buildHttpClient() {
       validateStatus: (status) => status != null && status < 500,
     ),
   );
-  dio.interceptors.add(_RetryOnce(dio));
+  dio
+    ..httpClientAdapter = _Http2WhenOffered()
+    ..interceptors.add(_RetryOnce(dio));
   return dio;
+}
+
+/// HTTP/2 wherever the server negotiates it, HTTP/1.1 everywhere else.
+///
+/// Dart's own `HttpClient` speaks HTTP/1.1 only, and some CDNs treat that as
+/// a bot: NDTV's Akamai edge answers an HTTP/1.1 article request with 403 no
+/// matter what headers it carries, and the same request over HTTP/2 with the
+/// page. Plain `http://` goes straight to the 1.1 client — the h2 adapter
+/// would try cleartext h2 and fail — and an `https://` host that does not
+/// offer h2 in ALPN falls back the same way.
+class _Http2WhenOffered implements HttpClientAdapter {
+  final _h1 = IOHttpClientAdapter();
+  late final _h2 = Http2Adapter(ConnectionManager(), fallbackAdapter: _h1);
+
+  @override
+  Future<ResponseBody> fetch(
+    RequestOptions options,
+    Stream<Uint8List>? requestStream,
+    Future<void>? cancelFuture,
+  ) async {
+    if (options.uri.scheme != 'https') {
+      return await _h1.fetch(options, requestStream, cancelFuture);
+    }
+    final body = await _h2.fetch(options, requestStream, cancelFuture);
+    // The h2 adapter hands back the wire bytes; the 1.1 client inflates for
+    // us. Both encodings a browser accepts are handled — The Hindu answers
+    // `br` whatever preference the header states.
+    final encoding = body.headers['content-encoding']?.join().toLowerCase();
+    final Stream<Uint8List> decoded;
+    switch (encoding) {
+      case 'gzip':
+        decoded = body.stream
+            .cast<List<int>>()
+            .transform(gzip.decoder)
+            .map(Uint8List.fromList);
+      case 'br':
+        // Whole-buffer only: the decoder has no chunked form. A page is a
+        // few hundred KB at most.
+        decoded = Stream.fromFuture(
+          body.stream
+              .fold<BytesBuilder>(BytesBuilder(), (b, chunk) => b..add(chunk))
+              .then((b) => Uint8List.fromList(brotli.decode(b.takeBytes()))),
+        );
+      default:
+        return body;
+    }
+    body.headers.remove('content-encoding');
+    return ResponseBody(
+      decoded,
+      body.statusCode,
+      headers: body.headers,
+      statusMessage: body.statusMessage,
+      isRedirect: body.isRedirect,
+      redirects: body.redirects,
+    );
+  }
+
+  @override
+  void close({bool force = false}) {
+    _h2.close(force: force);
+    _h1.close(force: force);
+  }
 }
 
 /// Retries a request once on a transient failure. Feeds are flaky; a second

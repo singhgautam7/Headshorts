@@ -128,7 +128,7 @@ void main() {
       );
     });
 
-    test('a category tab shows only that category', () async {
+    test('scoping by category shows only that category', () async {
       final hindu = await add('Hindu', 'India');
       final bbc = await add('BBC', 'World');
       await articles.upsert(hindu, [

@@ -41,14 +41,31 @@ abstract final class ArticleCleaner {
     final rules = rulesFor(base.host);
     final fragment = html_parser.parseFragment(html);
 
+    _stripComments(fragment);
     _resolveImages(fragment, base);
+    _preserveCaptions(fragment);
     _removeBoilerplate(fragment, rules);
     _removeSkipAndAriaJunk(fragment, rules);
     _resolveLinks(fragment, base);
     _sanitise(fragment);
+    _stitchInlineNodes(fragment);
     _prune(fragment);
 
     return _serialise(fragment);
+  }
+
+  /// Comments are not prose. Serialising a fragment writes a comment's text
+  /// out as text, and unwrapping a wrapper reparents its comments onto the
+  /// fragment, so an ad-slot marker like `<!--MIDTABOOLA-->` was landing in
+  /// the article as the word "MIDTABOOLA".
+  static void _stripComments(dom.Node node) {
+    for (final child in node.nodes.toList()) {
+      if (child is dom.Comment) {
+        child.remove();
+      } else {
+        _stripComments(child);
+      }
+    }
   }
 
   // ---- a. Images ----------------------------------------------------------
@@ -130,7 +147,69 @@ abstract final class ArticleCleaner {
         lower.contains('placeholder');
   }
 
-  // ---- b. Boilerplate containers -----------------------------------------
+  // ---- b. Captions --------------------------------------------------------
+
+  static final _captionPattern = RegExp(
+    r'\b(caption|img[-_]?cptn|image[-_]?caption|photo[-_]?caption|media[-_]?caption|wp-caption-text|art[-_]?caption|lead[-_]?cptn|caption[-_]?text|img[-_]?desc|custom[-_]?caption)\b',
+    caseSensitive: false,
+  );
+
+  static final _promoOrSocialPattern = RegExp(
+    r'\b(promo|newsletter|share|social|advert|sponsor|ad|cta)\b',
+    caseSensitive: false,
+  );
+
+  /// Recognises photo captions and credits across publishers and normalises
+  /// them to `<figcaption>` before unwrapping and sanitising.
+  ///
+  /// Publishers often wrap image captions in ad-hoc `<div>`, `<p>` or `<span>`
+  /// elements with classes like `img_cptn`, `image-caption`, or `wp-caption-text`.
+  /// Without this normalization, unwrapping unknown tags converts the caption
+  /// into indistinguishable body prose. Normalising to `<figcaption>` ensures
+  /// the Reader styles it in the dedicated muted, smaller sans-serif caption token.
+  static void _preserveCaptions(dom.DocumentFragment fragment) {
+    for (final element in fragment.querySelectorAll('*').toList()) {
+      if (!_attached(fragment, element)) continue;
+      if (element.localName == 'figcaption') continue;
+
+      final haystack = [
+        element.className,
+        element.id,
+        ...element.attributes.entries
+            .where((e) => e.key.toString().startsWith('data-'))
+            .map((e) => e.value),
+      ].join(' ');
+
+      if (haystack.trim().isEmpty) continue;
+      if (!_captionPattern.hasMatch(haystack)) continue;
+      if (_promoOrSocialPattern.hasMatch(haystack)) continue;
+
+      // Ensure it is a genuine caption: short prose, not a multi-paragraph
+      // story block or form.
+      final text = element.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+      if (text.isEmpty || text.length > 400) continue;
+      if (element.querySelectorAll('p').length > 1) continue;
+
+      final figcaption = dom.Element.tag('figcaption')..text = text;
+      element.replaceWith(figcaption);
+    }
+
+    for (final figure in fragment.querySelectorAll('figure').toList()) {
+      if (!_attached(fragment, figure)) continue;
+      if (figure.querySelector('figcaption') != null) continue;
+      for (final child in figure.children) {
+        if (child.localName == 'img' || child.localName == 'picture') continue;
+        final text = child.text.replaceAll(RegExp(r'\s+'), ' ').trim();
+        if (text.isNotEmpty && text.length <= 400 && child.querySelectorAll('p').length <= 1) {
+          final figcaption = dom.Element.tag('figcaption')..text = text;
+          child.replaceWith(figcaption);
+          break;
+        }
+      }
+    }
+  }
+
+  // ---- c. Boilerplate containers -----------------------------------------
 
   static void _removeBoilerplate(
     dom.DocumentFragment fragment,
@@ -163,7 +242,15 @@ abstract final class ArticleCleaner {
             .map((e) => e.value),
       ].join(' ');
       if (haystack.trim().isEmpty) continue;
-      if (pattern.hasMatch(haystack)) element.remove();
+      if (!pattern.hasMatch(haystack)) continue;
+      // A wrapper can carry an ad-ish class and still be the article: NDTV's
+      // story body sits in `sp-cn pg-str-com js-ad-section`. Removing the
+      // element that holds most of the text is removing the article.
+      if (_holdsRealProse(element) &&
+          element.text.length * 2 > fragment.text!.length) {
+        continue;
+      }
+      element.remove();
     }
   }
 
@@ -254,6 +341,195 @@ abstract final class ArticleCleaner {
         (name, _) => !keep.contains(name.toString()),
       );
     }
+  }
+
+  // ---- e. Stitch inline elements & split paragraphs ----------------------
+
+  static const _inlineTags = {
+    'a',
+    'strong',
+    'b',
+    'em',
+    'i',
+    'u',
+    's',
+    'code',
+    'sub',
+    'sup',
+    'span',
+    'br',
+    'small',
+    'mark',
+  };
+
+  static bool _isInline(dom.Node node) {
+    if (node is dom.Text) return true;
+    if (node is dom.Element) return _inlineTags.contains(node.localName);
+    return false;
+  }
+
+  static bool _isWhitespace(dom.Node node) {
+    if (node is dom.Text) return node.text.trim().isEmpty;
+    return false;
+  }
+
+  static bool _endsWithTerminalPunctuation(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    final lastChar = trimmed.substring(trimmed.length - 1);
+    return const ['.', '!', '?', ':', '—', '"', "'", '”', '’'].contains(lastChar);
+  }
+
+  static bool _startsWithContinuation(String text) {
+    final trimmed = text.trim();
+    if (trimmed.isEmpty) return false;
+    final firstChar = trimmed.substring(0, 1);
+    if (firstChar.toLowerCase() == firstChar && firstChar.toUpperCase() != firstChar) {
+      return true;
+    }
+    return const [',', ';', ')', ']', '}', '-', '—'].contains(firstChar);
+  }
+
+  static bool _endsWithSpacingOrOpenQuote(String text) {
+    if (text.isEmpty) return true;
+    final lastChar = text.substring(text.length - 1);
+    return RegExp(r'\s').hasMatch(lastChar) || const ['(', '[', '"', "'", '“', '‘'].contains(lastChar);
+  }
+
+  static bool _startsWithSpacingOrPunctuation(String text) {
+    if (text.isEmpty) return true;
+    final firstChar = text.substring(0, 1);
+    return RegExp(r'\s').hasMatch(firstChar) || const [',', '.', '!', '?', ';', ':', ')', ']', '"', "'", '”', '’', '-', '—'].contains(firstChar);
+  }
+
+  /// Stitches inline elements (like `<a>` or formatting tags) and unwrapped
+  /// runs of text back into their enclosing or adjacent `<p>` elements.
+  ///
+  /// Readability and DOM unwrapping often split a single prose sentence around
+  /// inline links into `<p>Prefix </p><a ...>Link</a><p> suffix</p>`, creating
+  /// disjointed paragraphs with jarring newlines before and after the link.
+  /// This merges them into a cohesive paragraph `<p>Prefix <a ...>Link</a> suffix</p>`.
+  static void _stitchInlineNodes(dom.DocumentFragment fragment) {
+    void processContainer(dom.Node container) {
+      var i = 0;
+      while (i < container.nodes.length) {
+        final node = container.nodes[i];
+
+        if (_isInline(node)) {
+          final inlineRun = <dom.Node>[];
+          var j = i;
+          while (j < container.nodes.length && _isInline(container.nodes[j])) {
+            inlineRun.add(container.nodes[j]);
+            j++;
+          }
+
+          final hasContent = inlineRun.any((n) => !_isWhitespace(n));
+          if (!hasContent) {
+            i = j;
+            continue;
+          }
+
+          dom.Node? prev;
+          for (var k = i - 1; k >= 0; k--) {
+            if (!_isWhitespace(container.nodes[k])) {
+              prev = container.nodes[k];
+              break;
+            }
+          }
+
+          dom.Node? next;
+          for (var k = j; k < container.nodes.length; k++) {
+            if (!_isWhitespace(container.nodes[k])) {
+              next = container.nodes[k];
+              break;
+            }
+          }
+
+          final prevIsP = prev is dom.Element && prev.localName == 'p';
+          final nextIsP = next is dom.Element && next.localName == 'p';
+
+          final prevComplete = prevIsP && _endsWithTerminalPunctuation(prev.text);
+          final inlineStartsContinuation = _startsWithContinuation(inlineRun.first.text ?? '');
+          final nextStartsContinuation = next != null && _startsWithContinuation(next.text ?? '');
+
+          final belongsToPrev = prevIsP && (!prevComplete || inlineStartsContinuation || (!nextIsP && next == null));
+
+          if (belongsToPrev) {
+            for (final n in inlineRun) {
+              if (!_endsWithSpacingOrOpenQuote(prev.text) && !_startsWithSpacingOrPunctuation(n.text ?? '')) {
+                prev.append(dom.Text(' '));
+              }
+              prev.append(n);
+            }
+
+            if (nextIsP) {
+              final prevText = prev.text;
+              final nextText = next.text;
+              final shouldMerge = !_endsWithTerminalPunctuation(prevText) || _startsWithContinuation(nextText);
+
+              if (shouldMerge) {
+                if (!_endsWithSpacingOrOpenQuote(prev.text) && !_startsWithSpacingOrPunctuation(next.text)) {
+                  prev.append(dom.Text(' '));
+                }
+                next.nodes.toList().forEach(prev.append);
+                next.remove();
+              }
+            }
+            i = j;
+            continue;
+          } else if (nextIsP && (nextStartsContinuation || !prevIsP)) {
+            for (var idx = inlineRun.length - 1; idx >= 0; idx--) {
+              final n = inlineRun[idx];
+              next.nodes.insert(0, n);
+              if (idx == inlineRun.length - 1 &&
+                  !_endsWithSpacingOrOpenQuote(n.text ?? '') &&
+                  !_startsWithSpacingOrPunctuation(next.text.substring(n.text?.length ?? 0))) {
+                next.nodes.insert(1, dom.Text(' '));
+              }
+            }
+            i = j;
+            continue;
+          } else {
+            final p = dom.Element.tag('p');
+            container.nodes.insert(i, p);
+            inlineRun.forEach(p.append);
+            i = i + 1;
+            continue;
+          }
+        }
+
+        if (node is dom.Element && node.localName == 'p') {
+          dom.Node? next;
+          for (var k = i + 1; k < container.nodes.length; k++) {
+            if (!_isWhitespace(container.nodes[k])) {
+              next = container.nodes[k];
+              break;
+            }
+          }
+
+          if (next is dom.Element && next.localName == 'p') {
+            final prevText = node.text;
+            final nextText = next.text;
+            if (!_endsWithTerminalPunctuation(prevText) && _startsWithContinuation(nextText)) {
+              if (!_endsWithSpacingOrOpenQuote(node.text) && !_startsWithSpacingOrPunctuation(next.text)) {
+                node.append(dom.Text(' '));
+              }
+              next.nodes.toList().forEach(node.append);
+              next.remove();
+              continue;
+            }
+          }
+        }
+
+        if (node is dom.Element && const {'blockquote', 'section', 'article'}.contains(node.localName)) {
+          processContainer(node);
+        }
+
+        i++;
+      }
+    }
+
+    processContainer(fragment);
   }
 
   // ---- f. Prune -----------------------------------------------------------

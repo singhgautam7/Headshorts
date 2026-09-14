@@ -34,11 +34,13 @@ than production code. Recreate the *visual output*, not the DOM structure.
 | A phone status bar in each mock | The real system status bar (`SafeArea`) | The mock frames draw "9:41"; on a device that is the OS's. |
 | The nav pill 22 above the frame edge | 8 above the safe area | The mock measures from the frame; a phone puts the system gesture inset there first, and the pill ends up floating in the bottom margin. |
 | More is the settings screen | More is one grouped list: settings rows and hub rows side by side, Appearance as its own page | Stats, AI summaries, About and Privacy are not settings, but a second "Settings" page under More was one tap of indirection for four rows. Grouped headings do the sorting instead. |
-| A "Top" sub-tab | "Latest" | "Top" reads as ranking, which the app does not do. Same tab, honest name. |
-| Fixed India / World / Tech tabs | Tabs derived from the reader's own categories | The mock shows one reader's set. Categories are a label on a source, so the tab bar follows whatever they have. |
+| A "Top" sub-tab & category tab strip | Single "Latest" list + "Filter" sheet; no category tabs | Headlines is a single, chronological Latest list. Category selection moves into the Filter sheet (bifurcated by category + enabled sources). Navigation is tap-only (no horizontal tab/category swipe). Stories are deferred to a later phase (design spec stays on file). |
+| Fixed India / World / Tech tabs | Categories derive reactively from sources and power the Filter | The mock shows one reader's set. Dynamic category logic is preserved under the hood to populate the Filter sheet options live. |
 | Two themes: AMOLED and White | Five families × Light / Dark / System, with AMOLED as a true-black toggle under dark | Perch's appearance model, by request. The board's own palette is the `paper` family and the default; the other four are Perch's, derived in OKLCh. |
 | Its own motion tokens (300ms page, 420ms spring nav morph, …) | Perch's M3 Expressive set: 150–260ms, `easeOutBack` for anything the finger caused, `easeOutCubic` for anything the system did | One motion vocabulary across the two apps. The board's curves were replaced wholesale rather than mixed, so nothing runs on two clocks. |
 | Linger on the page ground | Linger on pure black / pure white (`HsPalette.lingerBackground`) | Maximum contrast under the one card being read. The card keeps its designed colour; only the ground behind it changes. |
+| The Reader's text-size card sits inline under the bar, with a plain slider and "Follows the system setting" | A popover over the prose, with a tick at each of the five steps and the step in effect named where the note was | Inline it never went away and the prose reflowed under it; a slider with no marks read as continuous when it only ever had five values. Tap outside or start a scroll and it is gone. |
+| An AI summaries key screen | A "Coming soon" screen | A key field and toggles that did nothing looked half-enabled. Nothing is stored until something can use it. |
 
 ---
 
@@ -46,8 +48,7 @@ than production code. Recreate the *visual output*, not the DOM structure.
 
 - **Application ID / namespace:** `com.grs.news` (Dart package: `headshorts`).
 - **Flutter:** latest stable (3.47.x). Track it; do not pin backwards.
-- **minSdk 24**, **compileSdk 37** (the adaptive monochrome icon needs 24;
-  `flutter_secure_storage` needs to compile against 37).
+- **minSdk 24**, **compileSdk 37** (the adaptive monochrome icon needs 24).
 - Android only. iOS scaffolding exists but is not a target.
 
 ---
@@ -110,18 +111,19 @@ the reader's to edit. Nothing else defines it:
 
 - **Latest** is not a category. It is every enabled source merged, minus the
   ones muted there (`sources.mutedInLatest`), deduped, newest first.
-- **A category tab** appears for each category with at least one *enabled*
-  source, and disappears when the last one leaves. Recategorising a feed moves
-  it live, because the tab bar is a stream over the sources table.
+- **Categories populate the Filter sheet** reactively for each category with at
+  least one *enabled* source, and disappear when the last one leaves.
+  Recategorising a feed updates the options live via `categoriesProvider`.
 - **Everything downstream reads `activeCategoryProvider`, not the reader's
   raw selection.** A selection left pointing at a category that has since lost
   its last source falls back to Latest. Without that, pausing one feed leaves
   the query filtering on a name nothing is filed under and Today goes blank
   for no visible reason.
-- **The strip and the pages are one control.** Today's categories are a
-  `PageView` synced to the strip: tapping a tab and swiping the list are the
-  same gesture. Only the category in front of the reader is queried; the one
-  arriving under their thumb shows the skeleton until the swipe settles.
+- **Headlines is a single Latest list; category browsing lives in Filter.**
+  There is no top category tab strip and no horizontal swipe navigation.
+  Tapping "Filter" opens the sheet bifurcated by category + enabled sources.
+  Applying or clearing the filter displays a skeleton while loading before
+  revealing results (Apply/Clear → skeleton → results). Navigation is tap-only.
 - **OPML seeds it and stops there.** A feed's nearest ancestor outline becomes
   its category on import; from then on it is just a label like any other.
 - **Rename is the whole of category management.** Renaming onto a new name
@@ -417,6 +419,20 @@ Reader sends for article pages. Publishers refuse an unknown client outright:
 Business Standard answered `HeadShorts/1.0` with a 403 and a browser string
 with the feed.
 
+**The client speaks HTTP/2 wherever the server offers it** (`_Http2WhenOffered`
+in `http_client.dart`: `dio_http2_adapter` over `https`, Dart's own client
+for `http` and for hosts whose ALPN does not name `h2`). Dart's `HttpClient`
+is HTTP/1.1 only, and NDTV's Akamai edge answers an HTTP/1.1 article request
+with 403 whatever headers it carries — that, not the page, was why NDTV
+articles came back "did not return the page". The h2 adapter hands back wire
+bytes, so the wrapper inflates gzip itself; `br` is offered only at `q=0.1`
+and there is no brotli decoder (add `package:brotli` if a server ever insists).
+
+**Article pages are asked for the way a browser navigates**
+(`ExtractionService.pageHeaders`): `Accept`, `Accept-Language`,
+`Accept-Encoding` naming `br`, and the four `Sec-Fetch-*` headers. Each was
+bisected against NDTV's edge; drop any one and the answer is 403 again.
+
 **The reader is never told "caught up" over a cache that is still filling.**
 `RefreshProgress.finished` marks a run that reached the end; until the first
 one does, an empty briefing renders as the skeleton rather than the empty
@@ -555,12 +571,38 @@ One path, whatever came in: **normalise → clean → allowlist → render.**
    (`normaliseToHtml`), so there is one pipeline rather than a second that
    drifts.
 
+   **A declared body beats the heuristic.** `ExtractionService.extractPage`
+   tries `[itemprop="articleBody"]` first and keeps it if it assesses as a
+   whole article — at a 40-word floor rather than the heuristic's 120,
+   because a declared body that is a 70-word brief is complete, and the thin
+   card would send the reader to the page for a "rest" that does not exist;
+   only then does readability run. Readability is fooled by
+   NDTV: its story wrapper is classed `js-ad-section`, Mozilla's
+   unlikely-candidate rule matches `-ad-` and strips the whole story before
+   scoring, and the page footer wins. The publisher's own schema.org mark is
+   the more reliable signal when it exists. Neither parse runs on the UI
+   isolate — an 850KB page costs hundreds of milliseconds twice over — the
+   whole step goes through `compute`.
+
+   **Collapsed is not hidden.** NDTV folds the story behind a "Show full
+   article" toggle by CSS class alone; every paragraph is in the initial
+   HTML and reaches the Reader. Readability's dropping of `display:none`
+   nodes is left as it is — that is what removes the hidden AI-summary box —
+   so a body that is genuinely injected by JavaScript is still out of reach.
+   A page like that falls through to the thin card and "Open in web"; a
+   WebView render is the only way further and is deliberately not built.
+
 2. **Clean** (`ArticleCleaner.clean`), in this order, because each step
    depends on what the last one left:
+   - *Comments* — removed first. Serialising writes a comment's text out as
+     text and unwrapping reparents it, so `<!--MIDTABOOLA-->` was landing in
+     the article as the word "MIDTABOOLA".
    - *Images* — absolutise and de-lazy against the article URL.
    - *Boilerplate containers* — matched on `class`, `id` and `data-*` against
      the rules registry, then the always-dropped tags (`aside`, `iframe`,
      `script`, `style`, `noscript`, `form`, `button`, `nav`, `video`, …).
+     A matching container that holds most of the document's text is kept:
+     it is the article wearing an ad-ish class, not an ad.
    - *Skip links, aria junk and orphan captions* — `a[href^="#"]` whose text
      starts with "skip", `[aria-hidden="true"]`, and elements whose **entire**
      text is a known label. The **container** goes, not just the text:
@@ -587,7 +629,15 @@ One path, whatever came in: **normalise → clean → allowlist → render.**
 **The cleaning registry is data** (`cleaning_rules.dart`): global rules plus
 `perDomainCleaningRules`, keyed on the article's host. A new publisher quirk is
 one entry — the pipeline never changes. Same extension shape as
-`SourceAdapter`.
+`SourceAdapter`. `ndtv.com` is the largest entry: the "Ask NDTV" and AI
+"Quick Read" widgets, the expand toggle, share bars and the SEO footer.
+
+**On pulling a body a publisher gates behind ads.** The Reader shows what the
+publisher's own page already sent — nothing is fetched that a browser would
+not, and nothing is rendered that reader view in that browser would not. That
+is the same line as everywhere else in the app (§10: reader-view parity, no
+republishing). If Play review pushes on it, the lever is `perDomainCleaningRules`
+and the declared-body step, not a new setting.
 
 Two traps that cost real time, both now covered by tests:
 
@@ -644,15 +694,35 @@ the top of a list, when a list does not scroll at all, and on a tab change,
 and a 24px threshold stops a resting thumb making it flicker. Linger keeps its
 chrome, per the design board.
 
+**Back from any tab but Today goes to Today**, as in Perch. `AppShell` wraps
+the shell in a `PopScope` with `canPop: index == 0`; go_router asks the root
+navigator first, and a pushed screen or a sheet is above the shell there, so
+those pop before the tab does. On Today the disposition is the platform's and
+the app exits. `back_button_test` pins all four cases. Neither app enables
+predictive back in the manifest, so this is the whole story.
+
+**The Reader's text-size popover** is a card over the prose beneath the bar,
+sliding down from under it on `tabSlide` and back up on the way out, with an
+opaque barrier under it: a tap, or the start of a drag, anywhere
+outside closes it, and so does any scroll notification. It is mounted only
+while open. The slider is discrete — five ticks, the knob only ever on one,
+a drag snapping to the nearest — and carries slider semantics.
+
 **Bottom sheets are presented on the root navigator** (`showHsSheet` sets
 `useRootNavigator`). Presented on a branch navigator they render *beneath* the
 shell's floating pill, which then covers the sheet's own actions.
 
-**Tab switches cross-fade in `_BranchSwitcher`, not in the route.**
-`StatefulShellRoute.indexedStack` swaps branches instantly, so a transition on
-the branch's own page never plays at all. The shell builds its own container
-instead: every branch stays mounted, keeping its navigator and scroll
-position, and the swap animates on motion-page.
+**Tab switches slide directionally in `AppShell`, ported from Perch.**
+`StatefulShellRoute.indexedStack` hosts the branches while `AppShell` animates
+the incoming tab using `FractionalTranslation` with `RepaintBoundary` on `HsMotion.page`
+(240ms, `Curves.easeOutCubic`). Switching branches (via tap or swipe) triggers a forward
+or backward slide matching the navigation direction without layout cost or repaint jitter.
+
+**Bottom-nav tabs support horizontal swipe gestures.** Decisive horizontal flings
+(`velocity.abs() >= 240` via `GestureDetector(behavior: HitTestBehavior.translucent, onHorizontalDragEnd: ...)`)
+move across destinations (Today ↔ Linger ↔ Sources ↔ More) without interfering with vertical
+drags (Linger's vertical card swipe, pull-to-refresh, list scrolls). Category switching is
+handled via the Filter sheet rather than tab gestures.
 
 **Filter sheets close on success.** Behind a scrim, an action that leaves the
 sheet open looks like it did nothing — which is exactly how "Show all" read
@@ -703,7 +773,7 @@ The launcher icon is generated from the design board's mark by
 | State | `flutter_riverpod` (Riverpod 3) |
 | Routing | `go_router` (`StatefulShellRoute` for the four tabs) |
 | Database | `drift` + `drift_flutter` |
-| HTTP | `dio` |
+| HTTP | `dio` + `dio_http2_adapter` (h2 where offered; see §5) + `brotli` (pure-Dart decoder for what h2 returns) |
 | Feed parsing | `dart_rss` |
 | Extraction | `html_readability` |
 | Article rendering | `flutter_widget_from_html_core` |
@@ -711,7 +781,6 @@ The launcher icon is generated from the design board's mark by
 | Images | `cached_network_image` |
 | OPML / XML | `xml` |
 | Models | `freezed` |
-| Secure storage | `flutter_secure_storage` |
 | Files | `file_selector` (import only — export goes through `share_plus`) |
 | Version | `package_info_plus` — the About row and the foot of More read the installed version, never a string |
 | Colour | `Oklab` — ours; no package matches CSS `color-mix(in oklab, …)` |
@@ -748,14 +817,19 @@ The launcher icon is generated from the design board's mark by
   onboarding-and-refresh parity, entity decoding (including double-encoded
   fields), reactive category derivation and the fallback when a tab vanishes,
   the Linger filter query, the `SourceAdapter` registry,
-  OPML round-tripping, the Reader cleaning pipeline, canonical-URL and
-  headline de-duplication, the fairness cap, category derivation and renaming,
+  OPML round-tripping, the Reader cleaning pipeline (including an NDTV page
+  with its collapsed body and ad slots, through both the cleaner and the
+  service's declared-body path), Android back from every tab and over a
+  pushed screen and a sheet, the Reader's text-size popover dismissing and
+  snapping, canonical-URL and headline de-duplication, the fairness cap, category derivation and renaming,
   the seen/read model, the scroll-direction nav controller, the oklab colour
   maths against the design board's stated values, and the three widgets the
   design is most specific about: the nav pill, the Today card, the Linger card.
 - `test/fixtures/` holds **real saved article HTML**, not hand-written
   samples: a Guardian article with the newsletter block, one with headings and
-  lists, one with inline links. Hand-written HTML is too tidy to catch what
+  lists, one with inline links, and a whole NDTV page as a browser receives
+  it (script, style and SVG bodies trimmed; structure intact — the CDN
+  refuses anything that is not a browser, so it was saved through one). Hand-written HTML is too tidy to catch what
   publishers actually ship. `article_cleaner_test.dart` asserts the fixture
   still contains the boilerplate before asserting it is gone, so the test
   cannot quietly stop testing anything.
@@ -769,8 +843,11 @@ The launcher icon is generated from the design board's mark by
 
 ## 10. Out of scope (do not build)
 
-- The **AI summariser** itself. The entry point and the secure key screen
-  exist and store a key in the Android keystore; nothing summarises anything.
+- The **AI summariser** itself. The More row leads to a "Coming soon" screen
+  and nothing else; no key is collected or stored until there is something to
+  use it.
+- A **WebView render** for pages that inject their body with JavaScript. The
+  thin card and "Open in web" are the fallback.
 - Any **server-side** component.
 - Republishing publisher body text beyond on-device reader-view parity.
 - iOS release targeting.

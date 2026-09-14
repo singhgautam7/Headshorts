@@ -6,8 +6,8 @@ import 'package:headshorts/core/tokens/dimensions.dart';
 /// button. One place decides the hit area, the shape, the fill and the tint,
 /// so a bar can never grow a one-off.
 ///
-/// The visual is a [size] circle on the surface-variant tone; the tap target
-/// is never below [HsSize.buttonMedium].
+/// The visual is a [size] circle on the primaryContainer tone (matching the
+/// bottom nav's active tab accent); the tap target is never below [HsSize.buttonMedium].
 class HsIconButton extends StatelessWidget {
   const new({
     required this.onPressed,
@@ -42,10 +42,10 @@ class HsIconButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final fg = tint ?? palette.textPrimary;
+    final fg = tint ?? (active ? palette.onPrimary : palette.textPrimary);
     final bg = active
-        ? palette.navActive
-        : (filled ? palette.surfaceVariant : Colors.transparent);
+        ? palette.primary
+        : (filled ? palette.primaryContainer : Colors.transparent);
 
     return Semantics(
       button: true,

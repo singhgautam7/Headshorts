@@ -122,7 +122,7 @@ class ArticleBody extends StatelessWidget {
       },
       'figcaption' => {
         'font-family': HsType.sans,
-        'font-size': '${HsType.caption.fontSize}px',
+        'font-size': '${(body * 0.75).roundToDouble().clamp(11.0, 16.0)}px',
         'line-height': '1.4',
         'color': _hex(palette.textMuted),
         'margin': '${HsSpace.x2}px 0 ${HsSpace.x4}px',

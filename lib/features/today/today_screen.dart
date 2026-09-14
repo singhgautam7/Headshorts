@@ -9,7 +9,6 @@ import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/refresh_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
-import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/relative_time.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
@@ -35,10 +34,6 @@ class TodayScreen extends ConsumerStatefulWidget {
 }
 
 class _TodayScreenState extends ConsumerState<TodayScreen> {
-  /// The category strip and the pages are one control: tapping a tab and
-  /// swiping a page are the same gesture, and this keeps them in step.
-  final _pages = PageController();
-
   @override
   void initState() {
     super.initState();
@@ -49,76 +44,16 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
   }
 
   @override
-  void dispose() {
-    _pages.dispose();
-    super.dispose();
-  }
-
-  /// Brings the pages to [index] when the strip, or a vanished category,
-  /// moved the selection out from under them.
-  void _syncPages(int index) {
-    if (!_pages.hasClients || _pages.positions.length != 1) return;
-    final showing = (_pages.page ?? _pages.initialPage.toDouble()).round();
-    if (showing == index) return;
-    // Adjacent tabs slide; a jump across the strip would blur half the
-    // categories on the way past.
-    if ((showing - index).abs() > 1) {
-      _pages.jumpToPage(index);
-    } else {
-      _pages.animateToPage(
-        index,
-        duration: HsMotion.page,
-        curve: HsMotion.pageCurve,
-      );
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final categories =
-        ref.watch(categoriesProvider).value ?? const [latestScope];
-    final selected = ref.watch(activeCategoryProvider);
     final offline = ref.watch(offlineProvider);
-
-    final unreadAsync = ref.watch(unreadCountsProvider);
-    final unreadCounts = unreadAsync.value ?? const <String, int>{};
-    final loadingCounts = unreadAsync.isLoading;
-
-    final index = categories.indexOf(selected).clamp(0, categories.length - 1);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _syncPages(index);
-    });
 
     return HsScreen(
       title: 'Headlines',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          SubTabs(
-            labels: categories,
-            selectedIndex: index,
-            counts: unreadCounts,
-            loadingCounts: loadingCounts,
-            onSelected: (i) => ref
-                .read(selectedCategoryProvider.notifier)
-                .select(categories[i]),
-          ),
           if (offline) const _OfflineNote(),
-          Expanded(
-            child: PageView.builder(
-              controller: _pages,
-              itemCount: categories.length,
-              onPageChanged: (i) => ref
-                  .read(selectedCategoryProvider.notifier)
-                  .select(categories[i]),
-              // Only the category in front of the reader is queried. The one
-              // arriving under their thumb shows the skeleton until the swipe
-              // settles and it becomes the selection.
-              itemBuilder: (context, i) => i == index
-                  ? const _BriefingPage()
-                  : const _RefreshingSkeleton(),
-            ),
-          ),
+          const Expanded(child: _BriefingPage()),
         ],
       ),
     );
@@ -135,6 +70,7 @@ class _BriefingPage extends ConsumerWidget {
     return ref
         .watch(briefingProvider)
         .when(
+          skipLoadingOnReload: false,
           loading: () => const _RefreshingSkeleton(),
           error: (_, _) => const _RefreshingSkeleton(),
           data: (headlines) =>
@@ -174,6 +110,18 @@ class _Briefing extends ConsumerWidget {
         )
         .toList();
     final visible = scoped.where((s) => !muted.contains(s.id)).length;
+    final isFiltered = category != latestScope || muted.isNotEmpty;
+
+    final String filterLabel;
+    if (!isFiltered) {
+      filterLabel = 'Filter';
+    } else if (category != latestScope && muted.isEmpty) {
+      filterLabel = 'Filter · $category';
+    } else if (category != latestScope && muted.isNotEmpty) {
+      filterLabel = 'Filter · $category ($visible)';
+    } else {
+      filterLabel = 'Filter · $visible of ${scoped.length}';
+    }
 
     return NotificationListener<ScrollNotification>(
       // Today is the only place the pill gets out of the way. Linger keeps
@@ -224,16 +172,15 @@ class _Briefing extends ConsumerWidget {
                           ? 'updating…'
                           : lastUpdated == null
                           ? 'Not fetched yet'
-                          : 'updated ${clockTime(lastUpdated)} · newest first',
+                          : 'updated ${clockTime(lastUpdated)}',
                       style: HsType.timestamp.copyWith(
                         color: palette.textMuted,
                       ),
                     ),
                   ),
                   _ScopePill(
-                    label: visible == scoped.length
-                        ? 'All sources'
-                        : '$visible of ${scoped.length} sources',
+                    label: filterLabel,
+                    isFiltered: isFiltered,
                     onTap: () => showSourceFilterSheet(context),
                   ),
                 ],
@@ -313,9 +260,14 @@ class _CaughtUpState extends ConsumerState<_CaughtUp> {
 }
 
 class _ScopePill extends StatelessWidget {
-  const new({required this.label, required this.onTap});
+  const new({
+    required this.label,
+    required this.isFiltered,
+    required this.onTap,
+  });
 
   final String label;
+  final bool isFiltered;
   final VoidCallback onTap;
 
   @override
@@ -323,11 +275,14 @@ class _ScopePill extends StatelessWidget {
     final palette = context.hs;
     return Pressable(
       onTap: onTap,
+      semanticLabel: 'Filter headlines',
       child: Container(
         height: 32,
         padding: const EdgeInsets.symmetric(horizontal: HsSpace.x3),
         decoration: BoxDecoration(
-          border: Border.all(color: palette.stroke),
+          border: Border.all(
+            color: isFiltered ? palette.textMuted : palette.stroke,
+          ),
           borderRadius: HsRadius.pillBorder,
         ),
         child: Row(
@@ -335,11 +290,13 @@ class _ScopePill extends StatelessWidget {
           children: [
             Text(
               label,
-              style: HsType.chipSelected.copyWith(color: palette.textSecondary),
+              style: HsType.chipSelected.copyWith(
+                color: isFiltered ? palette.textPrimary : palette.textSecondary,
+              ),
             ),
             const SizedBox(width: HsSpace.x2),
             HsGlyph.chevron(
-              palette.textSecondary,
+              isFiltered ? palette.textPrimary : palette.textSecondary,
               direction: AxisDirection.down,
               size: 6,
             ),

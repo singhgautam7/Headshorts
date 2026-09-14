@@ -23,12 +23,15 @@ class RefreshController extends Notifier<RefreshProgress> {
   ///
   /// Used on launch and on returning to Today. A pull, or the refresh mark,
   /// always fetches — [refresh] itself never consults the cadence, because an
-  /// explicit ask should never be quietly ignored.
   Future<void> refreshIfDue() async {
     final cadence = ref.read(settingsProvider).refreshCadence.interval;
     if (cadence == null) return;
 
-    final last = await ref.read(lastUpdatedProvider.future);
+    final sources = await ref.read(sourceRepositoryProvider).all();
+    final stamps =
+        sources.map((s) => s.lastFetchedAt).whereType<DateTime>().toList()
+          ..sort();
+    final last = stamps.lastOrNull;
     if (last != null && DateTime.now().difference(last) < cadence) return;
     await refresh();
   }

@@ -160,11 +160,11 @@ void main() {
       expect(await sources.all(), hasLength(1));
     });
 
-    test("a new source's category tab appears", () async {
+    test("a new source's category appears", () async {
       await subscribe(catalog.sources.firstWhere((s) => s.category == 'India'));
       expect(await sources.watchCategories().first, ['India']);
 
-      // Adding a Technology source makes that tab appear.
+      // Adding a Technology source makes that category appear.
       await subscribe(
         catalog.sources.firstWhere((s) => s.category == 'Technology'),
       );

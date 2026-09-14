@@ -65,26 +65,19 @@ void main() {
     });
   });
 
-  group('SubTabs interaction & auto-scroll', () {
-    testWidgets('renders labels and supports selection', (tester) async {
-      final selected = <int>[];
+  group('HsScreen', () {
+    testWidgets('renders title and child', (tester) async {
       await pumpThemed(
         tester,
-        SubTabs(
-          labels: const ['Latest', 'India', 'World', 'Tech', 'Business'],
-          selectedIndex: 0,
-          onSelected: selected.add,
+        const HsScreen(
+          title: 'Headlines',
+          child: Text('Content'),
         ),
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Latest'), findsOneWidget);
-      expect(find.text('Tech'), findsOneWidget);
-
-      await tester.tap(find.text('Tech'));
-      await tester.pumpAndSettle();
-
-      expect(selected, [3]);
+      expect(find.text('Headlines'), findsOneWidget);
+      expect(find.text('Content'), findsOneWidget);
     });
   });
 

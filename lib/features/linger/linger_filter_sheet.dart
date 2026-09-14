@@ -106,15 +106,10 @@ class _LingerFilterSheetState extends ConsumerState<_LingerFilterSheet> {
             switchOutCurve: Curves.easeInCubic,
             layoutBuilder: (currentChild, previousChildren) => Stack(
               alignment: Alignment.topLeft,
-              children: [
-                ...previousChildren,
-                ?currentChild,
-              ],
+              children: [...previousChildren, ?currentChild],
             ),
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: child,
-            ),
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
             child: KeyedSubtree(
               key: ValueKey(_draft.category),
               child: scope.isEmpty
@@ -136,8 +131,9 @@ class _LingerFilterSheetState extends ConsumerState<_LingerFilterSheet> {
                               onTap: () => _toggleSource(
                                 scope,
                                 source.id,
-                                on: !(chosen == null ||
-                                    chosen.contains(source.id)),
+                                on:
+                                    !(chosen == null ||
+                                        chosen.contains(source.id)),
                               ),
                             ),
                           ),
@@ -154,11 +150,11 @@ class _LingerFilterSheetState extends ConsumerState<_LingerFilterSheet> {
                 'Clear filter',
                 onPressed:
                     _draft.isDefault && ref.read(lingerFilterProvider).isDefault
-                        ? null
-                        : () {
-                            ref.read(lingerFilterProvider.notifier).clear();
-                            Navigator.of(context).pop();
-                          },
+                    ? null
+                    : () {
+                        ref.read(lingerFilterProvider.notifier).clear();
+                        Navigator.of(context).pop();
+                      },
                 kind: HsButtonKind.secondary,
               ),
             ),

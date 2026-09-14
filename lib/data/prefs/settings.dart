@@ -76,9 +76,6 @@ class Settings {
     this.linkOpenMode = LinkOpenMode.inApp,
     this.refreshCadence = RefreshCadence.hourly,
     this.maxConsecutivePerSource = 0,
-    this.aiProvider = 'Anthropic',
-    this.aiOnRequestOnly = true,
-    this.aiFullTextOnly = true,
   });
 
   /// Which [ThemeFamily] is in force; unknown ids fall back to the board's.
@@ -105,11 +102,6 @@ class Settings {
   /// source is simply moved down a place.
   final int maxConsecutivePerSource;
 
-  /// Later-phase AI settings. The summariser itself is not built.
-  final String aiProvider;
-  final bool aiOnRequestOnly;
-  final bool aiFullTextOnly;
-
   Settings copyWith({
     String? familyId,
     ThemeMode? themeMode,
@@ -120,9 +112,6 @@ class Settings {
     LinkOpenMode? linkOpenMode,
     RefreshCadence? refreshCadence,
     int? maxConsecutivePerSource,
-    String? aiProvider,
-    bool? aiOnRequestOnly,
-    bool? aiFullTextOnly,
   }) => Settings(
     familyId: familyId ?? this.familyId,
     themeMode: themeMode ?? this.themeMode,
@@ -134,9 +123,6 @@ class Settings {
     refreshCadence: refreshCadence ?? this.refreshCadence,
     maxConsecutivePerSource:
         maxConsecutivePerSource ?? this.maxConsecutivePerSource,
-    aiProvider: aiProvider ?? this.aiProvider,
-    aiOnRequestOnly: aiOnRequestOnly ?? this.aiOnRequestOnly,
-    aiFullTextOnly: aiFullTextOnly ?? this.aiFullTextOnly,
   );
 }
 
@@ -159,9 +145,6 @@ class SettingsStore {
   static const _maxRun = 'maxConsecutivePerSource';
   static const _linkMode = 'linkOpenMode';
   static const _cadence = 'refreshCadence';
-  static const _aiProvider = 'aiProvider';
-  static const _aiOnRequest = 'aiOnRequestOnly';
-  static const _aiFullText = 'aiFullTextOnly';
 
   Settings read() {
     const fallback = Settings();
@@ -188,9 +171,6 @@ class SettingsStore {
           fallback.refreshCadence,
       maxConsecutivePerSource:
           _prefs.getInt(_maxRun) ?? fallback.maxConsecutivePerSource,
-      aiProvider: _prefs.getString(_aiProvider) ?? fallback.aiProvider,
-      aiOnRequestOnly: _prefs.getBool(_aiOnRequest) ?? fallback.aiOnRequestOnly,
-      aiFullTextOnly: _prefs.getBool(_aiFullText) ?? fallback.aiFullTextOnly,
     );
   }
 
@@ -204,8 +184,5 @@ class SettingsStore {
     await _prefs.setInt(_maxRun, s.maxConsecutivePerSource);
     await _prefs.setString(_linkMode, s.linkOpenMode.name);
     await _prefs.setString(_cadence, s.refreshCadence.name);
-    await _prefs.setString(_aiProvider, s.aiProvider);
-    await _prefs.setBool(_aiOnRequest, s.aiOnRequestOnly);
-    await _prefs.setBool(_aiFullText, s.aiFullTextOnly);
   }
 }

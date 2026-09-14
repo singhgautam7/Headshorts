@@ -37,15 +37,6 @@ class SettingsController extends Notifier<Settings> {
 
   Future<void> setMaxConsecutivePerSource(int max) =>
       _save(state.copyWith(maxConsecutivePerSource: max));
-
-  Future<void> setAiProvider(String provider) =>
-      _save(state.copyWith(aiProvider: provider));
-
-  Future<void> setAiOnRequestOnly({required bool enabled}) =>
-      _save(state.copyWith(aiOnRequestOnly: enabled));
-
-  Future<void> setAiFullTextOnly({required bool enabled}) =>
-      _save(state.copyWith(aiFullTextOnly: enabled));
 }
 
 final settingsProvider = NotifierProvider<SettingsController, Settings>(

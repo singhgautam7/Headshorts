@@ -21,7 +21,8 @@ abstract final class HsMotion {
   static const navMorphCurve = spring;
 
   /// The pill sliding out of the way on scroll, and back.
-  static const navHide = Duration(milliseconds: 160);
+  static const navHide = Duration(milliseconds: 280);
+  static const navHideCurve = Curves.easeInOutCubic;
 
   /// Tab switches, push to Reader and Stats — and the pop back.
   static const page = Duration(milliseconds: 240);

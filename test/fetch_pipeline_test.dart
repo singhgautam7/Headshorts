@@ -220,8 +220,8 @@ void main() {
     });
   });
 
-  group('the category tabs derive from the sources', () {
-    test('adding a source in a new category adds its tab live', () async {
+  group('the categories derive from the sources', () {
+    test('adding a source in a new category adds it live', () async {
       final container = ProviderContainer(
         overrides: [sourceRepositoryProvider.overrideWithValue(sources)],
       );
@@ -250,7 +250,7 @@ void main() {
       );
       await pumpEventQueue();
       // Ordered the way the sources are — sortOrder, then title — so
-      // "A business site" leads. What matters is that both tabs are there.
+      // "A business site" leads. What matters is that both categories are there.
       expect(
         tabs.read().value,
         containsAll([latestScope, 'Technology', 'Business']),
@@ -258,7 +258,7 @@ void main() {
       expect(tabs.read().value, hasLength(3));
     });
 
-    test('a selection whose tab has gone falls back to Latest', () async {
+    test('a selection whose category has gone falls back to Latest', () async {
       final id = await sources.add(
         title: 'A tech site',
         feedUrl: 'https://tech.example.com/rss',
@@ -274,7 +274,7 @@ void main() {
       container.read(selectedCategoryProvider.notifier).select('Technology');
       expect(container.read(activeCategoryProvider), 'Technology');
 
-      // Pausing the only source in it takes the tab away.
+      // Pausing the only source in it takes the category away.
       await sources.setEnabled(id, enabled: false);
       await pumpEventQueue();
 

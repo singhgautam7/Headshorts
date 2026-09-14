@@ -98,15 +98,10 @@ class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
             switchOutCurve: Curves.easeInCubic,
             layoutBuilder: (currentChild, previousChildren) => Stack(
               alignment: Alignment.topLeft,
-              children: [
-                ...previousChildren,
-                ?currentChild,
-              ],
+              children: [...previousChildren, ?currentChild],
             ),
-            transitionBuilder: (child, animation) => FadeTransition(
-              opacity: animation,
-              child: child,
-            ),
+            transitionBuilder: (child, animation) =>
+                FadeTransition(opacity: animation, child: child),
             child: KeyedSubtree(
               key: ValueKey(_draftCategory),
               child: scope.isEmpty
@@ -141,11 +136,15 @@ class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
             Expanded(
               child: HsButton(
                 'Clear filter',
-                onPressed: _draftMuted.isEmpty &&
-                        ref.read(mutedSourcesProvider).isEmpty &&
-                        _draftCategory == ref.read(activeCategoryProvider)
+                onPressed: _draftCategory == latestScope &&
+                        _draftMuted.isEmpty &&
+                        ref.read(activeCategoryProvider) == latestScope &&
+                        ref.read(mutedSourcesProvider).isEmpty
                     ? null
                     : () {
+                        ref
+                            .read(selectedCategoryProvider.notifier)
+                            .select(latestScope);
                         ref.read(mutedSourcesProvider.notifier).showAll();
                         Navigator.of(context).pop();
                       },

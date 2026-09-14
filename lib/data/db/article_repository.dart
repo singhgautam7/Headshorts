@@ -250,16 +250,17 @@ class ArticleRepository {
   /// Watches unread article count by category and overall ('All').
   Stream<Map<String, int>> watchUnreadCountByCategory() {
     final count = _db.articles.id.count();
-    final query = _db.selectOnly(_db.articles).join([
-      innerJoin(
-        _db.sources,
-        _db.sources.id.equalsExp(_db.articles.sourceId),
-      ),
-    ])
-      ..addColumns([_db.sources.category, count])
-      ..where(_db.sources.enabled.equals(true))
-      ..where(_db.articles.readFull.equals(false))
-      ..groupBy([_db.sources.category]);
+    final query =
+        _db.selectOnly(_db.articles).join([
+            innerJoin(
+              _db.sources,
+              _db.sources.id.equalsExp(_db.articles.sourceId),
+            ),
+          ])
+          ..addColumns([_db.sources.category, count])
+          ..where(_db.sources.enabled.equals(true))
+          ..where(_db.articles.readFull.equals(false))
+          ..groupBy([_db.sources.category]);
 
     return query.watch().map((rows) {
       final map = <String, int>{};
@@ -389,12 +390,15 @@ class ArticleRepository {
     final text = FeedParser.plainText(html);
     final derivedSnippet =
         snippet ?? (text.length > 300 ? '${text.substring(0, 300)}…' : text);
-    final prior = await (_db.select(_db.articles)
-      ..where((a) => a.id.equals(articleId))).getSingleOrNull();
+    final prior = await (_db.select(
+      _db.articles,
+    )..where((a) => a.id.equals(articleId))).getSingleOrNull();
     final needSnippet =
         prior != null &&
         (prior.contentSnippet == null || prior.contentSnippet!.isEmpty);
-    await (_db.update(_db.articles)..where((a) => a.id.equals(articleId))).write(
+    await (_db.update(
+      _db.articles,
+    )..where((a) => a.id.equals(articleId))).write(
       ArticlesCompanion(
         fullContentHtml: Value(html),
         contentSnippet: needSnippet

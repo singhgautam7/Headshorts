@@ -118,7 +118,8 @@ class HsPullRing extends StatefulWidget {
   State<HsPullRing> createState() => _HsPullRingState();
 }
 
-class _HsPullRingState extends State<HsPullRing> with SingleTickerProviderStateMixin {
+class _HsPullRingState extends State<HsPullRing>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _turn = AnimationController(
     vsync: this,
     duration: const Duration(milliseconds: 900),
