@@ -50,3 +50,10 @@ app.*.map.json
 # Design spec handoff — not committed
 specs/
 .DS_Store
+
+# Android signing keys
+*.jks
+*.keystore
+key.properties
+**/key.properties
+
