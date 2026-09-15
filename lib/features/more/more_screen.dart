@@ -179,12 +179,6 @@ class MoreScreen extends ConsumerWidget {
                 onTap: () => context.push('/more/privacy'),
               ),
               SettingsRow(
-                icon: Icons.auto_awesome_outlined,
-                label: 'AI summaries',
-                value: 'Coming soon',
-                onTap: () => context.push('/more/ai'),
-              ),
-              SettingsRow(
                 icon: Icons.info_outline_rounded,
                 label: 'About',
                 value: version,
@@ -193,7 +187,13 @@ class MoreScreen extends ConsumerWidget {
             ],
           ),
           const VersionLine(),
-          const _MadeIn(),
+          const Padding(
+            padding: EdgeInsets.only(
+              top: HsSpace.x1,
+              bottom: HsSpace.navClearance,
+            ),
+            child: MadeInIndia(),
+          ),
         ],
       ),
     );
@@ -229,26 +229,20 @@ class VersionLine extends ConsumerWidget {
   }
 }
 
-/// Pinned at the foot of the hub. Muted, centred, and the only decoration in
-/// the app that is not doing a job.
-class _MadeIn extends StatelessWidget {
-  const new();
+/// Made with love in India. Pinned at the foot of the hub and set between
+/// the maker's note and the rest of About: muted, centred, and the only
+/// decoration in the app that is not doing a job.
+class MadeInIndia extends StatelessWidget {
+  const new({super.key});
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(
-      top: HsSpace.x1,
-      bottom: HsSpace.navClearance,
-    ),
-    child: Text(
-      'Made with \u2764\ufe0f in India',
-      textAlign: TextAlign.center,
-      style: HsType.note.copyWith(color: context.hs.textMuted),
-    ),
+  Widget build(BuildContext context) => Text(
+    'Made with \u2764\ufe0f in India',
+    textAlign: TextAlign.center,
+    style: HsType.note.copyWith(color: context.hs.textMuted),
   );
 }
 
-/// The three-way segmented control used for theme and AI provider.
 class SegmentedControl<T> extends StatelessWidget {
   const new({
     required this.value,

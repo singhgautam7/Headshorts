@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,6 +10,7 @@ import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/util/canonical_url.dart' show bodyHasImage;
 import 'package:headshorts/core/util/open_in_web.dart';
 import 'package:headshorts/core/util/relative_time.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
@@ -156,6 +156,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                 color: palette.textPrimary,
                               ),
                             ),
+                            // The feed's summary is the publisher's
+                            // standfirst — The Hindu's `sub-title`, NDTV's
+                            // `sp-descp` — and sits under the headline as it
+                            // does on their page, unless the body opens with
+                            // the same words, when it would only repeat.
+                            if (_standfirst(article, extraction.value)
+                                case final dek?) ...[
+                              const SizedBox(height: 14),
+                              Text(
+                                dek,
+                                style: HsType.readerStandfirst.copyWith(
+                                  color: palette.textSecondary,
+                                ),
+                              ),
+                            ],
                             const SizedBox(height: 18),
                             _Attribution(
                               headline: headline,
@@ -167,11 +182,14 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             const SizedBox(height: 18),
                             const HsDivider(),
                             const SizedBox(height: 18),
-                            // A lead image from the feed. Extraction does not always
-                            // carry a publisher's figures into the article body, and
-                            // an article that had a picture should still show one.
+                            // The feed's picture, unless the body carries
+                            // it — the publisher's own figure keeps its
+                            // caption and its place in the story.
                             if (article.imageUrl != null &&
-                                !_bodyHasImage(extraction.value))
+                                !_bodyHasLead(
+                                  extraction.value,
+                                  article.imageUrl!,
+                                ))
                               _LeadImage(
                                 url: article.imageUrl!,
                                 articleUrl: article.link,
@@ -180,7 +198,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                               AsyncData(:final value) => _body(
                                 context,
                                 value,
-                                article.summary,
                                 textSize,
                                 article.link,
                               ),
@@ -189,7 +206,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                 const ThinExtraction(
                                   'The article could not be fetched.',
                                 ),
-                                article.summary,
                                 textSize,
                                 article.link,
                               ),
@@ -303,7 +319,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
   List<Widget> _body(
     BuildContext context,
     Extraction extraction,
-    String? summary,
     TextSizeStep size,
     String link,
   ) {
@@ -316,8 +331,6 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           return _thinView(
             context,
             'The publisher did not provide readable body text.',
-            summary,
-            size,
             link,
           );
         }
@@ -330,33 +343,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           ),
         ];
       }(),
-      ThinExtraction(:final reason) => _thinView(
-        context,
-        reason,
-        summary,
-        size,
-        link,
-      ),
+      ThinExtraction(:final reason) => _thinView(context, reason, link),
     };
   }
 
-  List<Widget> _thinView(
-    BuildContext context,
-    String reason,
-    String? summary,
-    TextSizeStep size,
-    String link,
-  ) {
+  List<Widget> _thinView(BuildContext context, String reason, String link) {
+    // The summary already stands under the headline; the card is all that
+    // is left to say.
     final palette = context.hs;
     return [
-      if (summary != null && summary.isNotEmpty) ...[
-        Text(
-          summary,
-          style: HsType.readerBody(size.fontSize)
-              .copyWith(color: palette.textPrimary),
-        ),
-        const SizedBox(height: 18),
-      ],
       Container(
         padding: const EdgeInsets.all(18),
         decoration: BoxDecoration(
@@ -388,15 +383,22 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     ];
   }
 
-  /// Whether the extracted body already carries a picture of its own.
-  static bool _bodyHasImage(Extraction? extraction) =>
-      extraction is ExtractedArticle && extraction.html.contains('<img');
+  /// The summary as a standfirst, or null when the body already opens with
+  /// it (feeds whose description is the first paragraph) or it is missing.
+  static String? _standfirst(ArticleRow article, Extraction? extraction) {
+    final dek = article.summary?.trim();
+    if (dek == null || dek.length < 20) return null;
+    if (extraction is! ExtractedArticle) return dek;
+    final opening = FeedParser.plainText(extraction.html).trimLeft();
+    final probe = dek.substring(0, dek.length.clamp(0, 40));
+    return opening.startsWith(probe) ? null : dek;
+  }
+
+  static bool _bodyHasLead(Extraction? extraction, String url) =>
+      extraction is ExtractedArticle && bodyHasImage(extraction.html, url);
 }
 
 /// The article's own picture, above the body.
-///
-/// Fails quietly: a publisher that will not serve its image leaves the article
-/// looking like an article without one, rather than like a broken page.
 class _LeadImage extends StatelessWidget {
   const new({required this.url, required this.articleUrl});
 
@@ -405,16 +407,8 @@ class _LeadImage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
-    child: ClipRRect(
-      borderRadius: BorderRadius.circular(14),
-      child: CachedNetworkImage(
-        imageUrl: url,
-        httpHeaders: ExtractionService.imageHeaders(articleUrl),
-        placeholder: (_, _) => const SizedBox.shrink(),
-        errorWidget: (_, _, _) => const SizedBox.shrink(),
-      ),
-    ),
+    padding: const EdgeInsets.only(bottom: 18),
+    child: ArticleImage(url: url, articleUrl: articleUrl),
   );
 }
 

@@ -144,7 +144,9 @@ abstract final class ArticleCleaner {
         lower.contains('1x1') ||
         lower.contains('blank.gif') ||
         lower.contains('transparent.png') ||
-        lower.contains('placeholder');
+        lower.contains('placeholder') ||
+        lower.contains('avatar') ||
+        lower.contains('default-ie');
   }
 
   // ---- b. Captions --------------------------------------------------------
@@ -191,16 +193,31 @@ abstract final class ArticleCleaner {
       if (element.querySelectorAll('p').length > 1) continue;
 
       final figcaption = dom.Element.tag('figcaption')..text = text;
-      element.replaceWith(figcaption);
+      // The caption class is often on the wrapper that holds the picture
+      // too — Indian Express's `span.custom-caption` is image then text.
+      // Replacing the wrapper with its text alone loses every photograph.
+      final images = element.querySelectorAll('img');
+      if (images.isEmpty) {
+        element.replaceWith(figcaption);
+        continue;
+      }
+      final figure = dom.Element.tag('figure');
+      images.forEach(figure.append);
+      figure.append(figcaption);
+      element.replaceWith(figure);
     }
 
     for (final figure in fragment.querySelectorAll('figure').toList()) {
       if (!_attached(fragment, figure)) continue;
       if (figure.querySelector('figcaption') != null) continue;
       for (final child in figure.children) {
-        if (child.localName == 'img' || child.localName == 'picture') continue;
+        if (child.localName == 'img' || child.querySelector('img') != null) {
+          continue;
+        }
         final text = child.text.replaceAll(RegExp(r'\s+'), ' ').trim();
-        if (text.isNotEmpty && text.length <= 400 && child.querySelectorAll('p').length <= 1) {
+        if (text.isNotEmpty &&
+            text.length <= 400 &&
+            child.querySelectorAll('p').length <= 1) {
           final figcaption = dom.Element.tag('figcaption')..text = text;
           child.replaceWith(figcaption);
           break;
@@ -244,12 +261,11 @@ abstract final class ArticleCleaner {
       if (haystack.trim().isEmpty) continue;
       if (!pattern.hasMatch(haystack)) continue;
       // A wrapper can carry an ad-ish class and still be the article: NDTV's
-      // story body sits in `sp-cn pg-str-com js-ad-section`. Removing the
-      // element that holds most of the text is removing the article.
-      if (_holdsRealProse(element) &&
-          element.text.length * 2 > fragment.text!.length) {
-        continue;
-      }
+      // story body sits in `sp-cn pg-str-com js-ad-section`, and Indian
+      // Express gates the second half of a story — figures included — in
+      // `paywall container-wall-exclusive`. Several real paragraphs is the
+      // article, whatever the class says.
+      if (_holdsRealProse(element)) continue;
       element.remove();
     }
   }
@@ -284,17 +300,14 @@ abstract final class ArticleCleaner {
 
       final normalised = text.toLowerCase().replaceAll(RegExp(r'[.:…]+$'), '');
 
-      // A prefix match may catch a whole promo block — the Guardian wraps the
-      // skip link and its caption in one figure — so it is guarded by length.
-      // Boilerplate labels are short; an article body that happens to open
-      // with one of these words is not.
+      // A pattern match may catch a whole promo block — the Guardian wraps
+      // the skip link and its caption in one figure — so it is guarded by
+      // length. Boilerplate labels are short; an article body that happens to
+      // open with one of these words is not.
       final isLabel = text.length < _labelLength;
       final matches =
           exact.contains(normalised) ||
-          (isLabel &&
-              (normalised.startsWith('sign up to ') ||
-                  normalised.startsWith('skip past ') ||
-                  normalised.startsWith('skip to ')));
+          (isLabel && rules.textPatterns.any((p) => p.hasMatch(normalised)));
 
       // Remove the container, not just the text, so no orphan caption is left
       // sitting in the middle of the article.
@@ -377,14 +390,25 @@ abstract final class ArticleCleaner {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return false;
     final lastChar = trimmed.substring(trimmed.length - 1);
-    return const ['.', '!', '?', ':', '—', '"', "'", '”', '’'].contains(lastChar);
+    return const [
+      '.',
+      '!',
+      '?',
+      ':',
+      '—',
+      '"',
+      "'",
+      '”',
+      '’',
+    ].contains(lastChar);
   }
 
   static bool _startsWithContinuation(String text) {
     final trimmed = text.trim();
     if (trimmed.isEmpty) return false;
     final firstChar = trimmed.substring(0, 1);
-    if (firstChar.toLowerCase() == firstChar && firstChar.toUpperCase() != firstChar) {
+    if (firstChar.toLowerCase() == firstChar &&
+        firstChar.toUpperCase() != firstChar) {
       return true;
     }
     return const [',', ';', ')', ']', '}', '-', '—'].contains(firstChar);
@@ -393,13 +417,30 @@ abstract final class ArticleCleaner {
   static bool _endsWithSpacingOrOpenQuote(String text) {
     if (text.isEmpty) return true;
     final lastChar = text.substring(text.length - 1);
-    return RegExp(r'\s').hasMatch(lastChar) || const ['(', '[', '"', "'", '“', '‘'].contains(lastChar);
+    return RegExp(r'\s').hasMatch(lastChar) ||
+        const ['(', '[', '"', "'", '“', '‘'].contains(lastChar);
   }
 
   static bool _startsWithSpacingOrPunctuation(String text) {
     if (text.isEmpty) return true;
     final firstChar = text.substring(0, 1);
-    return RegExp(r'\s').hasMatch(firstChar) || const [',', '.', '!', '?', ';', ':', ')', ']', '"', "'", '”', '’', '-', '—'].contains(firstChar);
+    return RegExp(r'\s').hasMatch(firstChar) ||
+        const [
+          ',',
+          '.',
+          '!',
+          '?',
+          ';',
+          ':',
+          ')',
+          ']',
+          '"',
+          "'",
+          '”',
+          '’',
+          '-',
+          '—',
+        ].contains(firstChar);
   }
 
   /// Stitches inline elements (like `<a>` or formatting tags) and unwrapped
@@ -448,15 +489,24 @@ abstract final class ArticleCleaner {
           final prevIsP = prev is dom.Element && prev.localName == 'p';
           final nextIsP = next is dom.Element && next.localName == 'p';
 
-          final prevComplete = prevIsP && _endsWithTerminalPunctuation(prev.text);
-          final inlineStartsContinuation = _startsWithContinuation(inlineRun.first.text ?? '');
-          final nextStartsContinuation = next != null && _startsWithContinuation(next.text ?? '');
+          final prevComplete =
+              prevIsP && _endsWithTerminalPunctuation(prev.text);
+          final inlineStartsContinuation = _startsWithContinuation(
+            inlineRun.first.text ?? '',
+          );
+          final nextStartsContinuation =
+              next != null && _startsWithContinuation(next.text ?? '');
 
-          final belongsToPrev = prevIsP && (!prevComplete || inlineStartsContinuation || (!nextIsP && next == null));
+          final belongsToPrev =
+              prevIsP &&
+              (!prevComplete ||
+                  inlineStartsContinuation ||
+                  (!nextIsP && next == null));
 
           if (belongsToPrev) {
             for (final n in inlineRun) {
-              if (!_endsWithSpacingOrOpenQuote(prev.text) && !_startsWithSpacingOrPunctuation(n.text ?? '')) {
+              if (!_endsWithSpacingOrOpenQuote(prev.text) &&
+                  !_startsWithSpacingOrPunctuation(n.text ?? '')) {
                 prev.append(dom.Text(' '));
               }
               prev.append(n);
@@ -465,10 +515,13 @@ abstract final class ArticleCleaner {
             if (nextIsP) {
               final prevText = prev.text;
               final nextText = next.text;
-              final shouldMerge = !_endsWithTerminalPunctuation(prevText) || _startsWithContinuation(nextText);
+              final shouldMerge =
+                  !_endsWithTerminalPunctuation(prevText) ||
+                  _startsWithContinuation(nextText);
 
               if (shouldMerge) {
-                if (!_endsWithSpacingOrOpenQuote(prev.text) && !_startsWithSpacingOrPunctuation(next.text)) {
+                if (!_endsWithSpacingOrOpenQuote(prev.text) &&
+                    !_startsWithSpacingOrPunctuation(next.text)) {
                   prev.append(dom.Text(' '));
                 }
                 next.nodes.toList().forEach(prev.append);
@@ -483,7 +536,9 @@ abstract final class ArticleCleaner {
               next.nodes.insert(0, n);
               if (idx == inlineRun.length - 1 &&
                   !_endsWithSpacingOrOpenQuote(n.text ?? '') &&
-                  !_startsWithSpacingOrPunctuation(next.text.substring(n.text?.length ?? 0))) {
+                  !_startsWithSpacingOrPunctuation(
+                    next.text.substring(n.text?.length ?? 0),
+                  )) {
                 next.nodes.insert(1, dom.Text(' '));
               }
             }
@@ -510,8 +565,10 @@ abstract final class ArticleCleaner {
           if (next is dom.Element && next.localName == 'p') {
             final prevText = node.text;
             final nextText = next.text;
-            if (!_endsWithTerminalPunctuation(prevText) && _startsWithContinuation(nextText)) {
-              if (!_endsWithSpacingOrOpenQuote(node.text) && !_startsWithSpacingOrPunctuation(next.text)) {
+            if (!_endsWithTerminalPunctuation(prevText) &&
+                _startsWithContinuation(nextText)) {
+              if (!_endsWithSpacingOrOpenQuote(node.text) &&
+                  !_startsWithSpacingOrPunctuation(next.text)) {
                 node.append(dom.Text(' '));
               }
               next.nodes.toList().forEach(node.append);
@@ -521,7 +578,12 @@ abstract final class ArticleCleaner {
           }
         }
 
-        if (node is dom.Element && const {'blockquote', 'section', 'article'}.contains(node.localName)) {
+        if (node is dom.Element &&
+            const {
+              'blockquote',
+              'section',
+              'article',
+            }.contains(node.localName)) {
           processContainer(node);
         }
 
@@ -535,6 +597,16 @@ abstract final class ArticleCleaner {
   // ---- f. Prune -----------------------------------------------------------
 
   static void _prune(dom.DocumentFragment fragment) {
+    // A caption with no picture is a label under nothing: the lead video's
+    // caption, stranded once the embed is dropped, opened a TOI article.
+    for (final caption in fragment.querySelectorAll('figcaption').toList()) {
+      final figure = caption.parent;
+      final besidePicture = figure?.localName == 'figure'
+          ? figure!.querySelector('img') != null
+          : caption.previousElementSibling?.localName == 'img';
+      if (!besidePicture) caption.remove();
+    }
+
     // Empty elements can nest, so collapse repeatedly until nothing changes.
     var changed = true;
     while (changed) {

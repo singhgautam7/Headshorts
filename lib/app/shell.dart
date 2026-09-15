@@ -42,7 +42,8 @@ class _AppShellState extends ConsumerState<AppShell>
     super.didUpdateWidget(oldWidget);
     if (widget.navigationShell.currentIndex !=
         oldWidget.navigationShell.currentIndex) {
-      _forward = widget.navigationShell.currentIndex >
+      _forward =
+          widget.navigationShell.currentIndex >
           oldWidget.navigationShell.currentIndex;
       _page.forward(from: 0);
     }
@@ -104,20 +105,23 @@ class _AppShellState extends ConsumerState<AppShell>
                 // own taps and vertical drags.
                 behavior: HitTestBehavior.translucent,
                 child: ClipRect(
-                  child: RepaintBoundary(
-                    child: AnimatedBuilder(
-                      animation: pageCurved,
-                      builder: (context, child) {
-                        final t = pageCurved.value;
-                        if (t == 1 || reduced) return child!;
-                        final dx = _forward ? (1 - t) : -(1 - t);
-                        return FractionalTranslation(
-                          translation: Offset(dx, 0),
-                          child: child,
-                        );
-                      },
-                      child: widget.navigationShell,
-                    ),
+                  // The translation stays in the tree at rest (offset zero)
+                  // rather than being added for the animation: swapping the
+                  // wrapper re-parents every branch's subtree at the start
+                  // and end of each switch, which is what made the slide
+                  // stutter. The boundary sits *inside* it, so the page is
+                  // rasterised once and only moved, frame to frame.
+                  child: AnimatedBuilder(
+                    animation: pageCurved,
+                    builder: (context, child) {
+                      final t = reduced ? 1.0 : pageCurved.value;
+                      final dx = _forward ? (1 - t) : -(1 - t);
+                      return FractionalTranslation(
+                        translation: Offset(dx, 0),
+                        child: child,
+                      );
+                    },
+                    child: RepaintBoundary(child: widget.navigationShell),
                   ),
                 ),
               ),

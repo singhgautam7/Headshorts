@@ -1,8 +1,10 @@
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
+import 'package:headshorts/core/util/canonical_url.dart';
 import 'package:headshorts/data/feed/feed_parser.dart';
 import 'package:headshorts/data/feed/http_client.dart';
 import 'package:headshorts/data/readability/article_cleaner.dart';
+import 'package:html/dom.dart' as dom;
 import 'package:html/parser.dart' as html_parser;
 import 'package:html_readability/html_readability.dart';
 import 'package:markdown/markdown.dart' as markdown;
@@ -57,7 +59,11 @@ class ExtractionService {
 
   /// Extracts [link], preferring [feedHtml] when the feed already carried the
   /// whole article.
-  Future<Extraction> extract({required String link, String? feedHtml}) async {
+  Future<Extraction> extract({
+    required String link,
+    String? feedHtml,
+    String? imageUrl,
+  }) async {
     if (feedHtml != null && feedHtml.trim().isNotEmpty) {
       final fromFeed = assess(normaliseToHtml(feedHtml), sourceUrl: link);
       if (fromFeed is ExtractedArticle) return fromFeed;
@@ -80,12 +86,55 @@ class ExtractionService {
     // Parsing a publisher's page costs hundreds of milliseconds, and it is
     // parsed twice — once to look for a declared body, once by readability.
     // Neither belongs on the thread that is animating the Reader in.
-    return await compute(_extractPage, (page: page, link: link));
+    return await compute(_extractPage, (
+      page: page,
+      link: link,
+      imageUrl: imageUrl,
+    ));
   }
 
   /// Extracts an already-fetched [page].
-  static Extraction extractPage(String page, {required String link}) {
-    final declared = _declaredBody(page);
+  ///
+  /// [imageUrl] is the feed's picture for this story. When the body carries
+  /// no copy of it but the page does — The Hindu's top picture sits outside
+  /// its declared `articleBody` — the picture is put at the head of the body
+  /// with the caption the page gave it, so the caption reaches the Reader
+  /// and survives the cache like the rest of the body.
+  static Extraction extractPage(
+    String page, {
+    required String link,
+    String? imageUrl,
+  }) {
+    final doc = html_parser.parse(page);
+    final extracted = _extractBody(doc, page, link: link);
+    if (extracted is! ExtractedArticle || imageUrl == null) return extracted;
+    if (bodyHasImage(extracted.html, imageUrl)) return extracted;
+
+    final caption = _captionFor(doc, imageUrl);
+    if (caption == null) return extracted;
+    final figure = dom.Element.tag('figure')
+      ..append(dom.Element.tag('img')..attributes['src'] = imageUrl)
+      ..append(dom.Element.tag('figcaption')..text = caption);
+    return ExtractedArticle(
+      html: '${figure.outerHtml}${extracted.html}',
+      byline: extracted.byline,
+      wordCount: extracted.wordCount,
+    );
+  }
+
+  /// A declared body first, the heuristic second.
+  ///
+  /// Readability is a heuristic, and a heuristic can be fooled: NDTV wraps
+  /// its story in a `js-ad-section` class, which Mozilla's unlikely-candidate
+  /// rule strips before scoring begins, so the page's footer wins. A
+  /// schema.org `articleBody` is the publisher saying where the article is,
+  /// so it is tried first and only kept if it reads as a whole article.
+  static Extraction _extractBody(
+    dom.Document doc,
+    String page, {
+    required String link,
+  }) {
+    final declared = doc.querySelector('[itemprop="articleBody"]')?.innerHtml;
     if (declared != null) {
       final fromDeclaration = assess(
         declared,
@@ -109,18 +158,48 @@ class ExtractionService {
     }
   }
 
-  /// The body the publisher marked as such, when they marked one.
+  /// The caption the page gives the picture at [imageUrl], if it shows it.
   ///
-  /// Readability is a heuristic, and a heuristic can be fooled: NDTV wraps
-  /// its story in a `js-ad-section` class, which Mozilla's unlikely-candidate
-  /// rule strips before scoring begins, so the page's footer wins. A
-  /// schema.org `articleBody` is the publisher saying where the article is,
-  /// so it is tried first and only kept if it reads as a whole article.
-  static String? _declaredBody(String page) {
-    final body = html_parser
-        .parse(page)
-        .querySelector('[itemprop="articleBody"]');
-    return body?.innerHtml;
+  /// The page's copy is found by identity rather than address — the feed
+  /// names one size, the page another, and a lazy-loaded `<img>` may hold a
+  /// spacer in `src` with the real picture in `srcset` or a `<source>`. The
+  /// caption is the nearest `figcaption` or caption-classed element around
+  /// it, else the picture's own `alt`.
+  static String? _captionFor(dom.Document doc, String imageUrl) {
+    for (final img in doc.querySelectorAll('img')) {
+      final candidates = [
+        img.attributes['src'],
+        img.attributes['data-src'],
+        img.attributes['data-original'],
+        img.attributes['data-lazy-src'],
+        ...?img.attributes['srcset']?.split(','),
+        if (img.parent?.localName == 'picture')
+          for (final source in img.parent!.querySelectorAll('source'))
+            ...?source.attributes['srcset']?.split(','),
+      ].map((c) => c?.trim().split(RegExp(r'\s+')).first);
+      if (!candidates.any((c) => sameImage(c, imageUrl))) continue;
+
+      var scope = img.parent;
+      for (var up = 0; up < 4 && scope != null; up++, scope = scope.parent) {
+        final caption = scope
+            .querySelectorAll('*')
+            .where(
+              (e) =>
+                  e.localName == 'figcaption' ||
+                  RegExp(
+                    'caption|cptn',
+                    caseSensitive: false,
+                  ).hasMatch(e.className),
+            )
+            .map((e) => FeedParser.plainText(e.innerHtml).trim())
+            .where((t) => t.isNotEmpty && t.length < 400)
+            .firstOrNull;
+        if (caption != null) return caption;
+      }
+      final alt = img.attributes['alt']?.trim();
+      return alt != null && alt.length > 20 ? alt : null;
+    }
+    return null;
   }
 
   /// Cleans [html] and decides whether what is left is an article.
@@ -168,7 +247,7 @@ class ExtractionService {
   static Map<String, String> imageHeaders(String articleUrl) => {
     'Referer': articleUrl,
     'User-Agent': userAgent,
-    'Accept': 'image/avif,image/webp,image/*,*/*;q=0.8',
+    'Accept': 'image/webp,image/png,image/svg+xml,image/*;q=0.8,*/*;q=0.5',
   };
 
   /// Normalises whatever a source gave us into one HTML string.
@@ -197,5 +276,9 @@ class ExtractionService {
   }
 }
 
-Extraction _extractPage(({String page, String link}) job) =>
-    ExtractionService.extractPage(job.page, link: job.link);
+Extraction _extractPage(({String page, String link, String? imageUrl}) job) =>
+    ExtractionService.extractPage(
+      job.page,
+      link: job.link,
+      imageUrl: job.imageUrl,
+    );

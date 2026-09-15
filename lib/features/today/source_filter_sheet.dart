@@ -136,7 +136,8 @@ class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
             Expanded(
               child: HsButton(
                 'Clear filter',
-                onPressed: _draftCategory == latestScope &&
+                onPressed:
+                    _draftCategory == latestScope &&
                         _draftMuted.isEmpty &&
                         ref.read(activeCategoryProvider) == latestScope &&
                         ref.read(mutedSourcesProvider).isEmpty

@@ -176,6 +176,47 @@ void main() {
     String clean(String html) =>
         ArticleCleaner.clean(html, base: Uri.parse(base));
 
+    test('drops the labels publishers thread between paragraphs', () {
+      // Indian Express's byline strip and ad-slot label, TOI's SEO tail, and
+      // a tag list at the foot — each a whole element whose text is the label.
+      final out = clean(
+        '<p>3 min read<em>Jaipur</em>Updated: Sep 14, 2026 08:46 PM IST</p> '
+        '<p>Real prose here, long enough to be a paragraph of the story.</p> '
+        '<p>Story continues below this ad</p> '
+        '<p>More real prose, also long enough to count as the story.</p> '
+        '<p>Catch the latest World News and Live updates on Times of India.</p> '
+        '<ul><li>Tags:</li><li><a href="https://x/about/jaipur/">Jaipur</a></li></ul>',
+      );
+      expect(out, contains('Real prose here'));
+      expect(out, contains('More real prose'));
+      for (final label in [
+        'min read',
+        'Story continues',
+        'Catch the latest',
+        'Tags',
+        'Jaipur',
+      ]) {
+        expect(out, isNot(contains(label)), reason: label);
+      }
+    });
+
+    test('keeps a wrapper with several real paragraphs whatever its class', () {
+      // Indian Express gates the second half of a story, figures included,
+      // in `paywall container-wall-exclusive`.
+      final out = clean(
+        '<p>Opening paragraph of the story, long enough to be real prose.</p> '
+        '<div class="paywall container-wall-exclusive"> '
+        '<p>Second paragraph of the story, long enough to be real prose here, and then some more words so the wrapper is plainly an article.</p> '
+        '<p>Third paragraph of the story, long enough to be real prose here, and then some more words so the wrapper is plainly an article.</p> '
+        '<p>Fourth paragraph of the story, long enough to be real prose here, and then some more words so the wrapper is plainly an article.</p> '
+        '<p>Fifth paragraph of the story, long enough to be real prose here, and then some more words so the wrapper is plainly an article.</p> '
+        '<p>Sixth paragraph of the story, long enough to be real prose here, and then some more words so the wrapper is plainly an article.</p> '
+        '<img src="https://example.com/photo.jpg"></div>',
+      );
+      expect(out, contains('Sixth paragraph'));
+      expect(out, contains('https://example.com/photo.jpg'));
+    });
+
     test('removes a boilerplate container by class', () {
       expect(
         clean(
@@ -248,15 +289,35 @@ void main() {
     test('preserves and normalises photo captions to figcaption', () {
       expect(
         clean(
+          '<img src="https://example.com/pic.jpg"> '
           '<div class="Ta7d_ img_cptn"><span>Pakistan\'s Babar Azam, center. (AP Photo)</span></div> '
           '<p>NEW DELHI: The match concluded.</p>',
         ),
-        contains("<figcaption>Pakistan's Babar Azam, center. (AP Photo)</figcaption>"),
+        contains(
+          "<figcaption>Pakistan's Babar Azam, center. (AP Photo)</figcaption>",
+        ),
       );
 
+      // A caption whose picture is gone is a label under nothing: TOI's lead
+      // video leaves one at the top of every story once the embed is dropped.
       expect(
-        clean('<p class="wp-caption-text">Photograph: Jane Doe</p><p>Story body.</p>'),
-        contains('<figcaption>Photograph: Jane Doe</figcaption>'),
+        clean(
+          '<p class="wp-caption-text">Photograph: Jane Doe</p><p>Story body.</p>',
+        ),
+        isNot(contains('Jane Doe')),
+      );
+
+      // The caption class is often on the wrapper that holds the picture —
+      // Indian Express's `span.custom-caption` — and the picture must survive.
+      final wrapped = clean(
+        '<p>Before.</p><span class="custom-caption"> '
+        '<img src="https://example.com/real.jpg" alt="Faiz Hasan won"> '
+        '<span>Faiz Hasan won from ward 71</span></span><p>After.</p>',
+      );
+      expect(wrapped, contains('https://example.com/real.jpg'));
+      expect(
+        wrapped,
+        contains('<figcaption>Faiz Hasan won from ward 71</figcaption>'),
       );
 
       expect(
@@ -269,7 +330,9 @@ void main() {
 
       // Promos and share blocks matching caption keywords must NOT become figcaptions
       expect(
-        clean('<div class="promo-caption">Sign up for our newsletter</div><p>Story body.</p>'),
+        clean(
+          '<div class="promo-caption">Sign up for our newsletter</div><p>Story body.</p>',
+        ),
         isNot(contains('<figcaption>')),
       );
     });

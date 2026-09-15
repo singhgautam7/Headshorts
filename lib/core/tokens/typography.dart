@@ -105,6 +105,10 @@ abstract final class HsType {
 
   /// The Reader's own headline.
   static TextStyle get readerTitle => _serif(27, 1.22, 700, tracking: -0.015);
+
+  /// The standfirst under the headline: the feed's own summary, one step
+  /// larger than the byline and a step under the body.
+  static TextStyle get readerStandfirst => _serif(18, 1.5, 400);
   static TextStyle get readerByline => _sans(13, 1.4, 500);
   static TextStyle get readerMeta => _sans(12, 1.4, 400);
 

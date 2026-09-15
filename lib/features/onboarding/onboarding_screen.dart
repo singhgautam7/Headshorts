@@ -116,28 +116,48 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   Widget _build(BuildContext context) => ColoredBox(
     color: context.hs.background,
     child: SafeArea(
-      child: switch (_step) {
-        _Step.welcome => _Welcome(
-          onChoose: () => setState(() => _step = _Step.pick),
-          onImport: () => _leaveTo('/sources/opml'),
-        ),
-        _Step.pick => _Pick(
-          grouped: _catalog.grouped(_query),
-          chosen: _chosen,
-          onSearch: (query) => setState(() => _query = query),
-          onToggleCategory: _toggleCategory,
-          onSkip: _skip,
-          onToggle: (url) => setState(() {
-            if (!_chosen.remove(url)) _chosen.add(url);
-          }),
-          onContinue: _chosen.isEmpty ? null : _continue,
-          onAddOwn: () => _leaveTo('/sources/add-url'),
-          onImport: () => _leaveTo('/sources/opml'),
-        ),
-        _Step.fetch => const InitialFetch(),
-      },
+      // Each step arrives the way a pushed page does: the router's slide and
+      // fade on motion-page, the one push transition in the app.
+      child: AnimatedSwitcher(
+        duration: HsMotion.of(context, HsMotion.page),
+        switchInCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
+        switchOutCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
+        transitionBuilder: (child, animation) {
+          final fade = FadeTransition(opacity: animation, child: child);
+          if (HsMotion.reduced(context)) return fade;
+          return SlideTransition(
+            position: Tween(
+              begin: const Offset(0.06, 0),
+              end: Offset.zero,
+            ).animate(animation),
+            child: fade,
+          );
+        },
+        child: KeyedSubtree(key: ValueKey(_step), child: _stepView(context)),
+      ),
     ),
   );
+
+  Widget _stepView(BuildContext context) => switch (_step) {
+    _Step.welcome => _Welcome(
+      onChoose: () => setState(() => _step = _Step.pick),
+      onImport: () => _leaveTo('/sources/opml'),
+    ),
+    _Step.pick => _Pick(
+      grouped: _catalog.grouped(_query),
+      chosen: _chosen,
+      onSearch: (query) => setState(() => _query = query),
+      onToggleCategory: _toggleCategory,
+      onSkip: _skip,
+      onToggle: (url) => setState(() {
+        if (!_chosen.remove(url)) _chosen.add(url);
+      }),
+      onContinue: _chosen.isEmpty ? null : _continue,
+      onAddOwn: () => _leaveTo('/sources/add-url'),
+      onImport: () => _leaveTo('/sources/opml'),
+    ),
+    _Step.fetch => const InitialFetch(),
+  };
 }
 
 class _Welcome extends StatelessWidget {
@@ -338,9 +358,44 @@ class _Pick extends StatelessWidget {
             onToggleCategory: onToggleCategory,
             leading: Padding(
               padding: const EdgeInsets.only(top: HsSpace.x4),
-              child: HsSearchField(
-                hint: 'Search publishers and categories',
-                onChanged: onSearch,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  HsSearchField(
+                    hint: 'Search publishers and categories',
+                    onChanged: onSearch,
+                  ),
+                  const SizedBox(height: HsSpace.x3),
+                  // The two other ways in sit with the search, not pinned
+                  // over the list: they are choices to make once, and the
+                  // foot is for leaving the step.
+                  Row(
+                    children: [
+                      Expanded(
+                        child: HsButton(
+                          'Add your own',
+                          onPressed: onAddOwn,
+                          kind: HsButtonKind.secondary,
+                          height: HsSize.buttonCompact,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: HsButton(
+                          'Import OPML',
+                          onPressed: onImport,
+                          kind: HsButtonKind.secondary,
+                          height: HsSize.buttonCompact,
+                        ),
+                      ),
+                      InfoButton(
+                        semanticLabel: 'About OPML',
+                        onTap: () =>
+                            showOpmlExplainer(context, onImport: onImport),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
@@ -353,49 +408,17 @@ class _Pick extends StatelessWidget {
               HsSpace.x5,
               26,
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: HsButton(
-                        'Add your own',
-                        onPressed: onAddOwn,
-                        kind: HsButtonKind.secondary,
-                        height: HsSize.buttonCompact,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: HsButton(
-                        'Import OPML',
-                        onPressed: onImport,
-                        kind: HsButtonKind.secondary,
-                        height: HsSize.buttonCompact,
-                      ),
-                    ),
-                    InfoButton(
-                      semanticLabel: 'About OPML',
-                      onTap: () =>
-                          showOpmlExplainer(context, onImport: onImport),
-                    ),
-                  ],
+                Expanded(
+                  child: HsButton(
+                    'Skip',
+                    onPressed: onSkip,
+                    kind: HsButtonKind.secondary,
+                  ),
                 ),
-                const SizedBox(height: HsSpace.x3),
-                HsButton(
-                  chosen.isEmpty
-                      ? 'Choose at least one'
-                      : 'Continue with ${chosen.length}',
-                  onPressed: onContinue,
-                ),
-                const SizedBox(height: HsSpace.x2),
-                HsButton(
-                  'Skip for now',
-                  onPressed: onSkip,
-                  kind: HsButtonKind.tertiary,
-                  height: HsSize.buttonSmall,
-                ),
+                const SizedBox(width: 10),
+                Expanded(child: HsButton('Continue', onPressed: onContinue)),
               ],
             ),
           ),

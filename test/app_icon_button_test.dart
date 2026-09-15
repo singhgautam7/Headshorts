@@ -12,11 +12,13 @@ void main() {
       );
 
   Finder iconMaterial() => find.descendant(
-        of: find.byType(HsIconButton),
-        matching: find.byType(Material),
-      );
+    of: find.byType(HsIconButton),
+    matching: find.byType(Material),
+  );
 
-  testWidgets('HsIconButton uses primaryContainer for filled background', (tester) async {
+  testWidgets('HsIconButton uses primaryContainer for filled background', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       frame(
         HsIconButton(
@@ -49,7 +51,9 @@ void main() {
     expect(material.color, HsPalette.amoled.primary);
   });
 
-  testWidgets('HsIconButton uses transparent when filled is false', (tester) async {
+  testWidgets('HsIconButton uses transparent when filled is false', (
+    tester,
+  ) async {
     await tester.pumpWidget(
       frame(
         HsIconButton(

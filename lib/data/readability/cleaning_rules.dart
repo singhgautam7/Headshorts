@@ -8,6 +8,7 @@ class CleaningRules {
   const new({
     this.containerPatterns = const [],
     this.exactText = const [],
+    this.textPatterns = const [],
     this.selectors = const [],
   });
 
@@ -20,18 +21,25 @@ class CleaningRules {
   /// the "after newsletter promotion" symptom.
   final List<String> exactText;
 
+  /// Like [exactText], but a pattern over the element's whole text, lower-
+  /// cased and without trailing punctuation — for labels that carry a
+  /// number or a variable tail: "3 min read", "Catch the latest World News…".
+  /// Still guarded by the label length, so a paragraph never matches.
+  final List<RegExp> textPatterns;
+
   /// CSS selectors to remove outright, for a publisher-specific structure.
   final List<String> selectors;
 
   CleaningRules merge(CleaningRules other) => CleaningRules(
     containerPatterns: [...containerPatterns, ...other.containerPatterns],
     exactText: [...exactText, ...other.exactText],
+    textPatterns: [...textPatterns, ...other.textPatterns],
     selectors: [...selectors, ...other.selectors],
   );
 }
 
 /// Rules that apply to every article.
-const globalCleaningRules = CleaningRules(
+final globalCleaningRules = CleaningRules(
   containerPatterns: [
     'newsletter',
     'promo',
@@ -71,14 +79,26 @@ const globalCleaningRules = CleaningRules(
     'subscribe',
     'newsletter',
   ],
+  textPatterns: [
+    RegExp('^sign up to '),
+    RegExp('^skip (past|to) '),
+    RegExp('^story continues below'),
+    // Indian Express runs its byline strip together: "3 min readJaipur…".
+    RegExp(r'^\d+ min read'),
+    // The SEO tail after a Times of India story.
+    RegExp('^(catch|get) the latest '),
+    RegExp(r'^(also|read) (read|more):?$'),
+    // A tag list at the foot: "Tags: Jaipur, Rajasthan".
+    RegExp('^(tags?|topics?):'),
+  ],
 );
 
 /// One publisher's quirks, keyed on the article's host without `www.`.
 ///
 /// Keep these small and specific. Anything that generalises belongs in
 /// [globalCleaningRules] instead.
-const perDomainCleaningRules = <String, CleaningRules>{
-  'theguardian.com': CleaningRules(
+final perDomainCleaningRules = <String, CleaningRules>{
+  'theguardian.com': const CleaningRules(
     exactText: [
       'skip past newsletter promotion',
       'after newsletter promotion',
@@ -89,12 +109,34 @@ const perDomainCleaningRules = <String, CleaningRules>{
     ],
     selectors: ['[data-component]', '.atom--snippet'],
   ),
-  'bbc.co.uk': CleaningRules(exactText: ['getty images', 'watch:', 'listen:']),
+  'bbc.co.uk': const CleaningRules(
+    exactText: ['getty images', 'watch:', 'listen:'],
+  ),
+  // The byline strip ("3 min read · Jaipur · Updated: …"), the ad-slot
+  // labels between paragraphs, and the author box with its avatar at the
+  // foot.
+  'indianexpress.com': const CleaningRules(
+    containerPatterns: [
+      'post-info',
+      'article-publish-date',
+      'ie-adtext',
+      'adbox',
+      'author-block',
+      'author-img',
+      'author-bio',
+      'more-abt-author',
+      r'\btags\b',
+    ],
+  ),
+  // The lead video's embed, whose caption would otherwise open the story.
+  'timesofindia.indiatimes.com': const CleaningRules(
+    containerPatterns: ['vdo_embedd', 'leadmedia'],
+  ),
   // The story is in `.Art-exp_wr`, collapsed behind a "Show full article"
   // toggle by CSS alone — the paragraphs are all in the initial HTML — and
   // interleaved with ad slots, an AI "Quick Read" box, an "Ask NDTV" widget,
   // share bars and an SEO footer. Everything here names one of those.
-  'ndtv.com': CleaningRules(
+  'ndtv.com': const CleaningRules(
     containerPatterns: [
       'AskWg1',
       'ASum_',
@@ -117,8 +159,10 @@ const perDomainCleaningRules = <String, CleaningRules>{
     ],
     exactText: ['show full article', 'read time:', 'follow us:'],
   ),
-  'nytimes.com': CleaningRules(exactText: ['thank you for your patience']),
-  'washingtonpost.com': CleaningRules(exactText: ['end of carousel']),
+  'nytimes.com': const CleaningRules(
+    exactText: ['thank you for your patience'],
+  ),
+  'washingtonpost.com': const CleaningRules(exactText: ['end of carousel']),
 };
 
 /// The rules in force for [host] — the global set plus anything registered

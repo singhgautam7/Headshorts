@@ -69,10 +69,7 @@ void main() {
     testWidgets('renders title and child', (tester) async {
       await pumpThemed(
         tester,
-        const HsScreen(
-          title: 'Headlines',
-          child: Text('Content'),
-        ),
+        const HsScreen(title: 'Headlines', child: Text('Content')),
       );
       await tester.pumpAndSettle();
 

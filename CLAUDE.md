@@ -21,9 +21,11 @@ components, motion, screen behaviour. If anything in this file appears to
 conflict with the spec, the spec wins.
 
 `specs/` is **gitignored**; the handoff bundle is not committed. The primary
-document is `specs/design/waiting-on-deliverable-details/project/HeadShorts
-Design Board.dc.html` — a Claude Design handoff, HTML/CSS prototypes rather
-than production code. Recreate the *visual output*, not the DOM structure.
+document is `specs/design/headshorts/project/HeadShorts Design Board.dc.html`
+— a Claude Design handoff, HTML/CSS prototypes rather than production code.
+`HeadShorts Store Assets.dc.html` beside it is the Play listing (feature
+graphic and five screenshots, exported under `project/exports/`). Recreate
+the *visual output*, not the DOM structure.
 
 **Deviations from the spec, and why** — keep this list current:
 
@@ -40,7 +42,7 @@ than production code. Recreate the *visual output*, not the DOM structure.
 | Its own motion tokens (300ms page, 420ms spring nav morph, …) | Perch's M3 Expressive set: 150–260ms, `easeOutBack` for anything the finger caused, `easeOutCubic` for anything the system did | One motion vocabulary across the two apps. The board's curves were replaced wholesale rather than mixed, so nothing runs on two clocks. |
 | Linger on the page ground | Linger on pure black / pure white (`HsPalette.lingerBackground`) | Maximum contrast under the one card being read. The card keeps its designed colour; only the ground behind it changes. |
 | The Reader's text-size card sits inline under the bar, with a plain slider and "Follows the system setting" | A popover over the prose, with a tick at each of the five steps and the step in effect named where the note was | Inline it never went away and the prose reflowed under it; a slider with no marks read as continuous when it only ever had five values. Tap outside or start a scroll and it is gone. |
-| An AI summaries key screen | A "Coming soon" screen | A key field and toggles that did nothing looked half-enabled. Nothing is stored until something can use it. |
+| An AI summaries row under More | No row | Nothing to open until the summariser exists; a "Coming soon" screen was one more tap to nowhere. The row returns with the feature. |
 
 ---
 
@@ -171,7 +173,8 @@ Linger reflect it without anything being told to reload:
 
 | Screen | Does |
 |---|---|
-| **More** | Grouped rows in Perch's settings dress — General (Appearance, Open links, Text size, Reading fairness, Check for new) · Your data (Stats, Data, Permissions) · About HeadShorts (Privacy, AI summaries, About) — the real version line and "Made with ❤️ in India" at the foot. Every one-of-N row opens `showOptionSheet`; nothing cycles in place |
+| **More** | Grouped rows in Perch's settings dress — General (Appearance, Open links, Text size, Reading fairness, Check for new) · Your data (Stats, Data, Permissions) · About HeadShorts (Privacy, About) — the real version line and "Made with ❤️ in India" at the foot. Every one-of-N row opens `showOptionSheet`; nothing cycles in place |
+| About | Kuber's arrangement in HeadShorts' dress (`about_screen.dart`): a note from the maker on the settings card, four tiles for what the app stands for, what it is in a paragraph, the version, and a developer group linking the portfolio (singhgautam.com), the other apps on Play, and the listing. Plain hyphens only; no em dashes in the copy |
 | Data | One page inside More: Export OPML (through the system share sheet — Android's save dialog is not available to `file_selector`), Import OPML, Clear cached articles |
 | **Sources** | The **whole catalog** plus the reader's own additions, searchable, grouped by category, one toggle per source. Also renames a category, and opens a source |
 | Sources → Add | Feed discovery from a pasted site address, for anything the catalog does not have |
@@ -597,24 +600,48 @@ One path, whatever came in: **normalise → clean → allowlist → render.**
    - *Comments* — removed first. Serialising writes a comment's text out as
      text and unwrapping reparents it, so `<!--MIDTABOOLA-->` was landing in
      the article as the word "MIDTABOOLA".
-   - *Images* — absolutise and de-lazy against the article URL.
+   - *Images* — absolutise and de-lazy against the article URL. Author
+     avatars and Indian Express's `default-ie.jpg` theme placeholder count
+     as spacers.
+   - *Captions* — an element whose class names a caption (`img_cptn`,
+     `wp-caption-text`, `custom-caption`, …) becomes a `<figcaption>`, so
+     the Reader can set it small and muted instead of unwrapping it into
+     prose. When that element is the wrapper *holding* the picture — Indian
+     Express puts image and text in one `span.custom-caption` — the picture
+     is kept in a `<figure>` beside its caption; replacing the wrapper with
+     its text alone lost every photograph on the site.
    - *Boilerplate containers* — matched on `class`, `id` and `data-*` against
      the rules registry, then the always-dropped tags (`aside`, `iframe`,
      `script`, `style`, `noscript`, `form`, `button`, `nav`, `video`, …).
-     A matching container that holds most of the document's text is kept:
-     it is the article wearing an ad-ish class, not an ad.
-   - *Skip links, aria junk and orphan captions* — `a[href^="#"]` whose text
-     starts with "skip", `[aria-hidden="true"]`, and elements whose **entire**
-     text is a known label. The **container** goes, not just the text:
-     removing only the text is what leaves an "after newsletter promotion"
-     caption stranded in the middle of an article.
+     A matching container with several real paragraphs is kept whatever its
+     class says: NDTV's story sits in `js-ad-section`, and Indian Express
+     gates the second half of a story, figures included, in
+     `paywall container-wall-exclusive`.
+   - *Skip links, aria junk and labels* — `a[href^="#"]` whose text starts
+     with "skip", `[aria-hidden="true"]`, and elements whose **entire** text
+     is a known label: `exactText` for fixed strings, `textPatterns` for the
+     ones that carry a number or a variable tail ("3 min read", "Story
+     continues below this ad", "Catch the latest World News…", "Tags:"),
+     both guarded by a label length so a paragraph never matches. The
+     **container** goes, not just the text: removing only the text is what
+     leaves an "after newsletter promotion" caption stranded in the middle
+     of an article.
    - *Links* — absolutised, tracking parameters stripped, `javascript:` and
      bare fragments dropped.
    - *Allowlist* — this is what kills junk nobody has seen yet. Only the tags
      in `allowedTags` survive; anything else is **unwrapped** (its prose is
      usually wanted) and `class`, `style`, `id`, `data-*` and every `on*`
      handler are stripped. `href` on `a` and `src`/`alt` on `img` are kept.
-   - *Prune* — empty elements, `<br>` runs, leading and trailing blanks.
+   - *Stitch* — `html_readability` wraps each bare text node in a `<p>` but
+     leaves the inline elements beside it as siblings, so `Prefix <a>link</a>
+     suffix` inside a div with blocks arrives as
+     `<p>Prefix </p><a>link</a><p> suffix</p>` and the link rendered on a
+     line of its own. `_stitchInlineNodes` puts that run back into one
+     paragraph, joining neighbours only when the punctuation and case say
+     the sentence continues.
+   - *Prune* — empty elements, `<br>` runs, leading and trailing blanks, and
+     a `<figcaption>` with no picture beside it (TOI's lead video leaves one
+     at the top of every story once the embed is dropped).
 
    Boilerplate removal must run **before** sanitising: the rules read the very
    attributes the allowlist throws away.
@@ -631,6 +658,8 @@ One path, whatever came in: **normalise → clean → allowlist → render.**
 one entry — the pipeline never changes. Same extension shape as
 `SourceAdapter`. `ndtv.com` is the largest entry: the "Ask NDTV" and AI
 "Quick Read" widgets, the expand toggle, share bars and the SEO footer.
+`indianexpress.com` names the byline strip, ad-slot labels and author box;
+`timesofindia.indiatimes.com` the lead video embed.
 
 **On pulling a body a publisher gates behind ads.** The Reader shows what the
 publisher's own page already sent — nothing is fetched that a browser would
@@ -648,6 +677,39 @@ Two traps that cost real time, both now covered by tests:
 - `querySelector('img')` searches descendants only, so an `<img>` must also be
   checked for by name, or an article that opens or closes with a photograph
   loses it.
+
+**Every picture in the Reader is one `ArticleImage`** — the lead above the
+title and each figure in the body alike: full column width, its own shape,
+but never taller than the column is wide (a portrait is cropped to a square
+rather than taking the whole screen), so a run of pictures reads as one
+column. The renderer's default `figure` margin is zeroed for the same reason.
+`Accept` on image requests names webp and png but **not avif** — Flutter has
+no AVIF decoder, and a CDN that is offered it sends it, which collapsed those
+images to nothing.
+
+**The lead is shown only when the body has no copy of it.** Publishers
+repeat the feed's picture as the first figure, usually with a caption; the
+figure keeps its caption and its place in the story, and a second copy at
+the top would not. When the body has no copy but the *page* does — The
+Hindu's top picture sits outside its declared `articleBody` — `extractPage`
+finds the page's copy by identity (`src`, lazy attributes, `srcset`, a
+`<picture>`'s `<source>`), takes the caption beside it (a `figcaption` or
+caption-classed element within four ancestors, else the `alt`), and puts a
+`<figure>` with the feed's picture and that caption at the head of the body.
+The caption then rides the normal figure path and survives the cache with
+the rest of the body; no column, no second field.
+
+**The standfirst is the feed's summary.** Publishers' deks — The Hindu's
+`sub-title`, NDTV's `sp-descp` — are what they put in the feed's
+`description`, so the Reader sets `article.summary` under the headline in
+`HsType.readerStandfirst` (serif, a step under the body, `textSecondary`)
+rather than parsing the page for it. It is skipped when the body opens with
+the same words (feeds whose description is the first paragraph), and the
+thin card no longer repeats it. `ArticleBody.isSameImage` sees through the size a
+publisher writes into the address (`_625x300`, `/400x225/`, `?width=445`),
+Hindustan Times's watermarked `/logo/` variant, and TOI's `msid`; it
+compares file names when the name is more than a number, and the whole path
+when it is not (the Guardian names every file by its width).
 
 *Images* still need all three of:
 
@@ -708,15 +770,24 @@ outside closes it, and so does any scroll notification. It is mounted only
 while open. The slider is discrete — five ticks, the knob only ever on one,
 a drag snapping to the nearest — and carries slider semantics.
 
+**Onboarding steps arrive like pushed pages.** Welcome, the picker and the
+first fetch are one screen switching its body; an `AnimatedSwitcher` keyed
+on the step plays the router's slide-and-fade on `page`, so the walkthrough
+runs on the same clock as everything after it.
+
 **Bottom sheets are presented on the root navigator** (`showHsSheet` sets
 `useRootNavigator`). Presented on a branch navigator they render *beneath* the
 shell's floating pill, which then covers the sheet's own actions.
 
 **Tab switches slide directionally in `AppShell`, ported from Perch.**
 `StatefulShellRoute.indexedStack` hosts the branches while `AppShell` animates
-the incoming tab using `FractionalTranslation` with `RepaintBoundary` on `HsMotion.page`
-(240ms, `Curves.easeOutCubic`). Switching branches (via tap or swipe) triggers a forward
-or backward slide matching the navigation direction without layout cost or repaint jitter.
+the incoming tab using `FractionalTranslation` on `HsMotion.page` (240ms,
+`Curves.easeOutCubic`). The translation stays in the tree at rest (offset
+zero) rather than being wrapped on for the animation: swapping the wrapper
+re-parents every branch's subtree at the start and end of each switch, which
+is what made the slide to Sources stutter. The `RepaintBoundary` sits
+*inside* the translation, so the page is rasterised once and only moved from
+frame to frame.
 
 **Bottom-nav tabs support horizontal swipe gestures.** Decisive horizontal flings
 (`velocity.abs() >= 240` via `GestureDetector(behavior: HitTestBehavior.translucent, onHorizontalDragEnd: ...)`)
@@ -762,7 +833,18 @@ dart run flutter_native_splash:create
 ```
 
 The launcher icon is generated from the design board's mark by
-`tool/make_icon.py` (pure stdlib, no image library) into `assets/icon/`.
+`tool/make_icon.py` (pure stdlib, no image library) into `assets/icon/`: a
+paper ground carrying a slate-teal headline card with two ghost cards behind
+it, every shape a rotated rounded box under a signed-distance function. The
+adaptive background is the paper (`#F4F1EA`), the foreground the whole stack
+inside the safe zone, the monochrome layer the front card's silhouette with
+its lines knocked out. The splash is `splash.png` on both Android
+generations: a paper disc carrying the stack on the AMOLED ground. Android
+12 shows only the inner two thirds of the drawable through its circular
+mask, over `icon_background_color` in the same paper, so the seam is
+invisible; the stack is drawn small enough (0.36 of the disc) to clear that
+crop. The foreground alone over a black disc, which is what it was, showed
+only the card.
 
 ---
 
@@ -832,7 +914,8 @@ The launcher icon is generated from the design board's mark by
   refuses anything that is not a browser, so it was saved through one). Hand-written HTML is too tidy to catch what
   publishers actually ship. `article_cleaner_test.dart` asserts the fixture
   still contains the boilerplate before asserting it is gone, so the test
-  cannot quietly stop testing anything.
+  cannot quietly stop testing anything. The caption, label, prose-guard and
+  inline-stitch cases in it are each a real publisher's markup, reduced.
 - Two of those are guard rails rather than coverage: `accent_test.dart`
   asserts the board's nine accents survive `accentFor` byte-for-byte, and
   pins `Oklab.mix` to the board's own `color-mix` results. Breaking either is
@@ -843,9 +926,8 @@ The launcher icon is generated from the design board's mark by
 
 ## 10. Out of scope (do not build)
 
-- The **AI summariser** itself. The More row leads to a "Coming soon" screen
-  and nothing else; no key is collected or stored until there is something to
-  use it.
+- The **AI summariser** itself. There is no row, screen or key for it until
+  it exists.
 - A **WebView render** for pages that inject their body with JavaScript. The
   thin card and "Open in web" are the fallback.
 - Any **server-side** component.

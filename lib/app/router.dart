@@ -3,7 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/shell.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/features/linger/linger_screen.dart';
-import 'package:headshorts/features/more/ai_summaries_screen.dart';
+import 'package:headshorts/features/more/about_screen.dart';
 import 'package:headshorts/features/more/appearance_screen.dart';
 import 'package:headshorts/features/more/data_screen.dart';
 import 'package:headshorts/features/more/info_screens.dart';
@@ -122,10 +122,6 @@ GoRouter buildRouter({required bool onboarded}) {
         pageBuilder: (context, state) => _page(const PermissionsScreen()),
       ),
       GoRoute(
-        path: '/more/ai',
-        pageBuilder: (context, state) => _page(const AiSummariesScreen()),
-      ),
-      GoRoute(
         path: '/more/data',
         pageBuilder: (context, state) => _page(const DataScreen()),
       ),
@@ -135,7 +131,7 @@ GoRouter buildRouter({required bool onboarded}) {
       ),
       GoRoute(
         path: '/more/about',
-        pageBuilder: (context, state) => _page(aboutScreen),
+        pageBuilder: (context, state) => _page(const AboutScreen()),
       ),
     ],
   );

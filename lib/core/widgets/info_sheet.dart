@@ -9,7 +9,7 @@ import 'package:headshorts/core/widgets/sheet.dart';
 /// optionally a quieter closing note, and at most two actions.
 ///
 /// Deliberately content-driven rather than one-off, so the next thing that
-/// needs explaining — AMOLED, AI summaries — is a call with different text
+/// needs explaining — AMOLED, a later feature — is a call with different text
 /// rather than another screen. Everything comes from the token layer, so it
 /// looks like the rest of the app in both themes without any new design.
 class InfoSheet extends StatelessWidget {

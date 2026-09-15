@@ -30,6 +30,9 @@ abstract final class HsRadius {
   static const chipBorder = BorderRadius.all(chip);
   static const buttonBorder = BorderRadius.all(button);
   static const cardBorder = BorderRadius.all(card);
+
+  /// A photograph in the Reader column.
+  static const imageBorder = BorderRadius.all(Radius.circular(14));
   static const sheetTop = BorderRadius.vertical(top: sheet);
   static const menuBorder = BorderRadius.all(menu);
   static const pillBorder = BorderRadius.all(pill);

@@ -146,3 +146,35 @@ const _stopWords = {
   'while',
   'your',
 };
+
+/// Whether two addresses are the same picture at different sizes.
+///
+/// Publishers put the size in the address — `_625x300`, `/400x225/`,
+/// `?width=445`, `imgsize-518986` — and Hindustan Times serves the feed's
+/// copy from a `/logo/` directory (the watermarked variant), so the feed's
+/// copy and the body's copy rarely match byte for byte. A file *name* that
+/// is more than a number is the picture's identity; the Guardian names every
+/// file by its width (`2036.jpg`), so there the whole path counts. Times of
+/// India names a picture by `msid` alone.
+bool sameImage(String? a, String? b) {
+  if (a == null || b == null) return false;
+  String stem(String url) {
+    final uri = Uri.tryParse(url.trim().toLowerCase());
+    if (uri == null) return url;
+    final msid = RegExp(r'msid[-_]?(\d+)').firstMatch(uri.path)?.group(1);
+    if (msid != null) return 'msid:$msid';
+    final path = uri.path.replaceAll(RegExp(r'\d+x\d+'), '');
+    final name = path.split('/').last;
+    final named = RegExp('[a-z]')
+        .hasMatch(name.replaceAll(RegExp(r'\.\w+$'), ''));
+    return '${uri.host}/${named ? name : path}';
+  }
+
+  return stem(a) == stem(b);
+}
+
+/// Whether [html] carries the picture at [url] anywhere in its body.
+bool bodyHasImage(String html, String url) =>
+    RegExp(r'<img[^>]*\ssrc="([^"]+)"')
+        .allMatches(html)
+        .any((m) => sameImage(m.group(1), url));

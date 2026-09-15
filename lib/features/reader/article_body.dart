@@ -120,6 +120,9 @@ class ArticleBody extends StatelessWidget {
         'font-size': '${body - 2}px',
         'color': _hex(palette.textPrimary),
       },
+      // The renderer's default figure margin (1em 40px) insets a photograph
+      // from the column it should fill.
+      'figure' => {'margin': '0'},
       'figcaption' => {
         'font-family': HsType.sans,
         'font-size': '${(body * 0.75).roundToDouble().clamp(11.0, 16.0)}px',
@@ -148,25 +151,9 @@ class ArticleBody extends StatelessWidget {
     if (src == null || src.isEmpty || src.startsWith('data:')) {
       return const SizedBox.shrink();
     }
-
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: HsSpace.x2),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
-        child: CachedNetworkImage(
-          imageUrl: src,
-          httpHeaders: ExtractionService.imageHeaders(articleUrl),
-          // No explicit size: the image fits the column and keeps its shape.
-          // Decoding is capped at the column's own width in device pixels, so
-          // a long article does not hold a dozen full-resolution bitmaps.
-          memCacheWidth:
-              (MediaQuery.sizeOf(context).width *
-                      MediaQuery.devicePixelRatioOf(context))
-                  .round(),
-          placeholder: (_, _) => const SizedBox.shrink(),
-          errorWidget: (_, _, _) => const SizedBox.shrink(),
-        ),
-      ),
+      child: ArticleImage(url: src, articleUrl: articleUrl),
     );
   }
 
@@ -182,4 +169,40 @@ class _Rule extends StatelessWidget {
     padding: const EdgeInsets.symmetric(vertical: HsSpace.x5),
     child: Container(height: HsSize.hairline, color: context.hs.divider),
   );
+}
+
+/// A photograph in the article column: the lead above the title, or a figure
+/// in the body.
+///
+/// Every picture takes the full column width and keeps its own shape, except
+/// that nothing runs taller than the column is wide — a portrait or an
+/// infographic is cropped to a square rather than taking the whole screen,
+/// so a run of pictures reads as one column rather than a jumble of sizes.
+/// One that will not load collapses to nothing.
+class ArticleImage extends StatelessWidget {
+  const new({required this.url, required this.articleUrl, super.key});
+
+  final String url;
+  final String articleUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final width = MediaQuery.sizeOf(context).width;
+    return ClipRRect(
+      borderRadius: HsRadius.imageBorder,
+      child: CachedNetworkImage(
+        imageUrl: url,
+        httpHeaders: ExtractionService.imageHeaders(articleUrl),
+        // Decoding is capped at the column's own width in device pixels, so
+        // a long article does not hold a dozen full-resolution bitmaps.
+        memCacheWidth: (width * MediaQuery.devicePixelRatioOf(context)).round(),
+        imageBuilder: (context, image) => ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: width),
+          child: Image(image: image, width: double.infinity, fit: BoxFit.cover),
+        ),
+        placeholder: (_, _) => const SizedBox.shrink(),
+        errorWidget: (_, _, _) => const SizedBox.shrink(),
+      ),
+    );
+  }
 }

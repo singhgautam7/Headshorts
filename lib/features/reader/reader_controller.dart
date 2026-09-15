@@ -25,7 +25,11 @@ final extractionProvider = FutureProvider.family<Extraction, int>((
   final article = headline.article;
   final result = await ref
       .watch(extractionServiceProvider)
-      .extract(link: article.link, feedHtml: article.fullContentHtml);
+      .extract(
+        link: article.link,
+        feedHtml: article.fullContentHtml,
+        imageUrl: article.imageUrl,
+      );
 
   if (result is ExtractedArticle && article.fullContentHtml == null) {
     await ref

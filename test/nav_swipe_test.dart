@@ -75,7 +75,9 @@ void main() {
     expect(router.state.uri.path, '/more');
   });
 
-  testWidgets('horizontal fling right switches to previous tab', (tester) async {
+  testWidgets('horizontal fling right switches to previous tab', (
+    tester,
+  ) async {
     await pump(tester);
     router.go('/more');
     await tester.pumpAndSettle();
@@ -102,7 +104,9 @@ void main() {
     expect(router.state.uri.path, '/today');
   });
 
-  testWidgets('slow drag below velocity threshold does not switch tab', (tester) async {
+  testWidgets('slow drag below velocity threshold does not switch tab', (
+    tester,
+  ) async {
     await pump(tester);
     expect(router.state.uri.path, '/today');
 

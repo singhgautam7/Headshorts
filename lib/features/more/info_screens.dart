@@ -131,12 +131,3 @@ class PrivacyScreen extends StatelessWidget {
 }
 
 const privacyScreen = PrivacyScreen();
-
-const aboutScreen = ProseScreen(
-  title: 'About HeadShorts',
-  paragraphs: [
-    'A finite briefing. It ends, and then you are done with it.',
-    'HeadShorts reads the feeds you choose, in the order they were published.  There is no algorithm, no ranking and no infinite scroll. When you  reach the bottom, that is the news.',
-    'There is deliberately no like, save-count, reaction, streak, goal, badge  or red dot anywhere in the app.',
-  ],
-);

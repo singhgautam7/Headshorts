@@ -120,6 +120,8 @@ void main() {
 
       expect(headers['Referer'], 'https://example.com/news/story');
       expect(headers['User-Agent'], contains('Mozilla/5.0'));
+      expect(headers['Accept'], contains('image/webp'));
+      expect(headers['Accept'], isNot(contains('image/avif')));
     });
   });
 
