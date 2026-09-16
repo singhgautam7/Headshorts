@@ -449,6 +449,7 @@ class _LingerCardState extends ConsumerState<LingerCard> {
                     accent: accent,
                     dark: dark,
                     when: widget.headline.article.publishedAt,
+                    author: widget.headline.article.author,
                   ),
                   const SizedBox(height: 22),
                   Expanded(
@@ -576,62 +577,88 @@ class _Header extends StatelessWidget {
     required this.accent,
     required this.dark,
     required this.when,
+    this.author,
   });
 
   final String source;
   final Color accent;
   final bool dark;
   final DateTime when;
+  final String? author;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    return Row(
+    final trimmedAuthor = author?.trim();
+    final hasAuthor = trimmedAuthor != null && trimmedAuthor.isNotEmpty;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (dark) ...[
-          Container(
-            width: HsSize.accentBar,
-            height: 22,
-            decoration: BoxDecoration(
-              color: accent,
-              borderRadius: BorderRadius.circular(2),
+        Row(
+          children: [
+            if (dark) ...[
+              Container(
+                width: HsSize.accentBar,
+                height: 22,
+                decoration: BoxDecoration(
+                  color: accent,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(width: HsSpace.x3),
+              Expanded(
+                child: Text(
+                  source.toUpperCase(),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HsType.lingerLabel.copyWith(color: accent),
+                ),
+              ),
+            ] else
+              Expanded(
+                child: Container(
+                  alignment: Alignment.centerLeft,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(
+                    color: accentWash(accent, palette),
+                    borderRadius: HsRadius.chipBorder,
+                  ),
+                  child: Text(
+                    source.toUpperCase(),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HsType.sourceLabel.copyWith(color: accent),
+                  ),
+                ),
+              ),
+            const SizedBox(width: HsSpace.x2),
+            // Leave room for the ruler.
+            Padding(
+              padding: const EdgeInsets.only(right: HsSpace.x4),
+              child: Text(
+                relativeTime(when),
+                style: HsType.timestamp.copyWith(color: palette.textMuted),
+              ),
             ),
-          ),
-          const SizedBox(width: HsSpace.x3),
-          Expanded(
+          ],
+        ),
+        if (hasAuthor) ...[
+          const SizedBox(height: 5),
+          Padding(
+            padding: EdgeInsets.only(
+              left: dark ? (HsSize.accentBar + HsSpace.x3) : 2,
+              right: HsSpace.x5,
+            ),
             child: Text(
-              source.toUpperCase(),
+              trimmedAuthor,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: HsType.lingerLabel.copyWith(color: accent),
+              style: HsType.timestamp.copyWith(color: palette.textSecondary),
             ),
           ),
-        ] else
-          Expanded(
-            child: Container(
-              alignment: Alignment.centerLeft,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: accentWash(accent, palette),
-                borderRadius: HsRadius.chipBorder,
-              ),
-              child: Text(
-                source.toUpperCase(),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: HsType.sourceLabel.copyWith(color: accent),
-              ),
-            ),
-          ),
-        const SizedBox(width: HsSpace.x2),
-        // Leave room for the ruler.
-        Padding(
-          padding: const EdgeInsets.only(right: HsSpace.x4),
-          child: Text(
-            relativeTime(when),
-            style: HsType.timestamp.copyWith(color: palette.textMuted),
-          ),
-        ),
+        ],
       ],
     );
   }

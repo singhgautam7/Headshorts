@@ -210,8 +210,8 @@ void main() {
           guid: 'old',
           title: 'A story filed well before this reader ever opened the app',
           link: 'https://example.com/old',
-          // Two years before the subscription existed.
-          publishedAt: DateTime(2024),
+          // Published before the subscription existed, but within 90 days.
+          publishedAt: DateTime.now().subtract(const Duration(days: 14)),
         ),
       ]);
 

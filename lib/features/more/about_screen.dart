@@ -19,6 +19,8 @@ class AboutScreen extends StatelessWidget {
   const new({super.key});
 
   static const portfolio = 'https://singhgautam.com';
+  static const website = 'https://headshorts.pages.dev';
+  static const privacyPolicy = 'https://headshorts.pages.dev/privacy';
   static const moreApps =
       'https://play.google.com/store/apps/developer?id=Gautam+Rajeev+Singh';
   static const listing =
@@ -37,6 +39,24 @@ class AboutScreen extends StatelessWidget {
       _WhatItIs(),
       SizedBox(height: HsSpace.x6),
       _Version(),
+      SizedBox(height: HsSpace.x6),
+      SettingsGroup(
+        label: 'Official website & legal',
+        children: [
+          _Link(
+            icon: Icons.language_rounded,
+            label: 'Headshorts website',
+            sub: 'headshorts.pages.dev',
+            url: AboutScreen.website,
+          ),
+          _Link(
+            icon: Icons.shield_outlined,
+            label: 'Privacy Policy (web)',
+            sub: 'headshorts.pages.dev/privacy',
+            url: AboutScreen.privacyPolicy,
+          ),
+        ],
+      ),
       SizedBox(height: HsSpace.x6),
       SettingsGroup(
         label: 'The developer',

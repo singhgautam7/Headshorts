@@ -173,6 +173,12 @@ class MoreScreen extends ConsumerWidget {
             label: 'About HeadShorts',
             children: [
               SettingsRow(
+                icon: Icons.mail_outline_rounded,
+                label: 'Contact us',
+                sub: 'singhgautam.dev@gmail.com',
+                onTap: () => context.push('/more/contact'),
+              ),
+              SettingsRow(
                 icon: Icons.shield_outlined,
                 label: 'Privacy',
                 value: 'Local only',

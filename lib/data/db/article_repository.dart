@@ -12,6 +12,10 @@ const todayPageSize = 25;
 /// The most items Linger will queue in one sitting.
 const lingerQueueSize = 60;
 
+/// The maximum age of articles displayed or retained (90 days / 3 months),
+/// enforcing Google Play News & Magazines policy freshness requirements.
+const maxArticleAge = Duration(days: 90);
+
 /// An article together with the source that published it — what every list in
 /// the app actually renders.
 class Headline {
@@ -213,11 +217,13 @@ class ArticleRepository {
   }
 
   /// The enabled, in-scope articles, newest first, as a total order.
+  /// Enforces a strict 90-day (< 3 months) freshness limit.
   JoinedSelectStatement<HasResultSet, dynamic> _scoped({
     String? category,
     Set<int>? sourceIds,
     Set<int>? mutedSourceIds,
   }) {
+    final cutoff = DateTime.now().subtract(maxArticleAge);
     final query =
         _db.select(_db.articles).join([
             innerJoin(
@@ -226,6 +232,7 @@ class ArticleRepository {
             ),
           ])
           ..where(_db.sources.enabled.equals(true))
+          ..where(_db.articles.publishedAt.isBiggerOrEqualValue(cutoff))
           ..orderBy([
             OrderingTerm.desc(_db.articles.publishedAt),
             OrderingTerm.desc(_db.articles.id),
@@ -249,6 +256,7 @@ class ArticleRepository {
 
   /// Watches unread article count by category and overall ('All').
   Stream<Map<String, int>> watchUnreadCountByCategory() {
+    final cutoff = DateTime.now().subtract(maxArticleAge);
     final count = _db.articles.id.count();
     final query =
         _db.selectOnly(_db.articles).join([
@@ -260,6 +268,7 @@ class ArticleRepository {
           ..addColumns([_db.sources.category, count])
           ..where(_db.sources.enabled.equals(true))
           ..where(_db.articles.readFull.equals(false))
+          ..where(_db.articles.publishedAt.isBiggerOrEqualValue(cutoff))
           ..groupBy([_db.sources.category]);
 
     return query.watch().map((rows) {
@@ -293,9 +302,12 @@ class ArticleRepository {
       .toList();
 
   Stream<Headline?> watchOne(int articleId) {
+    final cutoff = DateTime.now().subtract(maxArticleAge);
     final query = _db.select(_db.articles).join([
       innerJoin(_db.sources, _db.sources.id.equalsExp(_db.articles.sourceId)),
-    ])..where(_db.articles.id.equals(articleId));
+    ])
+      ..where(_db.articles.id.equals(articleId))
+      ..where(_db.articles.publishedAt.isBiggerOrEqualValue(cutoff));
 
     return query.watchSingleOrNull().map(
       (r) => r == null
@@ -308,11 +320,13 @@ class ArticleRepository {
   /// "4 new" / "caught up" line on the Sources screen. A state, not a score:
   /// it disappears the moment they have been seen, and never reaches the nav.
   Stream<Map<int, int>> watchUnseenBySource() {
+    final cutoff = DateTime.now().subtract(maxArticleAge);
     final count = _db.articles.id.count();
     final query = _db.selectOnly(_db.articles)
       ..addColumns([_db.articles.sourceId, count])
       ..where(_db.articles.seenInLinger.equals(false))
       ..where(_db.articles.readFull.equals(false))
+      ..where(_db.articles.publishedAt.isBiggerOrEqualValue(cutoff))
       ..groupBy([_db.articles.sourceId]);
 
     return query.watch().map(
@@ -324,20 +338,31 @@ class ArticleRepository {
   }
 
   /// Upserts a batch of parsed items, deduplicating on `(sourceId, guid)`.
+  /// Excludes items older than [maxArticleAge] (90 days).
   /// Returns how many were genuinely new.
   Future<int> upsert(int sourceId, List<ParsedArticle> parsed) async {
     if (parsed.isEmpty) return 0;
 
+    final cutoff = DateTime.now().subtract(maxArticleAge);
+    final fresh = parsed
+        .where(
+          (p) =>
+              p.publishedAt.isAfter(cutoff) ||
+              p.publishedAt.isAtSameMomentAs(cutoff),
+        )
+        .toList();
+    if (fresh.isEmpty) return 0;
+
     final existing =
         await (_db.select(_db.articles)
               ..where((a) => a.sourceId.equals(sourceId))
-              ..where((a) => a.guid.isIn(parsed.map((p) => p.guid))))
+              ..where((a) => a.guid.isIn(fresh.map((p) => p.guid))))
             .get();
     final known = {for (final row in existing) row.guid: row};
 
     var added = 0;
     await _db.batch((batch) {
-      for (final item in parsed) {
+      for (final item in fresh) {
         final prior = known[item.guid];
         if (prior == null) {
           added++;
@@ -369,6 +394,7 @@ class ArticleRepository {
               titleKey: Value(titleFingerprint(item.title)),
               summary: Value(item.summary),
               contentSnippet: Value(item.contentSnippet),
+              author: Value(item.author ?? prior.author),
               fullContentHtml: Value(
                 item.fullContentHtml ?? prior.fullContentHtml,
               ),

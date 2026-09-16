@@ -51,7 +51,9 @@ abstract final class FeedParser {
           summary: _snippet(description),
           contentSnippet: _snippet(content ?? description),
           fullContentHtml: _fullContent(content),
-          author: _text(item.author ?? item.dc?.creator),
+          author: _cleanAuthor(
+            _firstNonEmpty([item.dc?.creator, item.author]),
+          ),
           imageUrl: _imageFromRss(item),
         ),
       );
@@ -74,7 +76,7 @@ abstract final class FeedParser {
           summary: _snippet(item.description),
           contentSnippet: _snippet(content ?? item.description),
           fullContentHtml: _fullContent(content),
-          author: _text(item.dc?.creator),
+          author: _cleanAuthor(item.dc?.creator),
         ),
       );
     }
@@ -101,7 +103,12 @@ abstract final class FeedParser {
           summary: _snippet(item.summary),
           contentSnippet: _snippet(content ?? item.summary),
           fullContentHtml: _fullContent(content),
-          author: _text(item.authors.firstOrNull?.name),
+          author: _cleanAuthor(
+            _firstNonEmpty([
+              item.authors.firstOrNull?.name,
+              item.authors.firstOrNull?.email,
+            ]),
+          ),
           imageUrl: item.media?.thumbnails.firstOrNull?.url,
         ),
       );
@@ -175,6 +182,24 @@ abstract final class FeedParser {
   static String? _text(String? value) {
     if (value == null) return null;
     final text = plainText(value);
+    return text.isEmpty ? null : text;
+  }
+
+  /// Cleans an author string: removes wrapping parentheses if formatted like
+  /// `user@example.com (Author Name)`, strips leading "by " / "By ", and
+  /// strips HTML tags and entities.
+  static String? _cleanAuthor(String? raw) {
+    if (raw == null) return null;
+    var text = plainText(raw);
+    if (text.isEmpty) return null;
+
+    final parenMatch = RegExp(r'\(([^)]+)\)').firstMatch(text);
+    if (parenMatch != null && text.contains('@')) {
+      text = parenMatch.group(1)!.trim();
+    }
+    if (text.toLowerCase().startsWith('by ')) {
+      text = text.substring(3).trim();
+    }
     return text.isEmpty ? null : text;
   }
 

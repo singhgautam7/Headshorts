@@ -9,9 +9,10 @@ import 'package:url_launcher/url_launcher.dart';
 Future<bool> openInWeb(String url, {LinkOpenMode mode = LinkOpenMode.inApp}) {
   final uri = Uri.tryParse(url);
   if (uri == null) return Future.value(false);
+  final isHttp = uri.scheme == 'http' || uri.scheme == 'https';
   return launchUrl(
     uri,
-    mode: mode == LinkOpenMode.inApp
+    mode: isHttp && mode == LinkOpenMode.inApp
         ? LaunchMode.inAppBrowserView
         : LaunchMode.externalApplication,
   );

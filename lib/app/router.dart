@@ -5,6 +5,7 @@ import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/features/linger/linger_screen.dart';
 import 'package:headshorts/features/more/about_screen.dart';
 import 'package:headshorts/features/more/appearance_screen.dart';
+import 'package:headshorts/features/more/contact_screen.dart';
 import 'package:headshorts/features/more/data_screen.dart';
 import 'package:headshorts/features/more/info_screens.dart';
 import 'package:headshorts/features/more/more_screen.dart';
@@ -124,6 +125,10 @@ GoRouter buildRouter({required bool onboarded}) {
       GoRoute(
         path: '/more/data',
         pageBuilder: (context, state) => _page(const DataScreen()),
+      ),
+      GoRoute(
+        path: '/more/contact',
+        pageBuilder: (context, state) => _page(const ContactScreen()),
       ),
       GoRoute(
         path: '/more/privacy',

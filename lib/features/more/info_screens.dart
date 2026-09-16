@@ -3,7 +3,9 @@ import 'package:go_router/go_router.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/util/open_in_web.dart';
 import 'package:headshorts/core/widgets/screen.dart';
+import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/features/more/settings_widgets.dart';
 
 /// Prose screens: About is short on purpose.
@@ -125,6 +127,16 @@ class PrivacyScreen extends StatelessWidget {
           ),
           const SizedBox(height: 12),
         ],
+        const SizedBox(height: 16),
+        SettingsRow(
+          icon: Icons.open_in_browser_rounded,
+          label: 'View online Privacy Policy',
+          sub: 'headshorts.pages.dev/privacy',
+          onTap: () => openInWeb(
+            'https://headshorts.pages.dev/privacy',
+            mode: LinkOpenMode.browser,
+          ),
+        ),
       ],
     );
   }

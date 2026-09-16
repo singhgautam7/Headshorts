@@ -44,6 +44,9 @@ class HeadlineCard extends StatelessWidget {
     final summary = article.summary;
     final imageUrl = article.imageUrl;
 
+    final author = article.author?.trim();
+    final hasAuthor = author != null && author.isNotEmpty;
+
     final stamp = [
       if (offline) 'cached',
       relativeTime(article.publishedAt),
@@ -58,6 +61,15 @@ class HeadlineCard extends StatelessWidget {
           headline.source.title.toUpperCase(),
           style: HsType.sourceLabel.copyWith(color: accent),
         ),
+        if (hasAuthor) ...[
+          const SizedBox(height: 3),
+          Text(
+            author,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: HsType.timestamp.copyWith(color: palette.textSecondary),
+          ),
+        ],
         const SizedBox(height: 7),
         Text(
           article.title,
@@ -81,7 +93,8 @@ class HeadlineCard extends StatelessWidget {
       accent: tone,
       child: Pressable(
         onTap: onTap,
-        semanticLabel: '${headline.source.title}. ${article.title}',
+        semanticLabel:
+            '${headline.source.title}${hasAuthor ? ', by $author' : ''}. ${article.title}',
         child: Opacity(
           opacity: headline.isRead ? 0.5 : 1,
           child: Container(

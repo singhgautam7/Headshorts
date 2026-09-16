@@ -200,6 +200,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                 value,
                                 textSize,
                                 article.link,
+                                headline,
                               ),
                               AsyncError() => _body(
                                 context,
@@ -208,6 +209,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                                 ),
                                 textSize,
                                 article.link,
+                                headline,
                               ),
                               _ => [const _BodySkeleton()],
                             },
@@ -321,6 +323,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     Extraction extraction,
     TextSizeStep size,
     String link,
+    Headline headline,
   ) {
     final linkMode = ref.read(settingsProvider).linkOpenMode;
 
@@ -332,6 +335,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             context,
             'The publisher did not provide readable body text.',
             link,
+            headline,
           );
         }
         return [
@@ -341,16 +345,26 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             bodySize: size.fontSize,
             linkMode: linkMode,
           ),
+          const SizedBox(height: HsSpace.x6),
+          _OriginalSourceCard(headline: headline, link: link),
         ];
       }(),
-      ThinExtraction(:final reason) => _thinView(context, reason, link),
+      ThinExtraction(:final reason) =>
+        _thinView(context, reason, link, headline),
     };
   }
 
-  List<Widget> _thinView(BuildContext context, String reason, String link) {
+  List<Widget> _thinView(
+    BuildContext context,
+    String reason,
+    String link,
+    Headline headline,
+  ) {
     // The summary already stands under the headline; the card is all that
     // is left to say.
     final palette = context.hs;
+    final author = headline.article.author?.trim();
+
     return [
       Container(
         padding: const EdgeInsets.all(18),
@@ -366,7 +380,12 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
               'That is all this feed gives us',
               style: HsType.statTitle.copyWith(color: palette.textPrimary),
             ),
-            const SizedBox(height: HsSpace.x3),
+            const SizedBox(height: HsSpace.x2),
+            Text(
+              'Source: ${headline.source.title}${author != null && author.isNotEmpty ? ' · By $author' : ''}',
+              style: HsType.rowSub.copyWith(color: palette.textSecondary),
+            ),
+            const SizedBox(height: HsSpace.x2),
             Text(
               '$reason The rest is on their page.',
               style: HsType.note.copyWith(color: palette.textSecondary),
@@ -374,7 +393,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             const SizedBox(height: 14),
             HsButton(
               'Open in web',
-              onPressed: () => openInWeb(link),
+              onPressed: () => unawaited(openInWeb(link)),
               height: HsSize.buttonSmall,
             ),
           ],
@@ -659,7 +678,9 @@ class _Attribution extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final author = headline.article.author;
+    final tone = headline.source.accent;
+    final accent = tone.resolve(isDark: palette.isDark);
+    final author = headline.article.author?.trim();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -679,7 +700,70 @@ class _Attribution extends StatelessWidget {
           ].join(' · '),
           style: HsType.readerMeta.copyWith(color: palette.textMuted),
         ),
+        const SizedBox(height: HsSpace.x2),
+        Pressable(
+          onTap: () => unawaited(openInWeb(headline.article.link)),
+          semanticLabel: 'Open original article on ${headline.source.title}',
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                'Open original in web',
+                style: HsType.buttonSmall.copyWith(
+                  color: accent,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(Icons.open_in_new_rounded, size: 14, color: accent),
+            ],
+          ),
+        ),
       ],
+    );
+  }
+}
+
+class _OriginalSourceCard extends StatelessWidget {
+  const new({required this.headline, required this.link});
+
+  final Headline headline;
+  final String link;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+    final author = headline.article.author?.trim();
+
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: palette.surface,
+        border: Border.all(color: palette.stroke),
+        borderRadius: HsRadius.cardBorder,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Original article from ${headline.source.title}',
+            style: HsType.statTitle.copyWith(color: palette.textPrimary),
+          ),
+          if (author != null && author.isNotEmpty) ...[
+            const SizedBox(height: HsSpace.x1),
+            Text(
+              'By $author',
+              style: HsType.note.copyWith(color: palette.textSecondary),
+            ),
+          ],
+          const SizedBox(height: 14),
+          HsButton(
+            'Open original in web',
+            onPressed: () => unawaited(openInWeb(link)),
+            height: HsSize.buttonSmall,
+          ),
+        ],
+      ),
     );
   }
 }

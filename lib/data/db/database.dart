@@ -85,9 +85,17 @@ class HsDatabase extends _$HsDatabase {
     await delete(articles).go();
   }
 
-  /// Keeps the newest [keep] articles per source and drops the rest, so the
-  /// database stays light however long the app runs.
-  Future<void> pruneToRetention({int keep = 200}) async {
+  /// Keeps the newest [keep] articles per source and drops items older than
+  /// [maxAge] (90 days / 3 months), so the database stays fresh and compliant
+  /// with News & Magazines freshness policies.
+  Future<void> pruneToRetention({
+    int keep = 200,
+    Duration maxAge = const Duration(days: 90),
+  }) async {
+    final cutoff = DateTime.now().subtract(maxAge);
+    await (delete(articles)
+          ..where((a) => a.publishedAt.isSmallerThanValue(cutoff)))
+        .go();
     await customStatement(
       '''
       DELETE FROM articles WHERE id IN (
