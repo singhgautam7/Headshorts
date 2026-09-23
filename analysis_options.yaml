@@ -7,6 +7,9 @@ analyzer:
     - build/**
     - android/**
     - ios/**
+    # Someone else's source, vendored to patch one Gradle file. Holding it to
+    # this project's lints would be noise about code we do not write.
+    - third_party/**
   errors:
     # The design board is the specification; a widget tree that mirrors it is
     # long by nature rather than by accident.

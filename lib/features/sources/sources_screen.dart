@@ -8,6 +8,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/util/language.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
@@ -39,6 +40,7 @@ class SourcesScreen extends ConsumerWidget {
     final subscribed = (ref.watch(sourcesProvider).value ?? const [])
         .where((s) => s.enabled)
         .length;
+    final languages = ref.watch(sourceLanguagesProvider);
 
     // Headers and rows in one flat list, so the whole catalog builds lazily
     // rather than forty-five rows deep on every keystroke.
@@ -87,6 +89,18 @@ class SourcesScreen extends ConsumerWidget {
                   hint: 'Search publishers and categories',
                   onChanged: ref.read(sourcesQueryProvider.notifier).set,
                 ),
+                // Only when there is more than one to choose between, and
+                // each language names itself in its own script.
+                if (languages.length > 1) ...[
+                  const SizedBox(height: HsSpace.x3),
+                  LanguageChips(
+                    languages: languages,
+                    value: ref.watch(sourcesLanguageProvider),
+                    onChanged: ref
+                        .read(sourcesLanguageProvider.notifier)
+                        .select,
+                  ),
+                ],
                 const SizedBox(height: HsSpace.x3),
                 Text(
                   subscribed == 0
@@ -115,6 +129,7 @@ class SourcesScreen extends ConsumerWidget {
           final group = grouped[entry.category] ?? const <SourceEntry>[];
           return SourceRowTile(
             entry: entry,
+            showLanguage: languages.length > 1,
             showDivider: entry.feedUrl != group.last.feedUrl,
             onTap: () {
               final id = entry.subscription?.id;
@@ -216,6 +231,7 @@ class SourceRowTile extends StatelessWidget {
     required this.onTap,
     required this.onToggle,
     this.showDivider = true,
+    this.showLanguage = false,
     super.key,
   });
 
@@ -223,6 +239,10 @@ class SourceRowTile extends StatelessWidget {
   final VoidCallback onTap;
   final ValueChanged<bool> onToggle;
   final bool showDivider;
+
+  /// The two-letter tag. Shown only when the reader actually has more than
+  /// one language — on an English-only list it says nothing.
+  final bool showLanguage;
 
   @override
   Widget build(BuildContext context) {
@@ -269,17 +289,27 @@ class SourceRowTile extends StatelessWidget {
                                 entry.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: HsType.row.copyWith(
-                                  color: palette.textPrimary,
-                                ),
+                                style: HsType.forText(
+                                  HsType.row,
+                                  entry.title,
+                                ).copyWith(color: palette.textPrimary),
                               ),
-                              if (state != null) ...[
+                              if (state != null || showLanguage) ...[
                                 const SizedBox(height: HsSpace.x1),
-                                Text(
-                                  state,
-                                  style: HsType.rowSub.copyWith(
-                                    color: palette.textMuted,
-                                  ),
+                                Row(
+                                  children: [
+                                    if (showLanguage) ...[
+                                      LanguageTag(entry.language),
+                                      const SizedBox(width: 6),
+                                    ],
+                                    if (state != null)
+                                      Text(
+                                        state,
+                                        style: HsType.rowSub.copyWith(
+                                          color: palette.textMuted,
+                                        ),
+                                      ),
+                                  ],
                                 ),
                               ],
                             ],
@@ -330,6 +360,37 @@ class _NoMatches extends StatelessWidget {
             kind: HsButtonKind.secondary,
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// A source's language as a two-letter code on a hairline.
+///
+/// Read out in full by TalkBack — "Hindi", never "H I" — because a screen
+/// reader spelling a code is worse than no label at all.
+class LanguageTag extends StatelessWidget {
+  const new(this.tag, {super.key});
+
+  final String tag;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+    final language = HsLanguage.of(tag);
+    return Semantics(
+      label: language.englishName,
+      excludeSemantics: true,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+        decoration: BoxDecoration(
+          border: Border.all(color: palette.stroke),
+          borderRadius: BorderRadius.circular(4),
+        ),
+        child: Text(
+          language.code,
+          style: HsType.languageTag.copyWith(color: palette.textSecondary),
+        ),
       ),
     );
   }

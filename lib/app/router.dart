@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/shell.dart';
 import 'package:headshorts/core/tokens/motion.dart';
+import 'package:headshorts/features/bookmarks/bookmarks_screen.dart';
 import 'package:headshorts/features/linger/linger_screen.dart';
 import 'package:headshorts/features/more/about_screen.dart';
 import 'package:headshorts/features/more/appearance_screen.dart';
@@ -12,6 +13,7 @@ import 'package:headshorts/features/more/more_screen.dart';
 import 'package:headshorts/features/more/permissions_screen.dart';
 import 'package:headshorts/features/onboarding/onboarding_screen.dart';
 import 'package:headshorts/features/reader/reader_screen.dart';
+import 'package:headshorts/features/search/search_screen.dart';
 import 'package:headshorts/features/sources/add_source_screen.dart';
 import 'package:headshorts/features/sources/opml_import_screen.dart';
 import 'package:headshorts/features/sources/source_detail_screen.dart';
@@ -82,6 +84,15 @@ GoRouter buildRouter({required bool onboarded}) {
               ),
             ],
           ),
+          // Search sits fourth, as the v2 pill draws it.
+          StatefulShellBranch(
+            routes: [
+              GoRoute(
+                path: '/search',
+                pageBuilder: (context, state) => _tab(const SearchScreen()),
+              ),
+            ],
+          ),
           StatefulShellBranch(
             routes: [
               GoRoute(
@@ -96,6 +107,21 @@ GoRouter buildRouter({required bool onboarded}) {
         path: '/reader/:id',
         pageBuilder: (context, state) =>
             _page(ReaderScreen(int.parse(state.pathParameters['id']!))),
+      ),
+      // A saved article whose row has been pruned or unsubscribed away. Same
+      // Reader, reading the bookmark's own snapshot.
+      GoRoute(
+        path: '/bookmark/:id',
+        pageBuilder: (context, state) => _page(
+          ReaderScreen(
+            null,
+            bookmarkId: int.parse(state.pathParameters['id']!),
+          ),
+        ),
+      ),
+      GoRoute(
+        path: '/bookmarks',
+        pageBuilder: (context, state) => _page(const BookmarksScreen()),
       ),
       GoRoute(
         path: '/stats',

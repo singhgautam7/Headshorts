@@ -1,0 +1,30 @@
+name: flutter_tts
+description: >-
+  A patched copy of flutter_tts 4.2.5. The only change is that its Android
+  build no longer applies the Kotlin Gradle Plugin itself. See README.md.
+version: 4.2.5
+homepage: https://github.com/dlutton/flutter_tts
+publish_to: none
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
+
+flutter:
+  plugin:
+    platforms:
+      android:
+        package: com.eyedeadevelopment.fluttertts
+        pluginClass: FlutterTtsPlugin
+      web:
+        pluginClass: FlutterTtsPlugin
+        fileName: flutter_tts_web.dart
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  # The switch that tells Flutter's Gradle plugin this plugin is migrated, so
+  # it applies built-in Kotlin to this module. Without it the .kt sources are
+  # never compiled and the registrant cannot find FlutterTtsPlugin.
+  flutter: ">=3.44.0"

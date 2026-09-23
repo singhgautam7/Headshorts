@@ -64,6 +64,18 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, SourceRow> {
     type: DriftSqlType.string,
     requiredDuringInsert: true,
   );
+  static const VerificationMeta _languageMeta = const VerificationMeta(
+    'language',
+  );
+  @override
+  late final GeneratedColumn<String> language = GeneratedColumn<String>(
+    'language',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('en'),
+  );
   static const VerificationMeta _accentDarkMeta = const VerificationMeta(
     'accentDark',
   );
@@ -210,6 +222,7 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, SourceRow> {
     siteUrl,
     feedUrl,
     category,
+    language,
     accentDark,
     accentLight,
     type,
@@ -267,6 +280,12 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, SourceRow> {
       );
     } else if (isInserting) {
       context.missing(_categoryMeta);
+    }
+    if (data.containsKey('language')) {
+      context.handle(
+        _languageMeta,
+        language.isAcceptableOrUnknown(data['language']!, _languageMeta),
+      );
     }
     if (data.containsKey('accent_dark')) {
       context.handle(
@@ -382,6 +401,10 @@ class $SourcesTable extends Sources with TableInfo<$SourcesTable, SourceRow> {
         DriftSqlType.string,
         data['${effectivePrefix}category'],
       )!,
+      language: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}language'],
+      )!,
       accentDark: attachedDatabase.typeMapping.read(
         DriftSqlType.int,
         data['${effectivePrefix}accent_dark'],
@@ -451,6 +474,10 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
   final String feedUrl;
   final String category;
 
+  /// BCP-47 language tag of what this source publishes — 'en', 'hi', 'ta'.
+  /// A label, like the category: it filters, it never changes what is fetched.
+  final String language;
+
   /// The two tones of the source accent — light-on-black and deep-on-paper.
   final int accentDark;
   final int accentLight;
@@ -479,6 +506,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     this.siteUrl,
     required this.feedUrl,
     required this.category,
+    required this.language,
     required this.accentDark,
     required this.accentLight,
     required this.type,
@@ -502,6 +530,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     }
     map['feed_url'] = Variable<String>(feedUrl);
     map['category'] = Variable<String>(category);
+    map['language'] = Variable<String>(language);
     map['accent_dark'] = Variable<int>(accentDark);
     map['accent_light'] = Variable<int>(accentLight);
     {
@@ -538,6 +567,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
           : Value(siteUrl),
       feedUrl: Value(feedUrl),
       category: Value(category),
+      language: Value(language),
       accentDark: Value(accentDark),
       accentLight: Value(accentLight),
       type: Value(type),
@@ -572,6 +602,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
       siteUrl: serializer.fromJson<String?>(json['siteUrl']),
       feedUrl: serializer.fromJson<String>(json['feedUrl']),
       category: serializer.fromJson<String>(json['category']),
+      language: serializer.fromJson<String>(json['language']),
       accentDark: serializer.fromJson<int>(json['accentDark']),
       accentLight: serializer.fromJson<int>(json['accentLight']),
       type: $SourcesTable.$convertertype.fromJson(
@@ -597,6 +628,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
       'siteUrl': serializer.toJson<String?>(siteUrl),
       'feedUrl': serializer.toJson<String>(feedUrl),
       'category': serializer.toJson<String>(category),
+      'language': serializer.toJson<String>(language),
       'accentDark': serializer.toJson<int>(accentDark),
       'accentLight': serializer.toJson<int>(accentLight),
       'type': serializer.toJson<String>(
@@ -620,6 +652,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     Value<String?> siteUrl = const Value.absent(),
     String? feedUrl,
     String? category,
+    String? language,
     int? accentDark,
     int? accentLight,
     SourceType? type,
@@ -638,6 +671,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     siteUrl: siteUrl.present ? siteUrl.value : this.siteUrl,
     feedUrl: feedUrl ?? this.feedUrl,
     category: category ?? this.category,
+    language: language ?? this.language,
     accentDark: accentDark ?? this.accentDark,
     accentLight: accentLight ?? this.accentLight,
     type: type ?? this.type,
@@ -660,6 +694,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
       siteUrl: data.siteUrl.present ? data.siteUrl.value : this.siteUrl,
       feedUrl: data.feedUrl.present ? data.feedUrl.value : this.feedUrl,
       category: data.category.present ? data.category.value : this.category,
+      language: data.language.present ? data.language.value : this.language,
       accentDark: data.accentDark.present
           ? data.accentDark.value
           : this.accentDark,
@@ -695,6 +730,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
           ..write('siteUrl: $siteUrl, ')
           ..write('feedUrl: $feedUrl, ')
           ..write('category: $category, ')
+          ..write('language: $language, ')
           ..write('accentDark: $accentDark, ')
           ..write('accentLight: $accentLight, ')
           ..write('type: $type, ')
@@ -718,6 +754,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
     siteUrl,
     feedUrl,
     category,
+    language,
     accentDark,
     accentLight,
     type,
@@ -740,6 +777,7 @@ class SourceRow extends DataClass implements Insertable<SourceRow> {
           other.siteUrl == this.siteUrl &&
           other.feedUrl == this.feedUrl &&
           other.category == this.category &&
+          other.language == this.language &&
           other.accentDark == this.accentDark &&
           other.accentLight == this.accentLight &&
           other.type == this.type &&
@@ -760,6 +798,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
   final Value<String?> siteUrl;
   final Value<String> feedUrl;
   final Value<String> category;
+  final Value<String> language;
   final Value<int> accentDark;
   final Value<int> accentLight;
   final Value<SourceType> type;
@@ -778,6 +817,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     this.siteUrl = const Value.absent(),
     this.feedUrl = const Value.absent(),
     this.category = const Value.absent(),
+    this.language = const Value.absent(),
     this.accentDark = const Value.absent(),
     this.accentLight = const Value.absent(),
     this.type = const Value.absent(),
@@ -797,6 +837,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     this.siteUrl = const Value.absent(),
     required String feedUrl,
     required String category,
+    this.language = const Value.absent(),
     required int accentDark,
     required int accentLight,
     required SourceType type,
@@ -821,6 +862,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     Expression<String>? siteUrl,
     Expression<String>? feedUrl,
     Expression<String>? category,
+    Expression<String>? language,
     Expression<int>? accentDark,
     Expression<int>? accentLight,
     Expression<String>? type,
@@ -840,6 +882,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
       if (siteUrl != null) 'site_url': siteUrl,
       if (feedUrl != null) 'feed_url': feedUrl,
       if (category != null) 'category': category,
+      if (language != null) 'language': language,
       if (accentDark != null) 'accent_dark': accentDark,
       if (accentLight != null) 'accent_light': accentLight,
       if (type != null) 'type': type,
@@ -861,6 +904,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     Value<String?>? siteUrl,
     Value<String>? feedUrl,
     Value<String>? category,
+    Value<String>? language,
     Value<int>? accentDark,
     Value<int>? accentLight,
     Value<SourceType>? type,
@@ -880,6 +924,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
       siteUrl: siteUrl ?? this.siteUrl,
       feedUrl: feedUrl ?? this.feedUrl,
       category: category ?? this.category,
+      language: language ?? this.language,
       accentDark: accentDark ?? this.accentDark,
       accentLight: accentLight ?? this.accentLight,
       type: type ?? this.type,
@@ -912,6 +957,9 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
     }
     if (category.present) {
       map['category'] = Variable<String>(category.value);
+    }
+    if (language.present) {
+      map['language'] = Variable<String>(language.value);
     }
     if (accentDark.present) {
       map['accent_dark'] = Variable<int>(accentDark.value);
@@ -962,6 +1010,7 @@ class SourcesCompanion extends UpdateCompanion<SourceRow> {
           ..write('siteUrl: $siteUrl, ')
           ..write('feedUrl: $feedUrl, ')
           ..write('category: $category, ')
+          ..write('language: $language, ')
           ..write('accentDark: $accentDark, ')
           ..write('accentLight: $accentLight, ')
           ..write('type: $type, ')
@@ -2414,6 +2463,870 @@ class CaughtUpDaysCompanion extends UpdateCompanion<CaughtUpRow> {
   }
 }
 
+class $BookmarksTable extends Bookmarks
+    with TableInfo<$BookmarksTable, BookmarkRow> {
+  @override
+  final GeneratedDatabase attachedDatabase;
+  final String? _alias;
+  $BookmarksTable(this.attachedDatabase, [this._alias]);
+  static const VerificationMeta _idMeta = const VerificationMeta('id');
+  @override
+  late final GeneratedColumn<int> id = GeneratedColumn<int>(
+    'id',
+    aliasedName,
+    false,
+    hasAutoIncrement: true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+    defaultConstraints: GeneratedColumn.constraintIsAlways(
+      'PRIMARY KEY AUTOINCREMENT',
+    ),
+  );
+  static const VerificationMeta _articleIdMeta = const VerificationMeta(
+    'articleId',
+  );
+  @override
+  late final GeneratedColumn<int> articleId = GeneratedColumn<int>(
+    'article_id',
+    aliasedName,
+    true,
+    type: DriftSqlType.int,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _linkMeta = const VerificationMeta('link');
+  @override
+  late final GeneratedColumn<String> link = GeneratedColumn<String>(
+    'link',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+    defaultConstraints: GeneratedColumn.constraintIsAlways('UNIQUE'),
+  );
+  static const VerificationMeta _canonicalUrlMeta = const VerificationMeta(
+    'canonicalUrl',
+  );
+  @override
+  late final GeneratedColumn<String> canonicalUrl = GeneratedColumn<String>(
+    'canonical_url',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant(''),
+  );
+  static const VerificationMeta _titleMeta = const VerificationMeta('title');
+  @override
+  late final GeneratedColumn<String> title = GeneratedColumn<String>(
+    'title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _summaryMeta = const VerificationMeta(
+    'summary',
+  );
+  @override
+  late final GeneratedColumn<String> summary = GeneratedColumn<String>(
+    'summary',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _contentHtmlMeta = const VerificationMeta(
+    'contentHtml',
+  );
+  @override
+  late final GeneratedColumn<String> contentHtml = GeneratedColumn<String>(
+    'content_html',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _authorMeta = const VerificationMeta('author');
+  @override
+  late final GeneratedColumn<String> author = GeneratedColumn<String>(
+    'author',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _imageUrlMeta = const VerificationMeta(
+    'imageUrl',
+  );
+  @override
+  late final GeneratedColumn<String> imageUrl = GeneratedColumn<String>(
+    'image_url',
+    aliasedName,
+    true,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+  );
+  static const VerificationMeta _sourceTitleMeta = const VerificationMeta(
+    'sourceTitle',
+  );
+  @override
+  late final GeneratedColumn<String> sourceTitle = GeneratedColumn<String>(
+    'source_title',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _languageMeta = const VerificationMeta(
+    'language',
+  );
+  @override
+  late final GeneratedColumn<String> language = GeneratedColumn<String>(
+    'language',
+    aliasedName,
+    false,
+    type: DriftSqlType.string,
+    requiredDuringInsert: false,
+    defaultValue: const Constant('en'),
+  );
+  static const VerificationMeta _accentDarkMeta = const VerificationMeta(
+    'accentDark',
+  );
+  @override
+  late final GeneratedColumn<int> accentDark = GeneratedColumn<int>(
+    'accent_dark',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _accentLightMeta = const VerificationMeta(
+    'accentLight',
+  );
+  @override
+  late final GeneratedColumn<int> accentLight = GeneratedColumn<int>(
+    'accent_light',
+    aliasedName,
+    false,
+    type: DriftSqlType.int,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _publishedAtMeta = const VerificationMeta(
+    'publishedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> publishedAt = GeneratedColumn<DateTime>(
+    'published_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: true,
+  );
+  static const VerificationMeta _savedAtMeta = const VerificationMeta(
+    'savedAt',
+  );
+  @override
+  late final GeneratedColumn<DateTime> savedAt = GeneratedColumn<DateTime>(
+    'saved_at',
+    aliasedName,
+    false,
+    type: DriftSqlType.dateTime,
+    requiredDuringInsert: false,
+    defaultValue: currentDateAndTime,
+  );
+  @override
+  List<GeneratedColumn> get $columns => [
+    id,
+    articleId,
+    link,
+    canonicalUrl,
+    title,
+    summary,
+    contentHtml,
+    author,
+    imageUrl,
+    sourceTitle,
+    language,
+    accentDark,
+    accentLight,
+    publishedAt,
+    savedAt,
+  ];
+  @override
+  String get aliasedName => _alias ?? actualTableName;
+  @override
+  String get actualTableName => $name;
+  static const String $name = 'bookmarks';
+  @override
+  VerificationContext validateIntegrity(
+    Insertable<BookmarkRow> instance, {
+    bool isInserting = false,
+  }) {
+    final context = VerificationContext();
+    final data = instance.toColumns(true);
+    if (data.containsKey('id')) {
+      context.handle(_idMeta, id.isAcceptableOrUnknown(data['id']!, _idMeta));
+    }
+    if (data.containsKey('article_id')) {
+      context.handle(
+        _articleIdMeta,
+        articleId.isAcceptableOrUnknown(data['article_id']!, _articleIdMeta),
+      );
+    }
+    if (data.containsKey('link')) {
+      context.handle(
+        _linkMeta,
+        link.isAcceptableOrUnknown(data['link']!, _linkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_linkMeta);
+    }
+    if (data.containsKey('canonical_url')) {
+      context.handle(
+        _canonicalUrlMeta,
+        canonicalUrl.isAcceptableOrUnknown(
+          data['canonical_url']!,
+          _canonicalUrlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('title')) {
+      context.handle(
+        _titleMeta,
+        title.isAcceptableOrUnknown(data['title']!, _titleMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_titleMeta);
+    }
+    if (data.containsKey('summary')) {
+      context.handle(
+        _summaryMeta,
+        summary.isAcceptableOrUnknown(data['summary']!, _summaryMeta),
+      );
+    }
+    if (data.containsKey('content_html')) {
+      context.handle(
+        _contentHtmlMeta,
+        contentHtml.isAcceptableOrUnknown(
+          data['content_html']!,
+          _contentHtmlMeta,
+        ),
+      );
+    }
+    if (data.containsKey('author')) {
+      context.handle(
+        _authorMeta,
+        author.isAcceptableOrUnknown(data['author']!, _authorMeta),
+      );
+    }
+    if (data.containsKey('image_url')) {
+      context.handle(
+        _imageUrlMeta,
+        imageUrl.isAcceptableOrUnknown(data['image_url']!, _imageUrlMeta),
+      );
+    }
+    if (data.containsKey('source_title')) {
+      context.handle(
+        _sourceTitleMeta,
+        sourceTitle.isAcceptableOrUnknown(
+          data['source_title']!,
+          _sourceTitleMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_sourceTitleMeta);
+    }
+    if (data.containsKey('language')) {
+      context.handle(
+        _languageMeta,
+        language.isAcceptableOrUnknown(data['language']!, _languageMeta),
+      );
+    }
+    if (data.containsKey('accent_dark')) {
+      context.handle(
+        _accentDarkMeta,
+        accentDark.isAcceptableOrUnknown(data['accent_dark']!, _accentDarkMeta),
+      );
+    } else if (isInserting) {
+      context.missing(_accentDarkMeta);
+    }
+    if (data.containsKey('accent_light')) {
+      context.handle(
+        _accentLightMeta,
+        accentLight.isAcceptableOrUnknown(
+          data['accent_light']!,
+          _accentLightMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_accentLightMeta);
+    }
+    if (data.containsKey('published_at')) {
+      context.handle(
+        _publishedAtMeta,
+        publishedAt.isAcceptableOrUnknown(
+          data['published_at']!,
+          _publishedAtMeta,
+        ),
+      );
+    } else if (isInserting) {
+      context.missing(_publishedAtMeta);
+    }
+    if (data.containsKey('saved_at')) {
+      context.handle(
+        _savedAtMeta,
+        savedAt.isAcceptableOrUnknown(data['saved_at']!, _savedAtMeta),
+      );
+    }
+    return context;
+  }
+
+  @override
+  Set<GeneratedColumn> get $primaryKey => {id};
+  @override
+  BookmarkRow map(Map<String, dynamic> data, {String? tablePrefix}) {
+    final effectivePrefix = tablePrefix != null ? '$tablePrefix.' : '';
+    return BookmarkRow(
+      id: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}id'],
+      )!,
+      articleId: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}article_id'],
+      ),
+      link: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}link'],
+      )!,
+      canonicalUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}canonical_url'],
+      )!,
+      title: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}title'],
+      )!,
+      summary: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}summary'],
+      ),
+      contentHtml: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}content_html'],
+      ),
+      author: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}author'],
+      ),
+      imageUrl: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}image_url'],
+      ),
+      sourceTitle: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}source_title'],
+      )!,
+      language: attachedDatabase.typeMapping.read(
+        DriftSqlType.string,
+        data['${effectivePrefix}language'],
+      )!,
+      accentDark: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}accent_dark'],
+      )!,
+      accentLight: attachedDatabase.typeMapping.read(
+        DriftSqlType.int,
+        data['${effectivePrefix}accent_light'],
+      )!,
+      publishedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}published_at'],
+      )!,
+      savedAt: attachedDatabase.typeMapping.read(
+        DriftSqlType.dateTime,
+        data['${effectivePrefix}saved_at'],
+      )!,
+    );
+  }
+
+  @override
+  $BookmarksTable createAlias(String alias) {
+    return $BookmarksTable(attachedDatabase, alias);
+  }
+}
+
+class BookmarkRow extends DataClass implements Insertable<BookmarkRow> {
+  final int id;
+
+  /// The row it was saved from, while that row still exists. Deliberately not
+  /// a foreign key: a cascade from `sources` would take the bookmark with it.
+  final int? articleId;
+  final String link;
+  final String canonicalUrl;
+  final String title;
+  final String? summary;
+
+  /// The extracted body, so a saved article opens offline and unchanged.
+  final String? contentHtml;
+  final String? author;
+  final String? imageUrl;
+  final String sourceTitle;
+  final String language;
+  final int accentDark;
+  final int accentLight;
+  final DateTime publishedAt;
+  final DateTime savedAt;
+  const BookmarkRow({
+    required this.id,
+    this.articleId,
+    required this.link,
+    required this.canonicalUrl,
+    required this.title,
+    this.summary,
+    this.contentHtml,
+    this.author,
+    this.imageUrl,
+    required this.sourceTitle,
+    required this.language,
+    required this.accentDark,
+    required this.accentLight,
+    required this.publishedAt,
+    required this.savedAt,
+  });
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    map['id'] = Variable<int>(id);
+    if (!nullToAbsent || articleId != null) {
+      map['article_id'] = Variable<int>(articleId);
+    }
+    map['link'] = Variable<String>(link);
+    map['canonical_url'] = Variable<String>(canonicalUrl);
+    map['title'] = Variable<String>(title);
+    if (!nullToAbsent || summary != null) {
+      map['summary'] = Variable<String>(summary);
+    }
+    if (!nullToAbsent || contentHtml != null) {
+      map['content_html'] = Variable<String>(contentHtml);
+    }
+    if (!nullToAbsent || author != null) {
+      map['author'] = Variable<String>(author);
+    }
+    if (!nullToAbsent || imageUrl != null) {
+      map['image_url'] = Variable<String>(imageUrl);
+    }
+    map['source_title'] = Variable<String>(sourceTitle);
+    map['language'] = Variable<String>(language);
+    map['accent_dark'] = Variable<int>(accentDark);
+    map['accent_light'] = Variable<int>(accentLight);
+    map['published_at'] = Variable<DateTime>(publishedAt);
+    map['saved_at'] = Variable<DateTime>(savedAt);
+    return map;
+  }
+
+  BookmarksCompanion toCompanion(bool nullToAbsent) {
+    return BookmarksCompanion(
+      id: Value(id),
+      articleId: articleId == null && nullToAbsent
+          ? const Value.absent()
+          : Value(articleId),
+      link: Value(link),
+      canonicalUrl: Value(canonicalUrl),
+      title: Value(title),
+      summary: summary == null && nullToAbsent
+          ? const Value.absent()
+          : Value(summary),
+      contentHtml: contentHtml == null && nullToAbsent
+          ? const Value.absent()
+          : Value(contentHtml),
+      author: author == null && nullToAbsent
+          ? const Value.absent()
+          : Value(author),
+      imageUrl: imageUrl == null && nullToAbsent
+          ? const Value.absent()
+          : Value(imageUrl),
+      sourceTitle: Value(sourceTitle),
+      language: Value(language),
+      accentDark: Value(accentDark),
+      accentLight: Value(accentLight),
+      publishedAt: Value(publishedAt),
+      savedAt: Value(savedAt),
+    );
+  }
+
+  factory BookmarkRow.fromJson(
+    Map<String, dynamic> json, {
+    ValueSerializer? serializer,
+  }) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return BookmarkRow(
+      id: serializer.fromJson<int>(json['id']),
+      articleId: serializer.fromJson<int?>(json['articleId']),
+      link: serializer.fromJson<String>(json['link']),
+      canonicalUrl: serializer.fromJson<String>(json['canonicalUrl']),
+      title: serializer.fromJson<String>(json['title']),
+      summary: serializer.fromJson<String?>(json['summary']),
+      contentHtml: serializer.fromJson<String?>(json['contentHtml']),
+      author: serializer.fromJson<String?>(json['author']),
+      imageUrl: serializer.fromJson<String?>(json['imageUrl']),
+      sourceTitle: serializer.fromJson<String>(json['sourceTitle']),
+      language: serializer.fromJson<String>(json['language']),
+      accentDark: serializer.fromJson<int>(json['accentDark']),
+      accentLight: serializer.fromJson<int>(json['accentLight']),
+      publishedAt: serializer.fromJson<DateTime>(json['publishedAt']),
+      savedAt: serializer.fromJson<DateTime>(json['savedAt']),
+    );
+  }
+  @override
+  Map<String, dynamic> toJson({ValueSerializer? serializer}) {
+    serializer ??= driftRuntimeOptions.defaultSerializer;
+    return <String, dynamic>{
+      'id': serializer.toJson<int>(id),
+      'articleId': serializer.toJson<int?>(articleId),
+      'link': serializer.toJson<String>(link),
+      'canonicalUrl': serializer.toJson<String>(canonicalUrl),
+      'title': serializer.toJson<String>(title),
+      'summary': serializer.toJson<String?>(summary),
+      'contentHtml': serializer.toJson<String?>(contentHtml),
+      'author': serializer.toJson<String?>(author),
+      'imageUrl': serializer.toJson<String?>(imageUrl),
+      'sourceTitle': serializer.toJson<String>(sourceTitle),
+      'language': serializer.toJson<String>(language),
+      'accentDark': serializer.toJson<int>(accentDark),
+      'accentLight': serializer.toJson<int>(accentLight),
+      'publishedAt': serializer.toJson<DateTime>(publishedAt),
+      'savedAt': serializer.toJson<DateTime>(savedAt),
+    };
+  }
+
+  BookmarkRow copyWith({
+    int? id,
+    Value<int?> articleId = const Value.absent(),
+    String? link,
+    String? canonicalUrl,
+    String? title,
+    Value<String?> summary = const Value.absent(),
+    Value<String?> contentHtml = const Value.absent(),
+    Value<String?> author = const Value.absent(),
+    Value<String?> imageUrl = const Value.absent(),
+    String? sourceTitle,
+    String? language,
+    int? accentDark,
+    int? accentLight,
+    DateTime? publishedAt,
+    DateTime? savedAt,
+  }) => BookmarkRow(
+    id: id ?? this.id,
+    articleId: articleId.present ? articleId.value : this.articleId,
+    link: link ?? this.link,
+    canonicalUrl: canonicalUrl ?? this.canonicalUrl,
+    title: title ?? this.title,
+    summary: summary.present ? summary.value : this.summary,
+    contentHtml: contentHtml.present ? contentHtml.value : this.contentHtml,
+    author: author.present ? author.value : this.author,
+    imageUrl: imageUrl.present ? imageUrl.value : this.imageUrl,
+    sourceTitle: sourceTitle ?? this.sourceTitle,
+    language: language ?? this.language,
+    accentDark: accentDark ?? this.accentDark,
+    accentLight: accentLight ?? this.accentLight,
+    publishedAt: publishedAt ?? this.publishedAt,
+    savedAt: savedAt ?? this.savedAt,
+  );
+  BookmarkRow copyWithCompanion(BookmarksCompanion data) {
+    return BookmarkRow(
+      id: data.id.present ? data.id.value : this.id,
+      articleId: data.articleId.present ? data.articleId.value : this.articleId,
+      link: data.link.present ? data.link.value : this.link,
+      canonicalUrl: data.canonicalUrl.present
+          ? data.canonicalUrl.value
+          : this.canonicalUrl,
+      title: data.title.present ? data.title.value : this.title,
+      summary: data.summary.present ? data.summary.value : this.summary,
+      contentHtml: data.contentHtml.present
+          ? data.contentHtml.value
+          : this.contentHtml,
+      author: data.author.present ? data.author.value : this.author,
+      imageUrl: data.imageUrl.present ? data.imageUrl.value : this.imageUrl,
+      sourceTitle: data.sourceTitle.present
+          ? data.sourceTitle.value
+          : this.sourceTitle,
+      language: data.language.present ? data.language.value : this.language,
+      accentDark: data.accentDark.present
+          ? data.accentDark.value
+          : this.accentDark,
+      accentLight: data.accentLight.present
+          ? data.accentLight.value
+          : this.accentLight,
+      publishedAt: data.publishedAt.present
+          ? data.publishedAt.value
+          : this.publishedAt,
+      savedAt: data.savedAt.present ? data.savedAt.value : this.savedAt,
+    );
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BookmarkRow(')
+          ..write('id: $id, ')
+          ..write('articleId: $articleId, ')
+          ..write('link: $link, ')
+          ..write('canonicalUrl: $canonicalUrl, ')
+          ..write('title: $title, ')
+          ..write('summary: $summary, ')
+          ..write('contentHtml: $contentHtml, ')
+          ..write('author: $author, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('sourceTitle: $sourceTitle, ')
+          ..write('language: $language, ')
+          ..write('accentDark: $accentDark, ')
+          ..write('accentLight: $accentLight, ')
+          ..write('publishedAt: $publishedAt, ')
+          ..write('savedAt: $savedAt')
+          ..write(')'))
+        .toString();
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    id,
+    articleId,
+    link,
+    canonicalUrl,
+    title,
+    summary,
+    contentHtml,
+    author,
+    imageUrl,
+    sourceTitle,
+    language,
+    accentDark,
+    accentLight,
+    publishedAt,
+    savedAt,
+  );
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      (other is BookmarkRow &&
+          other.id == this.id &&
+          other.articleId == this.articleId &&
+          other.link == this.link &&
+          other.canonicalUrl == this.canonicalUrl &&
+          other.title == this.title &&
+          other.summary == this.summary &&
+          other.contentHtml == this.contentHtml &&
+          other.author == this.author &&
+          other.imageUrl == this.imageUrl &&
+          other.sourceTitle == this.sourceTitle &&
+          other.language == this.language &&
+          other.accentDark == this.accentDark &&
+          other.accentLight == this.accentLight &&
+          other.publishedAt == this.publishedAt &&
+          other.savedAt == this.savedAt);
+}
+
+class BookmarksCompanion extends UpdateCompanion<BookmarkRow> {
+  final Value<int> id;
+  final Value<int?> articleId;
+  final Value<String> link;
+  final Value<String> canonicalUrl;
+  final Value<String> title;
+  final Value<String?> summary;
+  final Value<String?> contentHtml;
+  final Value<String?> author;
+  final Value<String?> imageUrl;
+  final Value<String> sourceTitle;
+  final Value<String> language;
+  final Value<int> accentDark;
+  final Value<int> accentLight;
+  final Value<DateTime> publishedAt;
+  final Value<DateTime> savedAt;
+  const BookmarksCompanion({
+    this.id = const Value.absent(),
+    this.articleId = const Value.absent(),
+    this.link = const Value.absent(),
+    this.canonicalUrl = const Value.absent(),
+    this.title = const Value.absent(),
+    this.summary = const Value.absent(),
+    this.contentHtml = const Value.absent(),
+    this.author = const Value.absent(),
+    this.imageUrl = const Value.absent(),
+    this.sourceTitle = const Value.absent(),
+    this.language = const Value.absent(),
+    this.accentDark = const Value.absent(),
+    this.accentLight = const Value.absent(),
+    this.publishedAt = const Value.absent(),
+    this.savedAt = const Value.absent(),
+  });
+  BookmarksCompanion.insert({
+    this.id = const Value.absent(),
+    this.articleId = const Value.absent(),
+    required String link,
+    this.canonicalUrl = const Value.absent(),
+    required String title,
+    this.summary = const Value.absent(),
+    this.contentHtml = const Value.absent(),
+    this.author = const Value.absent(),
+    this.imageUrl = const Value.absent(),
+    required String sourceTitle,
+    this.language = const Value.absent(),
+    required int accentDark,
+    required int accentLight,
+    required DateTime publishedAt,
+    this.savedAt = const Value.absent(),
+  }) : link = Value(link),
+       title = Value(title),
+       sourceTitle = Value(sourceTitle),
+       accentDark = Value(accentDark),
+       accentLight = Value(accentLight),
+       publishedAt = Value(publishedAt);
+  static Insertable<BookmarkRow> custom({
+    Expression<int>? id,
+    Expression<int>? articleId,
+    Expression<String>? link,
+    Expression<String>? canonicalUrl,
+    Expression<String>? title,
+    Expression<String>? summary,
+    Expression<String>? contentHtml,
+    Expression<String>? author,
+    Expression<String>? imageUrl,
+    Expression<String>? sourceTitle,
+    Expression<String>? language,
+    Expression<int>? accentDark,
+    Expression<int>? accentLight,
+    Expression<DateTime>? publishedAt,
+    Expression<DateTime>? savedAt,
+  }) {
+    return RawValuesInsertable({
+      if (id != null) 'id': id,
+      if (articleId != null) 'article_id': articleId,
+      if (link != null) 'link': link,
+      if (canonicalUrl != null) 'canonical_url': canonicalUrl,
+      if (title != null) 'title': title,
+      if (summary != null) 'summary': summary,
+      if (contentHtml != null) 'content_html': contentHtml,
+      if (author != null) 'author': author,
+      if (imageUrl != null) 'image_url': imageUrl,
+      if (sourceTitle != null) 'source_title': sourceTitle,
+      if (language != null) 'language': language,
+      if (accentDark != null) 'accent_dark': accentDark,
+      if (accentLight != null) 'accent_light': accentLight,
+      if (publishedAt != null) 'published_at': publishedAt,
+      if (savedAt != null) 'saved_at': savedAt,
+    });
+  }
+
+  BookmarksCompanion copyWith({
+    Value<int>? id,
+    Value<int?>? articleId,
+    Value<String>? link,
+    Value<String>? canonicalUrl,
+    Value<String>? title,
+    Value<String?>? summary,
+    Value<String?>? contentHtml,
+    Value<String?>? author,
+    Value<String?>? imageUrl,
+    Value<String>? sourceTitle,
+    Value<String>? language,
+    Value<int>? accentDark,
+    Value<int>? accentLight,
+    Value<DateTime>? publishedAt,
+    Value<DateTime>? savedAt,
+  }) {
+    return BookmarksCompanion(
+      id: id ?? this.id,
+      articleId: articleId ?? this.articleId,
+      link: link ?? this.link,
+      canonicalUrl: canonicalUrl ?? this.canonicalUrl,
+      title: title ?? this.title,
+      summary: summary ?? this.summary,
+      contentHtml: contentHtml ?? this.contentHtml,
+      author: author ?? this.author,
+      imageUrl: imageUrl ?? this.imageUrl,
+      sourceTitle: sourceTitle ?? this.sourceTitle,
+      language: language ?? this.language,
+      accentDark: accentDark ?? this.accentDark,
+      accentLight: accentLight ?? this.accentLight,
+      publishedAt: publishedAt ?? this.publishedAt,
+      savedAt: savedAt ?? this.savedAt,
+    );
+  }
+
+  @override
+  Map<String, Expression> toColumns(bool nullToAbsent) {
+    final map = <String, Expression>{};
+    if (id.present) {
+      map['id'] = Variable<int>(id.value);
+    }
+    if (articleId.present) {
+      map['article_id'] = Variable<int>(articleId.value);
+    }
+    if (link.present) {
+      map['link'] = Variable<String>(link.value);
+    }
+    if (canonicalUrl.present) {
+      map['canonical_url'] = Variable<String>(canonicalUrl.value);
+    }
+    if (title.present) {
+      map['title'] = Variable<String>(title.value);
+    }
+    if (summary.present) {
+      map['summary'] = Variable<String>(summary.value);
+    }
+    if (contentHtml.present) {
+      map['content_html'] = Variable<String>(contentHtml.value);
+    }
+    if (author.present) {
+      map['author'] = Variable<String>(author.value);
+    }
+    if (imageUrl.present) {
+      map['image_url'] = Variable<String>(imageUrl.value);
+    }
+    if (sourceTitle.present) {
+      map['source_title'] = Variable<String>(sourceTitle.value);
+    }
+    if (language.present) {
+      map['language'] = Variable<String>(language.value);
+    }
+    if (accentDark.present) {
+      map['accent_dark'] = Variable<int>(accentDark.value);
+    }
+    if (accentLight.present) {
+      map['accent_light'] = Variable<int>(accentLight.value);
+    }
+    if (publishedAt.present) {
+      map['published_at'] = Variable<DateTime>(publishedAt.value);
+    }
+    if (savedAt.present) {
+      map['saved_at'] = Variable<DateTime>(savedAt.value);
+    }
+    return map;
+  }
+
+  @override
+  String toString() {
+    return (StringBuffer('BookmarksCompanion(')
+          ..write('id: $id, ')
+          ..write('articleId: $articleId, ')
+          ..write('link: $link, ')
+          ..write('canonicalUrl: $canonicalUrl, ')
+          ..write('title: $title, ')
+          ..write('summary: $summary, ')
+          ..write('contentHtml: $contentHtml, ')
+          ..write('author: $author, ')
+          ..write('imageUrl: $imageUrl, ')
+          ..write('sourceTitle: $sourceTitle, ')
+          ..write('language: $language, ')
+          ..write('accentDark: $accentDark, ')
+          ..write('accentLight: $accentLight, ')
+          ..write('publishedAt: $publishedAt, ')
+          ..write('savedAt: $savedAt')
+          ..write(')'))
+        .toString();
+  }
+}
+
 abstract class _$HsDatabase extends GeneratedDatabase {
   _$HsDatabase(QueryExecutor e) : super(e);
   $HsDatabaseManager get managers => $HsDatabaseManager(this);
@@ -2421,6 +3334,7 @@ abstract class _$HsDatabase extends GeneratedDatabase {
   late final $ArticlesTable articles = $ArticlesTable(this);
   late final $ReadEventsTable readEvents = $ReadEventsTable(this);
   late final $CaughtUpDaysTable caughtUpDays = $CaughtUpDaysTable(this);
+  late final $BookmarksTable bookmarks = $BookmarksTable(this);
   @override
   Iterable<TableInfo<Table, Object?>> get allTables =>
       allSchemaEntities.whereType<TableInfo<Table, Object?>>();
@@ -2430,6 +3344,7 @@ abstract class _$HsDatabase extends GeneratedDatabase {
     articles,
     readEvents,
     caughtUpDays,
+    bookmarks,
   ];
   @override
   StreamQueryUpdateRules get streamUpdateRules => const StreamQueryUpdateRules([
@@ -2456,6 +3371,7 @@ typedef $$SourcesTableCreateCompanionBuilder = SourcesCompanion Function({
   Value<String?> siteUrl,
   required String feedUrl,
   required String category,
+  Value<String> language,
   required int accentDark,
   required int accentLight,
   required SourceType type,
@@ -2475,6 +3391,7 @@ typedef $$SourcesTableUpdateCompanionBuilder = SourcesCompanion Function({
   Value<String?> siteUrl,
   Value<String> feedUrl,
   Value<String> category,
+  Value<String> language,
   Value<int> accentDark,
   Value<int> accentLight,
   Value<SourceType> type,
@@ -2543,6 +3460,11 @@ class $$SourcesTableFilterComposer
 
   ColumnFilters<String> get category => $composableBuilder(
     column: $table.category,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get language => $composableBuilder(
+    column: $table.language,
     builder: (column) => ColumnFilters(column),
   );
 
@@ -2667,6 +3589,11 @@ class $$SourcesTableOrderingComposer
     builder: (column) => ColumnOrderings(column),
   );
 
+  ColumnOrderings<String> get language => $composableBuilder(
+    column: $table.language,
+    builder: (column) => ColumnOrderings(column),
+  );
+
   ColumnOrderings<int> get accentDark => $composableBuilder(
     column: $table.accentDark,
     builder: (column) => ColumnOrderings(column),
@@ -2751,6 +3678,9 @@ class $$SourcesTableAnnotationComposer
 
   GeneratedColumn<String> get category =>
       $composableBuilder(column: $table.category, builder: (column) => column);
+
+  GeneratedColumn<String> get language =>
+      $composableBuilder(column: $table.language, builder: (column) => column);
 
   GeneratedColumn<int> get accentDark => $composableBuilder(
     column: $table.accentDark,
@@ -2859,6 +3789,7 @@ class $$SourcesTableTableManager
                 Value<String?> siteUrl = const Value.absent(),
                 Value<String> feedUrl = const Value.absent(),
                 Value<String> category = const Value.absent(),
+                Value<String> language = const Value.absent(),
                 Value<int> accentDark = const Value.absent(),
                 Value<int> accentLight = const Value.absent(),
                 Value<SourceType> type = const Value.absent(),
@@ -2877,6 +3808,7 @@ class $$SourcesTableTableManager
                 siteUrl: siteUrl,
                 feedUrl: feedUrl,
                 category: category,
+                language: language,
                 accentDark: accentDark,
                 accentLight: accentLight,
                 type: type,
@@ -2897,6 +3829,7 @@ class $$SourcesTableTableManager
                 Value<String?> siteUrl = const Value.absent(),
                 required String feedUrl,
                 required String category,
+                Value<String> language = const Value.absent(),
                 required int accentDark,
                 required int accentLight,
                 required SourceType type,
@@ -2915,6 +3848,7 @@ class $$SourcesTableTableManager
                 siteUrl: siteUrl,
                 feedUrl: feedUrl,
                 category: category,
+                language: language,
                 accentDark: accentDark,
                 accentLight: accentLight,
                 type: type,
@@ -4020,6 +4954,406 @@ typedef $$CaughtUpDaysTableProcessedTableManager =
       CaughtUpRow,
       PrefetchHooks Function()
     >;
+typedef $$BookmarksTableCreateCompanionBuilder = BookmarksCompanion Function({
+  Value<int> id,
+  Value<int?> articleId,
+  required String link,
+  Value<String> canonicalUrl,
+  required String title,
+  Value<String?> summary,
+  Value<String?> contentHtml,
+  Value<String?> author,
+  Value<String?> imageUrl,
+  required String sourceTitle,
+  Value<String> language,
+  required int accentDark,
+  required int accentLight,
+  required DateTime publishedAt,
+  Value<DateTime> savedAt,
+});
+typedef $$BookmarksTableUpdateCompanionBuilder = BookmarksCompanion Function({
+  Value<int> id,
+  Value<int?> articleId,
+  Value<String> link,
+  Value<String> canonicalUrl,
+  Value<String> title,
+  Value<String?> summary,
+  Value<String?> contentHtml,
+  Value<String?> author,
+  Value<String?> imageUrl,
+  Value<String> sourceTitle,
+  Value<String> language,
+  Value<int> accentDark,
+  Value<int> accentLight,
+  Value<DateTime> publishedAt,
+  Value<DateTime> savedAt,
+});
+
+class $$BookmarksTableFilterComposer
+    extends Composer<_$HsDatabase, $BookmarksTable> {
+  $$BookmarksTableFilterComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnFilters<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get articleId => $composableBuilder(
+    column: $table.articleId,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get link => $composableBuilder(
+    column: $table.link,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get canonicalUrl => $composableBuilder(
+    column: $table.canonicalUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get contentHtml => $composableBuilder(
+    column: $table.contentHtml,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get author => $composableBuilder(
+    column: $table.author,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get sourceTitle => $composableBuilder(
+    column: $table.sourceTitle,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<String> get language => $composableBuilder(
+    column: $table.language,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get accentDark => $composableBuilder(
+    column: $table.accentDark,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<int> get accentLight => $composableBuilder(
+    column: $table.accentLight,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get publishedAt => $composableBuilder(
+    column: $table.publishedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+
+  ColumnFilters<DateTime> get savedAt => $composableBuilder(
+    column: $table.savedAt,
+    builder: (column) => ColumnFilters(column),
+  );
+}
+
+class $$BookmarksTableOrderingComposer
+    extends Composer<_$HsDatabase, $BookmarksTable> {
+  $$BookmarksTableOrderingComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  ColumnOrderings<int> get id => $composableBuilder(
+    column: $table.id,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get articleId => $composableBuilder(
+    column: $table.articleId,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get link => $composableBuilder(
+    column: $table.link,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get canonicalUrl => $composableBuilder(
+    column: $table.canonicalUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get title => $composableBuilder(
+    column: $table.title,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get summary => $composableBuilder(
+    column: $table.summary,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get contentHtml => $composableBuilder(
+    column: $table.contentHtml,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get author => $composableBuilder(
+    column: $table.author,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get imageUrl => $composableBuilder(
+    column: $table.imageUrl,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get sourceTitle => $composableBuilder(
+    column: $table.sourceTitle,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<String> get language => $composableBuilder(
+    column: $table.language,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get accentDark => $composableBuilder(
+    column: $table.accentDark,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<int> get accentLight => $composableBuilder(
+    column: $table.accentLight,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get publishedAt => $composableBuilder(
+    column: $table.publishedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+
+  ColumnOrderings<DateTime> get savedAt => $composableBuilder(
+    column: $table.savedAt,
+    builder: (column) => ColumnOrderings(column),
+  );
+}
+
+class $$BookmarksTableAnnotationComposer
+    extends Composer<_$HsDatabase, $BookmarksTable> {
+  $$BookmarksTableAnnotationComposer({
+    required super.$db,
+    required super.$table,
+    super.joinBuilder,
+    super.$addJoinBuilderToRootComposer,
+    super.$removeJoinBuilderFromRootComposer,
+  });
+  GeneratedColumn<int> get id =>
+      $composableBuilder(column: $table.id, builder: (column) => column);
+
+  GeneratedColumn<int> get articleId =>
+      $composableBuilder(column: $table.articleId, builder: (column) => column);
+
+  GeneratedColumn<String> get link =>
+      $composableBuilder(column: $table.link, builder: (column) => column);
+
+  GeneratedColumn<String> get canonicalUrl => $composableBuilder(
+    column: $table.canonicalUrl,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get title =>
+      $composableBuilder(column: $table.title, builder: (column) => column);
+
+  GeneratedColumn<String> get summary =>
+      $composableBuilder(column: $table.summary, builder: (column) => column);
+
+  GeneratedColumn<String> get contentHtml => $composableBuilder(
+    column: $table.contentHtml,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get author =>
+      $composableBuilder(column: $table.author, builder: (column) => column);
+
+  GeneratedColumn<String> get imageUrl =>
+      $composableBuilder(column: $table.imageUrl, builder: (column) => column);
+
+  GeneratedColumn<String> get sourceTitle => $composableBuilder(
+    column: $table.sourceTitle,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<String> get language =>
+      $composableBuilder(column: $table.language, builder: (column) => column);
+
+  GeneratedColumn<int> get accentDark => $composableBuilder(
+    column: $table.accentDark,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<int> get accentLight => $composableBuilder(
+    column: $table.accentLight,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get publishedAt => $composableBuilder(
+    column: $table.publishedAt,
+    builder: (column) => column,
+  );
+
+  GeneratedColumn<DateTime> get savedAt =>
+      $composableBuilder(column: $table.savedAt, builder: (column) => column);
+}
+
+class $$BookmarksTableTableManager
+    extends
+        RootTableManager<
+          _$HsDatabase,
+          $BookmarksTable,
+          BookmarkRow,
+          $$BookmarksTableFilterComposer,
+          $$BookmarksTableOrderingComposer,
+          $$BookmarksTableAnnotationComposer,
+          $$BookmarksTableCreateCompanionBuilder,
+          $$BookmarksTableUpdateCompanionBuilder,
+          (
+            BookmarkRow,
+            BaseReferences<_$HsDatabase, $BookmarksTable, BookmarkRow>,
+          ),
+          BookmarkRow,
+          PrefetchHooks Function()
+        > {
+  $$BookmarksTableTableManager(_$HsDatabase db, $BookmarksTable table)
+    : super(
+        TableManagerState(
+          db: db,
+          table: table,
+          createFilteringComposer: () =>
+              $$BookmarksTableFilterComposer($db: db, $table: table),
+          createOrderingComposer: () =>
+              $$BookmarksTableOrderingComposer($db: db, $table: table),
+          createComputedFieldComposer: () =>
+              $$BookmarksTableAnnotationComposer($db: db, $table: table),
+          updateCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int?> articleId = const Value.absent(),
+                Value<String> link = const Value.absent(),
+                Value<String> canonicalUrl = const Value.absent(),
+                Value<String> title = const Value.absent(),
+                Value<String?> summary = const Value.absent(),
+                Value<String?> contentHtml = const Value.absent(),
+                Value<String?> author = const Value.absent(),
+                Value<String?> imageUrl = const Value.absent(),
+                Value<String> sourceTitle = const Value.absent(),
+                Value<String> language = const Value.absent(),
+                Value<int> accentDark = const Value.absent(),
+                Value<int> accentLight = const Value.absent(),
+                Value<DateTime> publishedAt = const Value.absent(),
+                Value<DateTime> savedAt = const Value.absent(),
+              }) => BookmarksCompanion(
+                id: id,
+                articleId: articleId,
+                link: link,
+                canonicalUrl: canonicalUrl,
+                title: title,
+                summary: summary,
+                contentHtml: contentHtml,
+                author: author,
+                imageUrl: imageUrl,
+                sourceTitle: sourceTitle,
+                language: language,
+                accentDark: accentDark,
+                accentLight: accentLight,
+                publishedAt: publishedAt,
+                savedAt: savedAt,
+              ),
+          createCompanionCallback:
+              ({
+                Value<int> id = const Value.absent(),
+                Value<int?> articleId = const Value.absent(),
+                required String link,
+                Value<String> canonicalUrl = const Value.absent(),
+                required String title,
+                Value<String?> summary = const Value.absent(),
+                Value<String?> contentHtml = const Value.absent(),
+                Value<String?> author = const Value.absent(),
+                Value<String?> imageUrl = const Value.absent(),
+                required String sourceTitle,
+                Value<String> language = const Value.absent(),
+                required int accentDark,
+                required int accentLight,
+                required DateTime publishedAt,
+                Value<DateTime> savedAt = const Value.absent(),
+              }) => BookmarksCompanion.insert(
+                id: id,
+                articleId: articleId,
+                link: link,
+                canonicalUrl: canonicalUrl,
+                title: title,
+                summary: summary,
+                contentHtml: contentHtml,
+                author: author,
+                imageUrl: imageUrl,
+                sourceTitle: sourceTitle,
+                language: language,
+                accentDark: accentDark,
+                accentLight: accentLight,
+                publishedAt: publishedAt,
+                savedAt: savedAt,
+              ),
+          withReferenceMapper: (p0) => p0
+              .map(
+                (e) => (
+                  e.readTable<$BookmarksTable, BookmarkRow>(table),
+                  BaseReferences<_$HsDatabase, $BookmarksTable, BookmarkRow>(
+                    db,
+                    table,
+                    e,
+                  ),
+                ),
+              )
+              .toList(),
+          prefetchHooksCallback: null,
+        ),
+      );
+}
+
+typedef $$BookmarksTableProcessedTableManager =
+    ProcessedTableManager<
+      _$HsDatabase,
+      $BookmarksTable,
+      BookmarkRow,
+      $$BookmarksTableFilterComposer,
+      $$BookmarksTableOrderingComposer,
+      $$BookmarksTableAnnotationComposer,
+      $$BookmarksTableCreateCompanionBuilder,
+      $$BookmarksTableUpdateCompanionBuilder,
+      (BookmarkRow, BaseReferences<_$HsDatabase, $BookmarksTable, BookmarkRow>),
+      BookmarkRow,
+      PrefetchHooks Function()
+    >;
 
 class $HsDatabaseManager {
   final _$HsDatabase _db;
@@ -4032,4 +5366,6 @@ class $HsDatabaseManager {
       $$ReadEventsTableTableManager(_db, _db.readEvents);
   $$CaughtUpDaysTableTableManager get caughtUpDays =>
       $$CaughtUpDaysTableTableManager(_db, _db.caughtUpDays);
+  $$BookmarksTableTableManager get bookmarks =>
+      $$BookmarksTableTableManager(_db, _db.bookmarks);
 }

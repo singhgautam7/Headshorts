@@ -126,6 +126,22 @@ ThemeData buildHsTheme(HsPalette p) {
       ),
       menuPadding: const EdgeInsets.all(HsSpace.x2),
     ),
+    // A long press names an icon-only control. Dressed here so it is the
+    // same object wherever one appears, like the overflow menu.
+    tooltipTheme: TooltipThemeData(
+      decoration: BoxDecoration(
+        color: p.surfaceVariant,
+        borderRadius: HsRadius.buttonBorder,
+        border: Border.all(color: p.stroke),
+      ),
+      padding: const EdgeInsets.symmetric(
+        horizontal: HsSpace.x3,
+        vertical: HsSpace.x2,
+      ),
+      margin: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
+      textStyle: HsType.rowSub.copyWith(color: p.textPrimary),
+      waitDuration: const Duration(milliseconds: 400),
+    ),
     textSelectionTheme: TextSelectionThemeData(
       cursorColor: p.primary,
       selectionColor: p.primaryContainer,

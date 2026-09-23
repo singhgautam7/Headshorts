@@ -63,6 +63,55 @@ enum TextSizeStep {
   };
 }
 
+/// How much of each item a list shows.
+///
+/// One setting, read by Headlines, Search and Bookmarks alike: a reader who
+/// asks for Small has asked for Small everywhere. The button that changes it
+/// lives only on Headlines.
+enum ListSize {
+  /// The v1 card, unchanged: standfirst and image, about three a screen.
+  large,
+
+  /// Headline and thumbnail, clamped to three lines. About seven.
+  medium,
+
+  /// Headline only, two lines, the source run in at the start. Twelve or more.
+  small;
+
+  String get label => switch (this) {
+    ListSize.large => 'Large',
+    ListSize.medium => 'Medium',
+    ListSize.small => 'Small',
+  };
+
+  String get description => switch (this) {
+    ListSize.large => 'Standfirst and image · about 3 a screen',
+    ListSize.medium => 'Headline and thumbnail · about 7',
+    ListSize.small => 'Headline only · 12 or more',
+  };
+}
+
+/// Read-aloud speed. The board's five steps, not a slider: a rate is a thing
+/// you pick once, and five values do not need continuous control.
+enum SpeechRate {
+  slowest(0.8),
+  slow(1),
+  medium(1.2),
+  fast(1.5),
+  fastest(2);
+
+  new(this.multiplier);
+
+  /// Relative to the engine's own normal rate.
+  final double multiplier;
+
+  String get label =>
+      '${multiplier == multiplier.roundToDouble() ? multiplier.toStringAsFixed(1) : multiplier}×';
+
+  /// Spoken in full, because "1.2 ×" is not a phrase.
+  String get spokenLabel => '$multiplier times';
+}
+
 /// Everything the reader has chosen, in one immutable value.
 @immutable
 class Settings {
@@ -76,6 +125,10 @@ class Settings {
     this.linkOpenMode = LinkOpenMode.inApp,
     this.refreshCadence = RefreshCadence.hourly,
     this.maxConsecutivePerSource = 0,
+    this.listSize = ListSize.large,
+    this.speechRate = SpeechRate.slow,
+    this.highlightWords = true,
+    this.voiceByLanguage = const {},
   });
 
   /// Which [ThemeFamily] is in force; unknown ids fall back to the board's.
@@ -102,6 +155,19 @@ class Settings {
   /// source is simply moved down a place.
   final int maxConsecutivePerSource;
 
+  /// Shared by Headlines, Search and Bookmarks.
+  final ListSize listSize;
+
+  final SpeechRate speechRate;
+
+  /// Following along as it reads. Never the only cue to position — the
+  /// progress bar and the time are — so it can simply be switched off.
+  final bool highlightWords;
+
+  /// The chosen voice per language tag, by the engine's own voice name. Per
+  /// language, because a voice picked for English says nothing about Hindi.
+  final Map<String, String> voiceByLanguage;
+
   Settings copyWith({
     String? familyId,
     ThemeMode? themeMode,
@@ -112,6 +178,10 @@ class Settings {
     LinkOpenMode? linkOpenMode,
     RefreshCadence? refreshCadence,
     int? maxConsecutivePerSource,
+    ListSize? listSize,
+    SpeechRate? speechRate,
+    bool? highlightWords,
+    Map<String, String>? voiceByLanguage,
   }) => Settings(
     familyId: familyId ?? this.familyId,
     themeMode: themeMode ?? this.themeMode,
@@ -123,6 +193,10 @@ class Settings {
     refreshCadence: refreshCadence ?? this.refreshCadence,
     maxConsecutivePerSource:
         maxConsecutivePerSource ?? this.maxConsecutivePerSource,
+    listSize: listSize ?? this.listSize,
+    speechRate: speechRate ?? this.speechRate,
+    highlightWords: highlightWords ?? this.highlightWords,
+    voiceByLanguage: voiceByLanguage ?? this.voiceByLanguage,
   );
 }
 
@@ -145,6 +219,10 @@ class SettingsStore {
   static const _maxRun = 'maxConsecutivePerSource';
   static const _linkMode = 'linkOpenMode';
   static const _cadence = 'refreshCadence';
+  static const _listSize = 'listSize';
+  static const _speechRate = 'speechRate';
+  static const _highlight = 'highlightWords';
+  static const _voices = 'voiceByLanguage';
 
   Settings read() {
     const fallback = Settings();
@@ -171,6 +249,22 @@ class SettingsStore {
           fallback.refreshCadence,
       maxConsecutivePerSource:
           _prefs.getInt(_maxRun) ?? fallback.maxConsecutivePerSource,
+      listSize:
+          ListSize.values.asNameMap()[_prefs.getString(_listSize)] ??
+          fallback.listSize,
+      speechRate:
+          SpeechRate.values.asNameMap()[_prefs.getString(_speechRate)] ??
+          fallback.speechRate,
+      highlightWords: _prefs.getBool(_highlight) ?? fallback.highlightWords,
+      // A flat "tag=voice" list rather than JSON: nothing else in the app
+      // speaks JSON, and a map of a dozen entries does not start now.
+      voiceByLanguage: {
+        for (final pair in _prefs.getStringList(_voices) ?? const <String>[])
+          if (pair.indexOf('=') > 0)
+            pair.substring(0, pair.indexOf('=')): pair.substring(
+              pair.indexOf('=') + 1,
+            ),
+      },
     );
   }
 
@@ -184,5 +278,12 @@ class SettingsStore {
     await _prefs.setInt(_maxRun, s.maxConsecutivePerSource);
     await _prefs.setString(_linkMode, s.linkOpenMode.name);
     await _prefs.setString(_cadence, s.refreshCadence.name);
+    await _prefs.setString(_listSize, s.listSize.name);
+    await _prefs.setString(_speechRate, s.speechRate.name);
+    await _prefs.setBool(_highlight, s.highlightWords);
+    await _prefs.setStringList(_voices, [
+      for (final entry in s.voiceByLanguage.entries)
+        '${entry.key}=${entry.value}',
+    ]);
   }
 }

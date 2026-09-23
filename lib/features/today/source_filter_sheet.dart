@@ -4,6 +4,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/util/language.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/sheet.dart';
 import 'package:headshorts/data/db/database.dart';
@@ -26,12 +27,17 @@ class _SourceFilterSheet extends ConsumerStatefulWidget {
 
 class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
   late String _draftCategory = ref.read(activeCategoryProvider);
+  late String? _draftLanguage = ref.read(briefingLanguageProvider);
   late final Set<int> _draftMuted = {...ref.read(mutedSourcesProvider)};
 
+  /// Language narrows the list rather than greying it out: with English
+  /// chosen, the two Hindi sources drop out of the chips altogether, because
+  /// a chip you cannot usefully turn on is noise.
   List<SourceRow> _inScope(List<SourceRow> sources) => sources
       .where(
         (s) =>
             s.enabled &&
+            (_draftLanguage == null || s.language == _draftLanguage) &&
             (_draftCategory == latestScope
                 ? !s.mutedInLatest
                 : s.category == _draftCategory),
@@ -60,6 +66,7 @@ class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
     final categories =
         ref.watch(categoriesProvider).value ?? const [latestScope];
     final sources = ref.watch(sourcesProvider).value ?? const [];
+    final languages = ref.watch(briefingLanguagesProvider);
     final scope = _inScope(sources);
     final visibleCount = scope.where((s) => !_draftMuted.contains(s.id)).length;
 
@@ -68,6 +75,28 @@ class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
       subtitle:
           'Narrows this briefing. It does not change what you subscribe to.',
       children: [
+        if (languages.length > 1) ...[
+          const SectionLabel('Language'),
+          const SizedBox(height: HsSpace.x3),
+          Wrap(
+            spacing: HsSpace.x2,
+            runSpacing: HsSpace.x2,
+            children: [
+              HsChip(
+                'All',
+                selected: _draftLanguage == null,
+                onTap: () => setState(() => _draftLanguage = null),
+              ),
+              for (final tag in languages)
+                HsChip(
+                  HsLanguage.of(tag).endonym,
+                  selected: _draftLanguage == tag,
+                  onTap: () => setState(() => _draftLanguage = tag),
+                ),
+            ],
+          ),
+          const SizedBox(height: 26),
+        ],
         const SectionLabel('Category'),
         const SizedBox(height: HsSpace.x3),
         Wrap(
@@ -103,7 +132,7 @@ class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
             transitionBuilder: (child, animation) =>
                 FadeTransition(opacity: animation, child: child),
             child: KeyedSubtree(
-              key: ValueKey(_draftCategory),
+              key: ValueKey('$_draftCategory/$_draftLanguage'),
               child: scope.isEmpty
                   ? Text(
                       'Nothing is subscribed under this category.',
@@ -138,14 +167,19 @@ class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
                 'Clear filter',
                 onPressed:
                     _draftCategory == latestScope &&
+                        _draftLanguage == null &&
                         _draftMuted.isEmpty &&
                         ref.read(activeCategoryProvider) == latestScope &&
+                        ref.read(briefingLanguageProvider) == null &&
                         ref.read(mutedSourcesProvider).isEmpty
                     ? null
                     : () {
                         ref
                             .read(selectedCategoryProvider.notifier)
                             .select(latestScope);
+                        ref
+                            .read(briefingLanguageProvider.notifier)
+                            .select(null);
                         ref.read(mutedSourcesProvider.notifier).showAll();
                         Navigator.of(context).pop();
                       },
@@ -162,6 +196,9 @@ class _SourceFilterSheetState extends ConsumerState<_SourceFilterSheet> {
                         .read(selectedCategoryProvider.notifier)
                         .select(_draftCategory);
                   }
+                  ref
+                      .read(briefingLanguageProvider.notifier)
+                      .select(_draftLanguage);
                   ref.read(mutedSourcesProvider.notifier).setMuted(_draftMuted);
                   Navigator.of(context).pop();
                 },

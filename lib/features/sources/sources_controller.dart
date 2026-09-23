@@ -22,6 +22,7 @@ class SourceEntry {
     required this.feedUrl,
     required this.category,
     required this.accent,
+    this.language = 'en',
     this.siteUrl,
     this.subscription,
     this.unseen = 0,
@@ -31,6 +32,9 @@ class SourceEntry {
   final String feedUrl;
   final String category;
   final SourceAccent accent;
+
+  /// BCP-47, from the catalog file or from the subscription.
+  final String language;
   final String? siteUrl;
 
   /// The row in `sources`, when the reader has subscribed. Null means this is
@@ -70,27 +74,42 @@ final sourcesQueryProvider = NotifierProvider<SourcesQuery, String>(
   SourcesQuery.new,
 );
 
-/// The catalog and the reader's subscriptions, merged and grouped.
+/// Which language the Sources catalog is narrowed to, or null for all of
+/// them. A view filter on a list, exactly like the category tabs: nothing
+/// here subscribes, pauses or fetches anything.
+class SourcesLanguage extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  // A setter would read as assigning `state` from outside the notifier.
+  // ignore: use_setters_to_change_properties
+  void select(String? language) => state = language;
+}
+
+final sourcesLanguageProvider = NotifierProvider<SourcesLanguage, String?>(
+  SourcesLanguage.new,
+);
+
+/// The catalog and the reader's subscriptions as one flat list.
 ///
-/// A source the reader added by URL is not in the catalog, so it is appended
-/// to its category; a catalog source they subscribed to shows its live state
-/// rather than appearing twice.
-final manageableSourcesProvider = Provider<Map<String, List<SourceEntry>>>((
-  ref,
-) {
+/// A source the reader added by URL is not in the catalog, so it is appended;
+/// a catalog source they subscribed to carries its live state rather than
+/// appearing twice. Search's scope sheet and the Sources screen both read
+/// this, so "every source there is" has one definition.
+final allSourceEntriesProvider = Provider<List<SourceEntry>>((ref) {
   final catalog = ref.watch(sourceCatalogProvider).value ?? SourceCatalog.empty;
   final subscribed = ref.watch(sourcesProvider).value ?? const [];
   final unseen = ref.watch(unseenBySourceProvider).value ?? const {};
-  final query = ref.watch(sourcesQueryProvider);
 
   final byFeed = {for (final row in subscribed) row.feedUrl: row};
-  final entries = <SourceEntry>[
+  return [
     for (final source in catalog.sources)
       SourceEntry(
         title: source.title,
         feedUrl: source.feedUrl,
         category: byFeed[source.feedUrl]?.category ?? source.category,
         accent: byFeed[source.feedUrl]?.accent ?? source.accent,
+        language: byFeed[source.feedUrl]?.language ?? source.language,
         siteUrl: source.siteUrl,
         subscription: byFeed[source.feedUrl],
         unseen: unseen[byFeed[source.feedUrl]?.id] ?? 0,
@@ -104,11 +123,37 @@ final manageableSourcesProvider = Provider<Map<String, List<SourceEntry>>>((
           feedUrl: row.feedUrl,
           category: row.category,
           accent: row.accent,
+          language: row.language,
           siteUrl: row.siteUrl,
           subscription: row,
           unseen: unseen[row.id] ?? 0,
         ),
   ];
+});
+
+/// The languages the catalog and the reader's own additions carry between
+/// them, English first and the rest in catalog order.
+///
+/// The control hides itself when this has one entry: a filter with a single
+/// option is furniture.
+final sourceLanguagesProvider = Provider<List<String>>((ref) {
+  final tags = ref.watch(allSourceEntriesProvider).map((e) => e.language);
+  return [
+    if (tags.contains('en')) 'en',
+    ...{...tags}..remove('en'),
+  ];
+});
+
+/// The flat list, narrowed by the language filter and the query, grouped by
+/// category for display.
+final manageableSourcesProvider = Provider<Map<String, List<SourceEntry>>>((
+  ref,
+) {
+  final language = ref.watch(sourcesLanguageProvider);
+  final entries = ref
+      .watch(allSourceEntriesProvider)
+      .where((e) => language == null || e.language == language);
+  final query = ref.watch(sourcesQueryProvider);
 
   final terms = query
       .toLowerCase()
@@ -147,6 +192,7 @@ Future<void> setSourceOn(
       feedUrl: entry.feedUrl,
       siteUrl: entry.siteUrl,
       category: entry.category,
+      language: entry.language,
       accent: entry.accent,
     );
   } else {

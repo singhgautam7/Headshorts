@@ -10,17 +10,14 @@ import 'package:headshorts/data/sources/source_adapter.dart';
 // Helpers
 // ---------------------------------------------------------------------------
 
-ParsedArticle _article(
-  String guid, {
-  DateTime? at,
-  String? author,
-}) => ParsedArticle(
-  guid: guid,
-  title: 'Headline $guid',
-  link: 'https://example.com/$guid',
-  publishedAt: at ?? DateTime.now(),
-  author: author,
-);
+ParsedArticle _article(String guid, {DateTime? at, String? author}) =>
+    ParsedArticle(
+      guid: guid,
+      title: 'Headline $guid',
+      link: 'https://example.com/$guid',
+      publishedAt: at ?? DateTime.now(),
+      author: author,
+    );
 
 DateTime _daysAgo(int days) => DateTime.now().subtract(Duration(days: days));
 
@@ -67,67 +64,72 @@ void main() {
         category: 'World',
       );
 
-      final count = await articles.upsert(
-        id,
-        [_article('stale', at: _daysAgo(91))],
-      );
+      final count = await articles.upsert(id, [
+        _article('stale', at: _daysAgo(91)),
+      ]);
 
       expect(count, 0);
       expect(await db.select(db.articles).get(), isEmpty);
     });
 
-    test('keeps an article published 89 days ago (well within the window)',
-        () async {
-      final id = await sources.add(
-        title: 'Reuters',
-        feedUrl: 'https://example.com/reuters',
-        category: 'World',
-      );
+    test(
+      'keeps an article published 89 days ago (well within the window)',
+      () async {
+        final id = await sources.add(
+          title: 'Reuters',
+          feedUrl: 'https://example.com/reuters',
+          category: 'World',
+        );
 
-      final count = await articles.upsert(
-        id,
-        [_article('near-boundary', at: _daysAgo(89))],
-      );
+        final count = await articles.upsert(id, [
+          _article('near-boundary', at: _daysAgo(89)),
+        ]);
 
-      expect(count, 1);
-    });
+        expect(count, 1);
+      },
+    );
 
-    test('filters stale items but still inserts fresh ones in the same batch',
-        () async {
-      final id = await sources.add(
-        title: 'Reuters',
-        feedUrl: 'https://example.com/reuters',
-        category: 'World',
-      );
+    test(
+      'filters stale items but still inserts fresh ones in the same batch',
+      () async {
+        final id = await sources.add(
+          title: 'Reuters',
+          feedUrl: 'https://example.com/reuters',
+          category: 'World',
+        );
 
-      final count = await articles.upsert(id, [
-        _article('old', at: _daysAgo(95)),
-        _article('new1'),
-        _article('new2'),
-      ]);
+        final count = await articles.upsert(id, [
+          _article('old', at: _daysAgo(95)),
+          _article('new1'),
+          _article('new2'),
+        ]);
 
-      expect(count, 2);
-      final guids = (await db.select(db.articles).get()).map((a) => a.guid);
-      expect(guids, containsAll(['new1', 'new2']));
-      expect(guids, isNot(contains('old')));
-    });
+        expect(count, 2);
+        final guids = (await db.select(db.articles).get()).map((a) => a.guid);
+        expect(guids, containsAll(['new1', 'new2']));
+        expect(guids, isNot(contains('old')));
+      },
+    );
 
-    test('updates author on existing row when feed later provides it', () async {
-      final id = await sources.add(
-        title: 'Reuters',
-        feedUrl: 'https://example.com/reuters',
-        category: 'World',
-      );
+    test(
+      'updates author on existing row when feed later provides it',
+      () async {
+        final id = await sources.add(
+          title: 'Reuters',
+          feedUrl: 'https://example.com/reuters',
+          category: 'World',
+        );
 
-      // First upsert: no author.
-      await articles.upsert(id, [_article('a', author: null)]);
+        // First upsert: no author.
+        await articles.upsert(id, [_article('a')]);
 
-      // Second upsert: author is now known.
-      await articles.upsert(id, [_article('a', author: 'Jane Smith')]);
+        // Second upsert: author is now known.
+        await articles.upsert(id, [_article('a', author: 'Jane Smith')]);
 
-      final stored = (await db.select(db.articles).get()).single;
-      expect(stored.author, 'Jane Smith');
-    });
+        final stored = (await db.select(db.articles).get()).single;
+        expect(stored.author, 'Jane Smith');
+      },
+    );
 
     test('does not erase a prior author when the update has none', () async {
       final id = await sources.add(
@@ -137,7 +139,7 @@ void main() {
       );
 
       await articles.upsert(id, [_article('a', author: 'Jane Smith')]);
-      await articles.upsert(id, [_article('a', author: null)]);
+      await articles.upsert(id, [_article('a')]);
 
       final stored = (await db.select(db.articles).get()).single;
       expect(stored.author, 'Jane Smith');
@@ -162,33 +164,37 @@ void main() {
       expect(briefing.map((h) => h.article.guid), contains('recent'));
     });
 
-    test('articles inserted directly at 91 days are excluded from briefing',
-        () async {
-      final id = await sources.add(
-        title: 'BBC',
-        feedUrl: 'https://example.com/bbc',
-        category: 'World',
-      );
+    test(
+      'articles inserted directly at 91 days are excluded from briefing',
+      () async {
+        final id = await sources.add(
+          title: 'BBC',
+          feedUrl: 'https://example.com/bbc',
+          category: 'World',
+        );
 
-      // Insert directly into the DB, bypassing the upsert freshness gate, to
-      // simulate a row that aged past the window after being stored.
-      await db.into(db.articles).insert(
-        ArticlesCompanion.insert(
-          sourceId: id,
-          guid: 'old-article',
-          title: 'Old Article',
-          link: 'https://example.com/old',
-          publishedAt: _daysAgo(91),
-        ),
-      );
-      await articles.upsert(id, [_article('new-article')]);
+        // Insert directly into the DB, bypassing the upsert freshness gate, to
+        // simulate a row that aged past the window after being stored.
+        await db
+            .into(db.articles)
+            .insert(
+              ArticlesCompanion.insert(
+                sourceId: id,
+                guid: 'old-article',
+                title: 'Old Article',
+                link: 'https://example.com/old',
+                publishedAt: _daysAgo(91),
+              ),
+            );
+        await articles.upsert(id, [_article('new-article')]);
 
-      final briefing = await articles.watchBriefing().first;
-      final guids = briefing.map((h) => h.article.guid);
+        final briefing = await articles.watchBriefing().first;
+        final guids = briefing.map((h) => h.article.guid);
 
-      expect(guids, contains('new-article'));
-      expect(guids, isNot(contains('old-article')));
-    });
+        expect(guids, contains('new-article'));
+        expect(guids, isNot(contains('old-article')));
+      },
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -209,32 +215,36 @@ void main() {
       expect(queue.map((h) => h.article.guid), contains('new'));
     });
 
-    test('articles aged past the window are excluded from the Linger queue',
-        () async {
-      final id = await sources.add(
-        title: 'Ars Technica',
-        feedUrl: 'https://example.com/ars',
-        category: 'Technology',
-      );
+    test(
+      'articles aged past the window are excluded from the Linger queue',
+      () async {
+        final id = await sources.add(
+          title: 'Ars Technica',
+          feedUrl: 'https://example.com/ars',
+          category: 'Technology',
+        );
 
-      // Insert a stale article directly, bypassing the upsert gate.
-      await db.into(db.articles).insert(
-        ArticlesCompanion.insert(
-          sourceId: id,
-          guid: 'stale',
-          title: 'Old Story',
-          link: 'https://example.com/stale',
-          publishedAt: _daysAgo(100),
-        ),
-      );
-      await articles.upsert(id, [_article('fresh')]);
+        // Insert a stale article directly, bypassing the upsert gate.
+        await db
+            .into(db.articles)
+            .insert(
+              ArticlesCompanion.insert(
+                sourceId: id,
+                guid: 'stale',
+                title: 'Old Story',
+                link: 'https://example.com/stale',
+                publishedAt: _daysAgo(100),
+              ),
+            );
+        await articles.upsert(id, [_article('fresh')]);
 
-      final queue = await articles.buildLingerQueue();
-      final guids = queue.map((h) => h.article.guid);
+        final queue = await articles.buildLingerQueue();
+        final guids = queue.map((h) => h.article.guid);
 
-      expect(guids, contains('fresh'));
-      expect(guids, isNot(contains('stale')));
-    });
+        expect(guids, contains('fresh'));
+        expect(guids, isNot(contains('stale')));
+      },
+    );
   });
 
   // -------------------------------------------------------------------------
@@ -250,24 +260,28 @@ void main() {
       );
 
       // Insert both articles directly to bypass the upsert freshness gate.
-      await db.into(db.articles).insert(
-        ArticlesCompanion.insert(
-          sourceId: id,
-          guid: 'old',
-          title: 'Old',
-          link: 'https://example.com/old',
-          publishedAt: _daysAgo(95),
-        ),
-      );
-      await db.into(db.articles).insert(
-        ArticlesCompanion.insert(
-          sourceId: id,
-          guid: 'fresh',
-          title: 'Fresh',
-          link: 'https://example.com/fresh',
-          publishedAt: DateTime.now(),
-        ),
-      );
+      await db
+          .into(db.articles)
+          .insert(
+            ArticlesCompanion.insert(
+              sourceId: id,
+              guid: 'old',
+              title: 'Old',
+              link: 'https://example.com/old',
+              publishedAt: _daysAgo(95),
+            ),
+          );
+      await db
+          .into(db.articles)
+          .insert(
+            ArticlesCompanion.insert(
+              sourceId: id,
+              guid: 'fresh',
+              title: 'Fresh',
+              link: 'https://example.com/fresh',
+              publishedAt: DateTime.now(),
+            ),
+          );
 
       expect(await db.select(db.articles).get(), hasLength(2));
 
@@ -287,15 +301,17 @@ void main() {
 
       // Insert 5 fresh articles directly.
       for (var i = 0; i < 5; i++) {
-        await db.into(db.articles).insert(
-          ArticlesCompanion.insert(
-            sourceId: id,
-            guid: 'article-$i',
-            title: 'Article $i',
-            link: 'https://example.com/article-$i',
-            publishedAt: DateTime.now().subtract(Duration(hours: i)),
-          ),
-        );
+        await db
+            .into(db.articles)
+            .insert(
+              ArticlesCompanion.insert(
+                sourceId: id,
+                guid: 'article-$i',
+                title: 'Article $i',
+                link: 'https://example.com/article-$i',
+                publishedAt: DateTime.now().subtract(Duration(hours: i)),
+              ),
+            );
       }
 
       await db.pruneToRetention(keep: 3);
@@ -309,10 +325,10 @@ void main() {
   // -------------------------------------------------------------------------
 
   group('FeedParser author parsing', () {
-    ParsedArticle _parse(String feedXml) => FeedParser.parse(feedXml).first;
+    ParsedArticle parse(String feedXml) => FeedParser.parse(feedXml).first;
 
     test('extracts a clean author from RSS2 dc:creator field', () {
-      final xml = '''
+      const xml = '''
 <rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel><title>T</title>
     <item>
@@ -323,11 +339,11 @@ void main() {
     </item>
   </channel>
 </rss>''';
-      expect(_parse(xml).author, 'John Doe');
+      expect(parse(xml).author, 'John Doe');
     });
 
     test('prefers dc:creator over <author> in RSS2', () {
-      final xml = '''
+      const xml = '''
 <rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel><title>T</title>
     <item>
@@ -339,11 +355,11 @@ void main() {
     </item>
   </channel>
 </rss>''';
-      expect(_parse(xml).author, 'Jane Smith');
+      expect(parse(xml).author, 'Jane Smith');
     });
 
     test('strips "email (Name)" format and returns just the name', () {
-      final xml = '''
+      const xml = '''
 <rss version="2.0">
   <channel><title>T</title>
     <item>
@@ -354,11 +370,11 @@ void main() {
     </item>
   </channel>
 </rss>''';
-      expect(_parse(xml).author, 'John Doe');
+      expect(parse(xml).author, 'John Doe');
     });
 
     test('strips leading "By " prefix (case-insensitive)', () {
-      final xml = '''
+      const xml = '''
 <rss version="2.0" xmlns:dc="http://purl.org/dc/elements/1.1/">
   <channel><title>T</title>
     <item>
@@ -369,11 +385,11 @@ void main() {
     </item>
   </channel>
 </rss>''';
-      expect(_parse(xml).author, 'Jane Smith');
+      expect(parse(xml).author, 'Jane Smith');
     });
 
     test('returns null when author field is absent', () {
-      final xml = '''
+      const xml = '''
 <rss version="2.0">
   <channel><title>T</title>
     <item>
@@ -383,11 +399,11 @@ void main() {
     </item>
   </channel>
 </rss>''';
-      expect(_parse(xml).author, isNull);
+      expect(parse(xml).author, isNull);
     });
 
     test('extracts author from Atom feed author name', () {
-      final xml = '''
+      const xml = '''
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>T</title>
   <entry>
@@ -398,11 +414,11 @@ void main() {
     <author><name>Alice Wonderland</name></author>
   </entry>
 </feed>''';
-      expect(_parse(xml).author, 'Alice Wonderland');
+      expect(parse(xml).author, 'Alice Wonderland');
     });
 
     test('falls back to Atom author email when name is absent', () {
-      final xml = '''
+      const xml = '''
 <feed xmlns="http://www.w3.org/2005/Atom">
   <title>T</title>
   <entry>
@@ -413,7 +429,7 @@ void main() {
     <author><email>alice@example.com</email></author>
   </entry>
 </feed>''';
-      expect(_parse(xml).author, 'alice@example.com');
+      expect(parse(xml).author, 'alice@example.com');
     });
   });
 }

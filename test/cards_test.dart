@@ -17,6 +17,7 @@ SourceRow _source() => SourceRow(
   title: 'BBC News',
   feedUrl: 'https://example.com/rss',
   category: 'World',
+  language: 'en',
   accentDark: _accent.darkValue,
   accentLight: _accent.lightValue,
   type: SourceType.rss,
@@ -57,7 +58,10 @@ void main() {
     testWidgets('shows source, headline, summary and a relative timestamp', (
       tester,
     ) async {
-      await pumpThemed(tester, HeadlineCard(_headline(), onTap: () {}));
+      await pumpThemed(
+        tester,
+        HeadlineCard(ArticleView.fromHeadline(_headline()), onTap: () {}),
+      );
 
       expect(find.text('BBC NEWS'), findsOneWidget);
       expect(find.textContaining('tap-in fare cap'), findsOneWidget);
@@ -70,7 +74,10 @@ void main() {
     ) async {
       await pumpThemed(
         tester,
-        HeadlineCard(_headline(read: true), onTap: () {}),
+        HeadlineCard(
+          ArticleView.fromHeadline(_headline(read: true)),
+          onTap: () {},
+        ),
       );
 
       final opacity = tester.widget<Opacity>(
@@ -91,7 +98,11 @@ void main() {
     ) async {
       await pumpThemed(
         tester,
-        HeadlineCard(_headline(), onTap: () {}, offline: true),
+        HeadlineCard(
+          ArticleView.fromHeadline(_headline()),
+          onTap: () {},
+          offline: true,
+        ),
       );
 
       expect(find.text('cached · 5 hours ago'), findsOneWidget);
@@ -103,7 +114,9 @@ void main() {
       await pumpThemed(
         tester,
         HeadlineCard(
-          _headline(imageUrl: 'https://example.com/x.jpg'),
+          ArticleView.fromHeadline(
+            _headline(imageUrl: 'https://example.com/x.jpg'),
+          ),
           onTap: () {},
         ),
       );
@@ -116,7 +129,10 @@ void main() {
       var opened = 0;
       await pumpThemed(
         tester,
-        HeadlineCard(_headline(), onTap: () => opened++),
+        HeadlineCard(
+          ArticleView.fromHeadline(_headline()),
+          onTap: () => opened++,
+        ),
       );
 
       await tester.tap(find.byType(HeadlineCard));

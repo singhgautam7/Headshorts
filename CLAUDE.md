@@ -21,11 +21,13 @@ components, motion, screen behaviour. If anything in this file appears to
 conflict with the spec, the spec wins.
 
 `specs/` is **gitignored**; the handoff bundle is not committed. The primary
-document is `specs/design/headshorts/project/HeadShorts Design Board.dc.html`
-— a Claude Design handoff, HTML/CSS prototypes rather than production code.
-`HeadShorts Store Assets.dc.html` beside it is the Play listing (feature
-graphic and five screenshots, exported under `project/exports/`). Recreate
-the *visual output*, not the DOM structure.
+documents are `specs/design/headshorts/project/HeadShorts Design Board.dc.html`
+(v1) and `HeadShorts v2 Design Board.dc.html` beside it (Search, languages,
+bookmarks, Listen, list size), with `HS Nav Pill v2.dc.html` as the five-item
+pill — Claude Design handoffs, HTML/CSS prototypes rather than production
+code. `HeadShorts Store Assets.dc.html` is the Play listing (feature graphic
+and five screenshots, exported under `project/exports/`). Recreate the
+*visual output*, not the DOM structure.
 
 **Deviations from the spec, and why** — keep this list current:
 
@@ -43,6 +45,9 @@ the *visual output*, not the DOM structure.
 | Linger on the page ground | Linger on pure black / pure white (`HsPalette.lingerBackground`) | Maximum contrast under the one card being read. The card keeps its designed colour; only the ground behind it changes. |
 | The Reader's text-size card sits inline under the bar, with a plain slider and "Follows the system setting" | A popover over the prose, with a tick at each of the five steps and the step in effect named where the note was | Inline it never went away and the prose reflowed under it; a slider with no marks read as continuous when it only ever had five values. Tap outside or start a scroll and it is gone. |
 | An AI summaries row under More | No row | Nothing to open until the summariser exists; a "Coming soon" screen was one more tap to nowhere. The row returns with the feature. |
+| Bundle a Noto face per Indic script | Devanagari bundled; the rest named as fallbacks | Nine more variable fonts is several megabytes for feeds most readers never take up. Android ships the Noto families, so `fontFamilyFallback` resolves them by name; Devanagari is bundled because it is the catalog's second script and must look designed rather than found. |
+| Listen's unsupported card offers "Speech settings" | One action, "Not now", and the copy names where to go | Opening Android's text-to-speech settings needs a platform intent, and neither `url_launcher` nor anything else already here can raise one. A button that does nothing is worse than a sentence that does. |
+| The v2 no-results screen lists both levers unconditionally | "Search any time" appears only when a range is set | Offering to widen a range that is already "any time" is a control that cannot do anything. |
 
 ---
 
@@ -69,12 +74,14 @@ lib/
     widgets/    nav pill, controls, glyphs, sheet, screen chrome, pull-to-refresh, caught-up
     util/       relative time, open-in-web
   data/
-    db/         drift database, tables, repositories (source / article / stats)
+    db/         drift database, tables, repositories
+                (source / article / bookmark / stats)
     sources/    SourceAdapter + RssSourceAdapter + registry, OPML, starter set
     feed/       http client, feed parser, discovery, refresh pipeline
     readability/on-device article extraction
     prefs/      settings store (shared_preferences)
-  features/     today · linger · reader · sources · more · stats · onboarding
+  features/     search · today · linger · reader · sources · bookmarks ·
+                more · stats · onboarding
                 more/ is the hub; more/settings_screen.dart is one page in it
 ```
 
@@ -136,8 +143,8 @@ the reader's to edit. Nothing else defines it:
 
 ### The bundled catalog
 
-`assets/feeds/starter_feeds.opml` ships ~45 verified feeds across eight
-categories, parsed once per launch into `SourceCatalog`
+`assets/feeds/starter_feeds.opml` ships ~58 verified feeds across nine
+categories and eight languages, parsed once per launch into `SourceCatalog`
 (`sourceCatalogProvider`). It is a **directory to search, not a starting
 state** — nothing in it is subscribed until the reader says so.
 
@@ -148,9 +155,15 @@ state** — nothing in it is subscribed until the reader says so.
 - Accents travel in `hsAccentDark` / `hsAccentLight`, our own OPML extension,
   so the design board's eight survive the round trip byte-for-byte (asserted by
   test). Anyone else's OPML omits them and the app derives a tone instead.
+  `language` is the same kind of extension, and an omitted one reads English.
+- The Indic feeds carry no baked accent: `accentFor` derives a stable tone
+  per feed address, which is the same path anything the reader pastes takes.
 - **Every URL in the file was fetched and checked before shipping.** Eight
-  candidates were dropped for 403/404/empty responses. Re-verify before adding
-  more — a dead feed in the catalog is worse than a short catalog.
+  candidates were dropped for 403/404/empty responses in v1, and more in v2 —
+  Jagran, Navbharat Times, Bhaskar, Aaj Tak, Dinamani, Mathrubhumi and
+  Livehindustan all answer 404, 500 or 503 at the addresses they publish.
+  Re-verify before adding more — a dead feed in the catalog is worse than a
+  short catalog.
 - `search(query)` matches case-insensitively on name *and* category, and every
   whitespace-separated term must match, so a second word narrows. An empty
   query browses everything. `grouped(query)` returns the same results grouped
@@ -165,6 +178,56 @@ there needed a loop: squeezing a colour back into 8-bit sRGB moves it, so one
 pass does not always land inside the band, and a single pass would shift a
 channel on every launch. It iterates to a fixed point instead.
 
+### Search looks through the cache, not the web
+
+Search is the fourth tab, where the board's pill draws it. It is the same
+argument as every other list here:
+finite, date-ordered, and **never ranked**. FTS5 will happily sort by bm25
+relevance; it does not, because a list whose order you cannot predict is a
+list you have to keep checking.
+
+- **The index is SQLite FTS5 in external-content mode** (`articles_fts`, built
+  in `HsDatabase._createSearchIndex`). It stores the terms, not a second copy
+  of the text, and reads the columns back out of `articles` by rowid. Three
+  triggers keep it in step, because an external-content table is not
+  maintained by SQLite on its own — insert, update and delete each have one,
+  and a fresh index over an existing table is told to `rebuild`.
+- **The tokeniser is `unicode61 remove_diacritics 2`.** Without it a whole
+  Devanagari or Tamil headline tokenises as one term and a Hindi search
+  matches nothing. This is not a nicety; it is what makes §2's languages
+  searchable at all.
+- **The query is quoted and starred** (`ftsQuery`): every term becomes
+  `"term"*`, so `heat wav` finds "heatwave warning" while a stray quote,
+  hyphen or the word `AND` is a word rather than syntax that throws. A query
+  of punctuation alone is not a query and returns nothing.
+- **`searchArticleIds` returns ids**, and the join back through `sources` is a
+  normal drift query — nothing downstream has to read prefixed result columns.
+- Results are deduped by the same `dedupeStories` as every other list, and
+  capped at `searchResultLimit` (200). The list ends in a plain count, never
+  a "load more".
+
+**Scope is a lens, exactly like Filter.** `searchScopeProvider` holds feed
+addresses, and **null means "whatever I follow and have switched on"** rather
+than a snapshot of it — a source enabled tomorrow is in scope tomorrow
+without the reader coming back to add it. Adding an unfollowed source
+searches it once: it does not subscribe, does not fetch on a schedule and
+does not appear in the briefing. An **empty** scope finds nothing, because
+saying so beats quietly falling back to everything.
+
+A **paused source is still searchable.** The scope decides what is in, not
+the subscription — the cache still holds what that source published, and
+refusing to look in it would be a second, invisible filter.
+
+**A source with nothing cached is fetched on the spot** (`_searchLive`): one
+request, filtered in memory, **nothing written to the database**. That is the
+honest shape of "search a source I do not follow". It also means the date
+range reaches back exactly as far as that publisher's current feed does and
+no further, which the end of the results says in words — an RSS feed is not
+an archive, and implying one would be a lie the reader only discovers later.
+
+The date range is by **publication** date, never by when an item was fetched:
+a feed that arrives late is still the day's news.
+
 ### Where subscription lives
 
 Everything that changes *what the app fetches* is in Sources or Settings, and
@@ -173,7 +236,9 @@ Linger reflect it without anything being told to reload:
 
 | Screen | Does |
 |---|---|
-| **More** | Grouped rows in Perch's settings dress — General (Appearance, Open links, Text size, Reading fairness, Check for new) · Your data (Stats, Data, Permissions) · About HeadShorts (Privacy, About) — the real version line and "Made with ❤️ in India" at the foot. Every one-of-N row opens `showOptionSheet`; nothing cycles in place |
+| **Search** | The fourth tab. A query over the cache, scoped to the sources the reader picks, in a date range. Two sheets: scope and date |
+| **More** | Grouped rows in Perch's settings dress — Saved (Bookmarks) · General (Appearance, Open links, Text size, List size, Read aloud, Reading fairness, Check for new) · Your data (Stats, Data, Permissions) · About HeadShorts (Privacy, About) — the real version line and "Made with ❤️ in India" at the foot. Every one-of-N row opens `showOptionSheet`; nothing cycles in place |
+| Bookmarks | One pushed page under More: saved articles newest-saved first, swipe or long-press to remove with Undo, and an empty state that names where the control is |
 | About | Kuber's arrangement in HeadShorts' dress (`about_screen.dart`): a note from the maker on the settings card, four tiles for what the app stands for, what it is in a paragraph, the version, and a developer group linking the portfolio (singhgautam.com), the other apps on Play, and the listing. Plain hyphens only; no em dashes in the copy |
 | Data | One page inside More: Export OPML (through the system share sheet — Android's save dialog is not available to `file_selector`), Import OPML, Clear cached articles |
 | **Sources** | The **whole catalog** plus the reader's own additions, searchable, grouped by category, one toggle per source. Also renames a category, and opens a source |
@@ -210,6 +275,163 @@ Two settings do real work rather than being stored and ignored:
 **Clear cached articles** deletes articles *and* read events, and keeps
 subscriptions. Read state goes with the rows that carried it — leaving "read"
 markers pointing at nothing would be worse.
+
+### Language is a label, like a category
+
+`sources.language` is a BCP-47 tag and nothing more. It filters; it never
+changes what is fetched, and there is no such thing as a paused language.
+
+- **The catalog states every tag** (`language=` on each OPML outline, our own
+  convention — OPML has none). Anyone else's export omits it and the app
+  reads English, which is what every other reader assumes anyway.
+- **A filter offers only languages that have a source behind it**, and hides
+  itself entirely when there is one — a control with a single option is
+  furniture. Headlines' Filter puts language above Category; the onboarding
+  picker, Sources and Search's scope sheet each carry `LanguageChips`. Each
+  language names itself **in its own script**.
+- **The language filter is a scrolling chip row, not a segmented control.**
+  The board draws three segments because that reader follows two languages;
+  the catalog offers eight, and eight equal-width segments wrap every label
+  into a broken stack — which is exactly what the emulator showed. A row that
+  scrolls holds any number and keeps each name whole.
+- **Where the reader is browsing the catalog** — onboarding and Sources — the
+  filter offers every language the catalog carries, not only the ones already
+  followed. The point of the first run is to find publishers you do not have.
+- Language narrows a list rather than greying it out: with English chosen,
+  the Hindi sources drop out of the Filter's chips altogether, because a chip
+  you cannot usefully turn on is noise.
+- On Headlines it folds into the muted set (`offLanguageSourcesProvider`).
+  To the briefing query, "hidden by language" and "hidden by the filter" are
+  the same thing, so nothing downstream needed a second parameter.
+- **The row tag is spoken in full.** "Hindi", never "H I" — a screen reader
+  spelling a code out is worse than no label.
+
+**Indic type is a stack, not a second design.** Source Serif 4 and Archivo
+carry no Indic glyphs, so every role names a fallback (`HsType.serifFallback`
+/ `sansFallback`). Fallback is per-glyph, so a headline mixing Latin and
+Devanagari sets each run in the right family without anything detecting a
+script. Noto Devanagari **ships with the app** in both voices; the other
+scripts name Android's own Noto families.
+
+The metrics change with the script, from the board's type table: the line
+opens up (19/1.32 becomes 19/1.50, 17/1.72 becomes 17/1.85) and
+letter-spacing goes to zero, because tracking pulls a conjunct apart into its
+halants. The **size never changes** — a Devanagari headline is the same
+headline. `HsType.forText` decides from the text itself rather than the
+source's tag, because an English-tagged feed still carries the odd
+Devanagari headline; `sourceLabelFor`/`sourceLabelText` additionally drop the
+caps, since there is no case to raise.
+
+### Saved articles outlive the cache
+
+A bookmark is a **copy, not a pointer**. The `bookmarks` table holds
+everything needed to render the article — title, source, accent, author,
+date, link, image and the extracted body — and references `articles` only
+through a plain nullable `articleId` that is deliberately **not** a foreign
+key.
+
+That is the whole design, and it follows from what would otherwise happen to
+a saved article:
+
+| | What would take it | What actually happens |
+|---|---|---|
+| `pruneToRetention` | Newest 200 per source, 90-day window | Both `DELETE`s carry `AND link NOT IN (SELECT link FROM bookmarks)` |
+| `clearCache` | Everything | Same exemption |
+| Unsubscribing | The FK cascade from `sources` | No FK, so the bookmark stays; the article row does go |
+
+The article row is spared as well as the bookmark, so `/reader/:id` keeps
+working. When it has gone anyway — the source was unsubscribed — Bookmarks
+opens `/bookmark/:id` and the **same** Reader renders the snapshot:
+`ReaderDoc` resolves from either store (`readerDocProvider`,
+`readerBodyProvider`), so "open a saved article offline" is not a second
+screen that drifts.
+
+Saving is keyed on the **link**, not the row id, so the second feed's copy of
+a story reads as saved and saving it twice updates one row. A bookmark made
+before extraction finished is saved at once with whatever body has arrived
+and the text **catches up** when it lands (`attachBody`) — the confirmation
+is immediate and the promise still holds.
+
+Removing is a swipe, a long-press menu **and** a TalkBack custom action: a
+swipe is never the only way to do anything. Undo holds for five seconds and
+puts the row back exactly as it was.
+
+### Listen is the phone's own voice
+
+Read-aloud is `flutter_tts` over the engine already on the device. Nothing
+leaves the phone — it is the same engine TalkBack uses, handed a string.
+
+- **It reads `FeedParser.blockText`, not `plainText`.** The latter collapses
+  *all* whitespace, which is right for a title and wrong for a body: the
+  whole article becomes one line, so it would be one utterance with one
+  "current paragraph", and "…a 45-minute clash." would meet "Star Indian
+  weightlifter…" with no space between them. `blockText` splits on block
+  closers and gives the paragraphs back. The extracted snippet uses it too.
+- **It reads plain text, and shows plain text.** The engine reports a word as
+  a character range in the string it was given, so the string it was given
+  has to be the string on screen. `ListenView` stands in for the rendered
+  body while it reads and the rich rendering comes straight back after.
+  Mapping ranges back through markup breaks the moment a publisher puts a
+  link in the middle of a sentence.
+- **One utterance per paragraph.** Offsets are utterance-relative, so a whole
+  article as one utterance puts every offset thousands of characters out.
+  A paragraph is also the natural unit to scroll to.
+- The sentence in hand takes the source accent at 32% under full ink; the
+  spoken word is solid accent on the page ground; everything else steps back
+  to secondary. Highlighting can be switched off and is **never the only cue
+  to position** — the progress bar and the time are.
+- **The voice stops when the Reader does.** `ListenController.shutdown()` is
+  called from the Reader's `deactivate`, its `dispose` and on any lifecycle
+  state but `resumed`. It silences the engine **without touching `state`**,
+  because by then the provider may already be disposed and writing to it
+  would throw — and the one thing that must still happen is the voice
+  stopping. Dropping every reference to the engine does *not* stop it: it
+  speaks on its own thread until told otherwise, which is why this is an
+  explicit call rather than something left to `onDispose`. Backgrounding
+  stops rather than pauses: a voice that starts talking again when the
+  reader comes back to check the time is worse than losing the place.
+  `listenSupportedProvider` is auto-dispose for the same reason — a provider
+  that outlived the Reader would hold the controller, and the engine, alive
+  with it.
+- **Support is checked before anything is spoken**, in the background
+  (`listenSupportedProvider`). The overflow menu never waits on the speech
+  engine to open: when the answer is already in hand and negative, Listen
+  carries the reason as a sub-line, in secondary ink rather than greyed out,
+  and still opens the card that explains. An option that disappears leaves
+  the reader wondering what they did wrong.
+- **Every platform call is guarded.** A phone with no speech engine at all —
+  or a test, which has no platform — must leave the Reader working rather
+  than throwing out of a button tap.
+- The listen bar takes the action row's place in the same pill dress and
+  **does not hide on scroll**: losing a row of links while reading is
+  nothing, losing the pause button while something is talking is not. The
+  page follows the reading; a manual drag stops it following and offers
+  "Back to reading" rather than fighting the thumb.
+- Speed is five steps, not a slider, and the voice is remembered **per
+  language** — a voice picked for English says nothing about Hindi. Both
+  restart the current paragraph when changed mid-article, which is the only
+  way an engine will take a new setting.
+- The times on the bar are estimated from characters at the chosen rate. No
+  engine reports a duration up front; the bar says so by being an
+  orientation rather than a measurement.
+
+### List size is one setting, three lists
+
+`ListSize` is read by Headlines, Search and Bookmarks alike: a reader who
+picks Small gets Small everywhere. The button lives only on Headlines, **beside
+Filter and in Filter's dress** — both narrow what this list shows, so they
+belong to each other rather than to the title — and opens an **anchored menu
+rather than a sheet**, so the list stays visible behind the choice. It is
+icon-only, so it names itself on a long press. More carries the same setting
+as a row.
+
+`HeadlineCard` takes an `ArticleView` — built from a cached article, a
+bookmark snapshot or a live search hit — so one card serves three row types
+and a fix to it is a fix everywhere. Large is the v1 card unchanged. Medium
+drops the standfirst, sets the headline a step down, clamps it to three lines
+and shrinks the thumbnail. Small is headline only: two lines, the source run
+in at the start in its accent, the time right-aligned, hairlines doing the
+separating instead of rules and images — and still a 44dp target.
 
 ### Filter is not selection
 
@@ -347,10 +569,10 @@ Two opt-in controls exist, and neither ranks anything:
 
 ## 4. Data model
 
-- **sources** — id, title, siteUrl, feedUrl (unique), category, `accentDark` /
-  `accentLight` (the accent's two tones), type, enabled, `mutedInLatest`,
-  sortOrder, etag, lastModified, lastFetchedAt, addedAt, `failingSince`,
-  `lastError`.
+- **sources** — id, title, siteUrl, feedUrl (unique), category, `language`
+  (BCP-47, default `en`), `accentDark` / `accentLight` (the accent's two
+  tones), type, enabled, `mutedInLatest`, sortOrder, etag, lastModified,
+  lastFetchedAt, addedAt, `failingSince`, `lastError`.
 - **articles** — id, sourceId (FK, cascade), guid, title, summary,
   contentSnippet, `fullContentHtml` (nullable — only when a full-content feed
   or extraction supplied it), link, `canonicalUrl`, `titleKey`, author,
@@ -358,6 +580,13 @@ Two opt-in controls exist, and neither ranks anything:
   `(sourceId, guid)`.
 - **read_events** — articleId, mode, at, dwellMs. Reading time comes from here,
   not from a column on `articles`.
+- **bookmarks** — id, `articleId` (nullable, **not** a foreign key), link
+  (unique), canonicalUrl, title, summary, `contentHtml`, author, imageUrl,
+  sourceTitle, language, `accentDark` / `accentLight`, publishedAt, savedAt.
+  A snapshot: see "Saved articles outlive the cache".
+- **articles_fts** — an FTS5 virtual table in external-content mode over
+  `articles(title, summary, content_snippet)`, kept in step by three
+  triggers. It holds terms, not text.
 - **caught_up_days** — one row per day the reader reached the end of Today.
 
 Rules:
@@ -369,14 +598,18 @@ Rules:
 - **Finite.** Every query is bounded. There is no cursor and no "load more".
   Lists end in "You're caught up"; swiping past it settles back.
 - **Retention.** `pruneToRetention()` keeps the newest 200 items per source
-  after each refresh.
+  after each refresh, and drops anything past the 90-day window. **A
+  bookmarked link is exempt from both**, and from `clearCache()`.
 - Updating an article never erases a `fullContentHtml` the feed has stopped
   sending.
-- **Schema version 3.** Adding or renaming a column means bumping
+- **Schema version 4.** Adding or renaming a column means bumping
   `schemaVersion` and adding a step to `MigrationStrategy.onUpgrade` in
   `database.dart`. v2 added the de-duplication keys and `mutedInLatest`; v3
   renamed `read_in_reel`/`read_in_full` to `seenInLinger`/`readFull`, which
-  carry over as-is because the old flags meant exactly those two things.
+  carry over as-is because the old flags meant exactly those two things; v4
+  added `sources.language` and the `bookmarks` table. The search index is
+  created in `beforeOpen` rather than in a migration step, so a database
+  whose index was dropped rebuilds itself on the next launch.
 
 ---
 
@@ -513,7 +746,8 @@ not invented.
 
 **Every wait shows a skeleton**, and every skeleton is a flat fill: Today's
 first load and category swipe, Linger's queue build, the Reader's body, the
-Sources list while the catalog asset is read. A wait that draws nothing reads
+Sources list while the catalog asset is read, Search's results while a query
+runs, and the Bookmarks list on the way in. A wait that draws nothing reads
 as a freeze, which is what the first-run fetch used to be.
 
 Performance is a set of habits rather than a pass: parse off the main isolate,
@@ -540,6 +774,10 @@ shared transition goes through `HsMotion.of`/`curveOf`, which collapse to a
 **Loading is one primitive.** `SkeletonBar` (`core/widgets/caught_up.dart`)
 is every placeholder in the app; Today, Linger, the Reader body and a source
 row compose it and add nothing of their own.
+
+**An icon-only control names itself on a long press.** Flutter's `Tooltip`,
+dressed once in `tooltipTheme` so it is the same object everywhere, as the
+overflow menu is. The list-size button on Headlines is the first of them.
 
 **A one-of-N setting is `showOptionSheet`** — the shared sheet with the
 option, what it means, and a tick on the one in effect. Open links, text size,
@@ -739,9 +977,18 @@ shadow, optional blur — on its own so the Reader's three floating actions
 (Open in web · Share · More) are separate objects wearing exactly it, with air
 between them, rather than a second style of floating control.
 
-**The nav pill** is a floating, detached, content-hugging object: four tabs,
-no FAB, opaque by default (blur is an off-by-default setting), only the
-selected destination carries text, and inactive labels are not in the tree.
+**The nav pill** is a floating, detached, content-hugging object: five tabs —
+Headlines · Linger · Sources · Search · More — no FAB, opaque by default
+(blur is an off-by-default setting), only the selected destination carries
+text, and inactive labels are not in the tree.
+
+**Only the selected item takes free space** — `Flexible(flex: 1)` for it,
+`flex: 0` for the other four, which are 44 square and must stay that way.
+Making all five flexible splits the free space five ways and clips the one
+label to a third of itself ("Hea"), which is what shipped until the emulator
+showed it. The wrapper is always present, never swapped in and out: a child
+that changes shape between builds loses its element and the label's morph
+snaps instead of animating.
 
 It rests `HsSize.navPillInset` (8) above the bottom **safe area**, not the 22
 the board draws. The mock's inset is measured from the frame's edge; on a real
@@ -756,12 +1003,13 @@ the top of a list, when a list does not scroll at all, and on a tab change,
 and a 24px threshold stops a resting thumb making it flicker. Linger keeps its
 chrome, per the design board.
 
-**Back from any tab but Today goes to Today**, as in Perch. `AppShell` wraps
-the shell in a `PopScope` with `canPop: index == 0`; go_router asks the root
-navigator first, and a pushed screen or a sheet is above the shell there, so
-those pop before the tab does. On Today the disposition is the platform's and
-the app exits. `back_button_test` pins all four cases. Neither app enables
-predictive back in the manifest, so this is the whole story.
+**Back from any tab but Headlines goes to Headlines**, as in Perch.
+`AppShell` wraps the shell in a `PopScope` with `canPop: index ==
+AppShell.homeIndex`; go_router asks the root navigator first, and a pushed
+screen or a sheet is above the shell there, so those pop before the tab does.
+On Headlines the disposition is the platform's and the app exits.
+`back_button_test` pins all the cases. Neither app enables predictive back in
+the manifest, so this is the whole story.
 
 **The Reader's text-size popover** is a card over the prose beneath the bar,
 sliding down from under it on `tabSlide` and back up on the way out, with an
@@ -791,8 +1039,9 @@ frame to frame.
 
 **Bottom-nav tabs support horizontal swipe gestures.** Decisive horizontal flings
 (`velocity.abs() >= 240` via `GestureDetector(behavior: HitTestBehavior.translucent, onHorizontalDragEnd: ...)`)
-move across destinations (Today ↔ Linger ↔ Sources ↔ More) without interfering with vertical
-drags (Linger's vertical card swipe, pull-to-refresh, list scrolls). Category switching is
+move across destinations (Headlines ↔ Linger ↔ Sources ↔ Search ↔ More) without interfering
+with vertical drags (Linger's vertical card swipe, pull-to-refresh, list scrolls). The count
+comes from the shell's own branches, not a constant. Category switching is
 handled via the Filter sheet rather than tab gestures.
 
 **Filter sheets close on success.** Behind a scrim, an action that leaves the
@@ -860,6 +1109,8 @@ only the card.
 | Extraction | `html_readability` |
 | Article rendering | `flutter_widget_from_html_core` |
 | Custom Tabs | `url_launcher` (`LaunchMode.inAppBrowserView`) |
+| Read aloud | `flutter_tts` — the phone's own engine; nothing leaves the device. **Vendored and patched**, see below |
+| Full-text search | SQLite FTS5 through `drift` — no package; see §Search |
 | Images | `cached_network_image` |
 | OPML / XML | `xml` |
 | Models | `freezed` |
@@ -887,14 +1138,41 @@ only the card.
 - **`opml` package: not used.** OPML is XML plus one convention; a ~120-line
   reader/writer over `xml` beats a dependency.
 - **Fonts are bundled**, not fetched at runtime — Source Serif 4 and Archivo
-  as variable TTFs, with `wght` set through `fontVariations` in `HsType`.
+  as variable TTFs, with `wght` set through `fontVariations` in `HsType`,
+  plus Noto Serif and Noto Sans Devanagari as the Indic fallback. The other
+  Indic scripts are named in `fontFamilyFallback` and resolved from Android's
+  own Noto families; see §2's type note.
+- **A search package: not added.** SQLite already has FTS5, and
+  `drift_flutter` already ships a build with it enabled. An in-memory index
+  would be a second copy of every article that the prune could not reach.
+- **`flutter_tts` is vendored under `third_party/`**, with exactly one change:
+  its Android build no longer applies the Kotlin Gradle Plugin. Upstream 4.2.5
+  — the latest release — still does, which Flutter warns about on every build
+  and will refuse outright in a future version. The patch follows Flutter's
+  own migration guide for plugin authors, and the app's
+  `android/gradle.properties` turns **on** `android.builtInKotlin` so AGP 9
+  compiles the plugin's Kotlin instead. Measured: no APK size cost (50.44MB
+  profile either way). The plugin's 815-line `FlutterTtsPlugin.kt` and all of
+  its Dart are untouched; `third_party/flutter_tts/README.md` says what to
+  delete when upstream ships a migrated release. `third_party/**` is excluded
+  from `analyze`: it is not our code to lint.
+- **`android_intent_plus`: not added.** The only thing wanting it is a jump to
+  Android's text-to-speech settings from the Listen card, which the copy can
+  name instead. One dependency for one button is not a trade worth making.
 
 ---
 
 ## 9. Quality bar
 
 - `flutter analyze` clean under `very_good_analysis`. No warnings.
-- Tests cover the fetch/parse/dedup pipeline, the fetch pool's concurrency
+- Tests cover full-text search (query, prefix, every-term-narrows, FTS syntax
+  that must not throw, a Devanagari query, scope including a paused source,
+  an empty scope, the date range at both ends, and the index keeping up with
+  an insert, a correction and a prune), a bookmark surviving a prune, the
+  90-day window, a cache clear and its source being unsubscribed, language as
+  a label (the tag, script detection, the Indic type metrics, the catalog's
+  own tags, OPML round-tripping and the filter losing an option with its last
+  source), the fetch/parse/dedup pipeline, the fetch pool's concurrency
   ceiling and per-feed timeout, a feed that throws not taking the run with it,
   onboarding-and-refresh parity, entity decoding (including double-encoded
   fields), reactive category derivation and the fallback when a tab vanishes,
@@ -906,7 +1184,8 @@ only the card.
   snapping, canonical-URL and headline de-duplication, the fairness cap, category derivation and renaming,
   the seen/read model, the scroll-direction nav controller, the oklab colour
   maths against the design board's stated values, and the three widgets the
-  design is most specific about: the nav pill, the Today card, the Linger card.
+  design is most specific about: the nav pill (now five destinations), the
+  Today card, the Linger card.
 - `test/fixtures/` holds **real saved article HTML**, not hand-written
   samples: a Guardian article with the newsletter block, one with headings and
   lists, one with inline links, and a whole NDTV page as a browser receives
@@ -932,4 +1211,8 @@ only the card.
   thin card and "Open in web" are the fallback.
 - Any **server-side** component.
 - Republishing publisher body text beyond on-device reader-view parity.
+- **A server-side search index.** Search reads the cache on the device; a
+  source with nothing cached is fetched once, for that search, and stored
+  nowhere.
+- **A cloud voice for Listen.** The phone's engine or nothing, said plainly.
 - iOS release targeting.

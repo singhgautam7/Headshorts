@@ -619,8 +619,10 @@ class _Header extends StatelessWidget {
               Expanded(
                 child: Container(
                   alignment: Alignment.centerLeft,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 6,
+                  ),
                   decoration: BoxDecoration(
                     color: accentWash(accent, palette),
                     borderRadius: HsRadius.chipBorder,

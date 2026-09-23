@@ -24,10 +24,14 @@ class NavDestination {
 
 /// The floating, detached nav pill.
 ///
-/// It does not span the screen or divide into equal segments: it hugs its four
+/// It does not span the screen or divide into equal segments: it hugs its five
 /// items, centred, [HsSize.navPillInset] from the bottom, so it reads as an
 /// object floating over content rather than a footer. Only the selected
 /// destination carries text. There is no action button, and never a badge.
+///
+/// Five destinations is the widest the pill is designed to go: four inactive
+/// 44s, the active item, four 2dp gaps and a 7dp inset come to about 316 on
+/// the longest label, inside a 360 screen with room each side.
 class NavPill extends StatelessWidget {
   const new({
     required this.destinations,
@@ -41,6 +45,7 @@ class NavPill extends StatelessWidget {
     NavDestination(label: 'Headlines', icon: HsGlyph.today, iconWidth: 16),
     NavDestination(label: 'Linger', icon: HsGlyph.linger, iconWidth: 13),
     NavDestination(label: 'Sources', icon: HsGlyph.sources, iconWidth: 16),
+    NavDestination(label: 'Search', icon: HsGlyph.search, iconWidth: 16),
     NavDestination(label: 'More', icon: HsGlyph.more, iconWidth: 16),
   ];
 
@@ -63,13 +68,30 @@ class NavPill extends StatelessWidget {
           children: [
             for (var i = 0; i < destinations.length; i++) ...[
               if (i > 0) const SizedBox(width: 2),
-              _NavItem(
-                destination: destinations[i],
-                selected: i == selectedIndex,
-                onTap: () {
-                  unawaited(HapticFeedback.selectionClick());
-                  onSelected(i);
-                },
+              // Only the selected item takes free space: flex 1 for it,
+              // flex 0 — laid out rigid, exactly like a bare child — for the
+              // other four, which are 44 square and must stay that way.
+              // Making all five flexible splits the free space five ways and
+              // clips the one label to a third of itself.
+              //
+              // The wrapper is always there, never swapped in and out: a
+              // child that changes shape between builds loses its element,
+              // and the label's morph would snap rather than animate.
+              //
+              // Loose, so on any real phone the label takes the room it
+              // needs, and at a large font scale it gives way rather than
+              // pushing the pill off the screen — the board's note, with
+              // TalkBack keeping the full name either way.
+              Flexible(
+                flex: i == selectedIndex ? 1 : 0,
+                child: _NavItem(
+                  destination: destinations[i],
+                  selected: i == selectedIndex,
+                  onTap: () {
+                    unawaited(HapticFeedback.selectionClick());
+                    onSelected(i);
+                  },
+                ),
               ),
             ],
           ],
@@ -191,20 +213,23 @@ class _NavItem extends StatelessWidget {
                   // The label exists only while it is at least partly
                   // visible: an inactive destination is a glyph, full stop.
                   if (open > 0)
-                    ClipRect(
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        widthFactor: width,
-                        child: Opacity(
-                          opacity: open,
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: HsSpace.x2),
-                            child: Text(
-                              destination.label,
-                              maxLines: 1,
-                              softWrap: false,
-                              style: HsType.buttonSmall.copyWith(
-                                color: palette.onPrimaryContainer,
+                    Flexible(
+                      child: ClipRect(
+                        child: Align(
+                          alignment: Alignment.centerLeft,
+                          widthFactor: width,
+                          child: Opacity(
+                            opacity: open,
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: HsSpace.x2),
+                              child: Text(
+                                destination.label,
+                                maxLines: 1,
+                                softWrap: false,
+                                overflow: TextOverflow.clip,
+                                style: HsType.buttonSmall.copyWith(
+                                  color: palette.onPrimaryContainer,
+                                ),
                               ),
                             ),
                           ),

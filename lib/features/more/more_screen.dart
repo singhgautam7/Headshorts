@@ -9,6 +9,7 @@ import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/core/widgets/sheet.dart';
 import 'package:headshorts/data/prefs/settings.dart';
+import 'package:headshorts/features/bookmarks/bookmarks_controller.dart';
 import 'package:headshorts/features/more/settings_widgets.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
@@ -33,6 +34,20 @@ class MoreScreen extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
         children: [
+          SettingsGroup(
+            label: 'Saved',
+            children: [
+              SettingsRow(
+                icon: Icons.bookmark_border_rounded,
+                label: 'Bookmarks',
+                sub: 'Articles you kept to read later',
+                // A plain value on the right, like every other row. It never
+                // reaches the nav and it is not something to clear.
+                value: '${ref.watch(bookmarkCountProvider).value ?? 0}',
+                onTap: () => context.push('/bookmarks'),
+              ),
+            ],
+          ),
           SettingsGroup(
             label: 'General',
             children: [
@@ -89,6 +104,53 @@ class MoreScreen extends ConsumerWidget {
                     ],
                   );
                   if (picked != null) await controller.setTextSize(picked);
+                },
+              ),
+              SettingsRow(
+                icon: Icons.view_agenda_outlined,
+                label: 'List size',
+                value: s.listSize.label,
+                onTap: () async {
+                  final picked = await showOptionSheet<ListSize>(
+                    context,
+                    title: 'List size',
+                    description:
+                        'How much of each item Headlines, Search and '
+                        'Bookmarks show. Headlines also has this beside its '
+                        'title.',
+                    selected: s.listSize,
+                    options: [
+                      for (final size in ListSize.values)
+                        SheetOption(
+                          value: size,
+                          label: size.label,
+                          description: size.description,
+                        ),
+                    ],
+                  );
+                  if (picked != null) await controller.setListSize(picked);
+                },
+              ),
+              SettingsRow(
+                icon: Icons.volume_up_outlined,
+                label: 'Read aloud',
+                value:
+                    '${s.speechRate.label} · '
+                    '${s.voiceByLanguage.isEmpty ? 'System voice' : 'Your voice'}',
+                onTap: () async {
+                  final picked = await showOptionSheet<SpeechRate>(
+                    context,
+                    title: 'Read aloud',
+                    description:
+                        "Speed for the Reader's Listen. The voice is chosen "
+                        'per language while it reads, and remembered.',
+                    selected: s.speechRate,
+                    options: [
+                      for (final rate in SpeechRate.values)
+                        SheetOption(value: rate, label: rate.label),
+                    ],
+                  );
+                  if (picked != null) await controller.setSpeechRate(picked);
                 },
               ),
               SettingsRow(

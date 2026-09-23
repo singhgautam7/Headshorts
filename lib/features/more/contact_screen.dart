@@ -55,9 +55,7 @@ class ContactScreen extends StatelessWidget {
           email: developerEmail,
           onEmailTap: () => unawaited(openInWeb('mailto:$developerEmail')),
           onCopyTap: () async {
-            await Clipboard.setData(
-              const ClipboardData(text: developerEmail),
-            );
+            await Clipboard.setData(const ClipboardData(text: developerEmail));
             if (context.mounted) {
               unawaited(HapticFeedback.selectionClick());
               showNotice(context, 'Email copied to clipboard');
@@ -75,19 +73,14 @@ class ContactScreen extends StatelessWidget {
               icon: Icons.open_in_browser_rounded,
               label: 'Website contact page',
               sub: 'headshorts.pages.dev/contact',
-              onTap: () => openInWeb(
-                websiteContactUrl,
-                mode: LinkOpenMode.browser,
-              ),
+              onTap: () =>
+                  openInWeb(websiteContactUrl, mode: LinkOpenMode.browser),
             ),
             SettingsRow(
               icon: Icons.language_rounded,
               label: 'Headshorts website',
               sub: 'headshorts.pages.dev',
-              onTap: () => openInWeb(
-                websiteUrl,
-                mode: LinkOpenMode.browser,
-              ),
+              onTap: () => openInWeb(websiteUrl, mode: LinkOpenMode.browser),
             ),
           ],
         ),

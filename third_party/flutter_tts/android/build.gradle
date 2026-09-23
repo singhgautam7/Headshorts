@@ -1,0 +1,64 @@
+// Patched copy of flutter_tts 4.2.5's Android build — see ../README.md.
+//
+// The ONLY change from upstream is the Kotlin setup: upstream applies the
+// Kotlin Gradle Plugin itself, which Flutter now warns about and will refuse
+// outright in a future release. This file relies on the built-in Kotlin the
+// app already uses instead, exactly as the migration guide for plugin authors
+// describes. Nothing about the plugin's behaviour changes.
+def args = ["-Xlint:deprecation"]
+
+group 'com.eyedeadevelopment.fluttertts'
+version '1.0-SNAPSHOT'
+
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.13.0'
+    }
+}
+
+rootProject.allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
+}
+
+project.getTasks().withType(JavaCompile).configureEach {
+    options.compilerArgs.addAll(args)
+}
+
+apply plugin: 'com.android.library'
+
+android {
+    compileSdk 36
+    if (project.android.hasProperty("namespace")) {
+        namespace 'com.eyedeadevelopment.fluttertts'
+    }
+
+    defaultConfig {
+        minSdkVersion 24
+        testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    lintOptions {
+        disable 'InvalidPackage'
+        disable 'GradleDependency'
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
+    }
+}
+
+// Replaces upstream's `kotlinOptions` block, which needs the plugin's own KGP.
+kotlin {
+    compilerOptions {
+        jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_11
+    }
+}

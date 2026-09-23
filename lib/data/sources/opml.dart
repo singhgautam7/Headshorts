@@ -11,6 +11,7 @@ class OpmlEntry {
     required this.title,
     required this.feedUrl,
     required this.category,
+    this.language = 'en',
     this.siteUrl,
     this.accent,
   });
@@ -18,6 +19,11 @@ class OpmlEntry {
   final String title;
   final String feedUrl;
   final String category;
+
+  /// The BCP-47 tag from the outline's `language` attribute. OPML has no
+  /// language convention of its own, and neither does anyone else's exporter,
+  /// so an omitted one is English — the catalog's own file states every tag.
+  final String language;
   final String? siteUrl;
 
   /// Carried by our own files in `hsAccentDark`/`hsAccentLight`, so the
@@ -70,6 +76,7 @@ abstract final class Opml {
           title: title.isEmpty ? feedUrl : title,
           feedUrl: feedUrl,
           category: category,
+          language: _language(element),
           siteUrl: element.getAttribute('htmlUrl')?.trim(),
           accent: _accentOf(element),
         ),
@@ -82,6 +89,11 @@ abstract final class Opml {
     for (final child in element.childElements) {
       _walk(child, nested, out);
     }
+  }
+
+  static String _language(XmlElement element) {
+    final tag = element.getAttribute('language')?.trim();
+    return (tag == null || tag.isEmpty) ? 'en' : tag.toLowerCase();
   }
 
   /// Our own accent extension. A reader's OPML from another app will not
@@ -140,6 +152,7 @@ abstract final class Opml {
                         'text': row.title,
                         'title': row.title,
                         'xmlUrl': row.feedUrl,
+                        'language': row.language,
                         if (row.siteUrl != null) 'htmlUrl': row.siteUrl!,
                         'hsAccentDark': _hex(row.accentDark),
                         'hsAccentLight': _hex(row.accentLight),

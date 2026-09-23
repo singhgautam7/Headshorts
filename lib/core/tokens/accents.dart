@@ -90,6 +90,11 @@ class SourceAccent {
     );
   }
 
+  /// The stored pair, read back. The database keeps the two tones as two
+  /// integers; this is the one place they become an accent again.
+  factory fromValues(int dark, int light) =>
+      SourceAccent(Color(dark), Color(light));
+
   /// The neutral "source", used where the accent should read as plain ink:
   /// the caught-up rule, the welcome mark, the Linger hard stop.
   ///

@@ -19,6 +19,10 @@ class Sources extends Table {
   TextColumn get feedUrl => text().unique()();
   TextColumn get category => text()();
 
+  /// BCP-47 language tag of what this source publishes — 'en', 'hi', 'ta'.
+  /// A label, like the category: it filters, it never changes what is fetched.
+  TextColumn get language => text().withDefault(const Constant('en'))();
+
   /// The two tones of the source accent — light-on-black and deep-on-paper.
   IntColumn get accentDark => integer()();
   IntColumn get accentLight => integer()();
@@ -110,4 +114,37 @@ class CaughtUpDays extends Table {
 
   @override
   Set<Column<Object>> get primaryKey => {day};
+}
+
+/// An article the reader kept.
+///
+/// A **snapshot**, not a pointer. Everything needed to render the article is
+/// copied in at save time, because the cache it came from is pruned to the
+/// newest 200 per source and to 90 days, and a bookmark must outlive both.
+/// Nothing here references `articles`, so no cascade or prune can reach it.
+@DataClassName('BookmarkRow')
+class Bookmarks extends Table {
+  IntColumn get id => integer().autoIncrement()();
+
+  /// The row it was saved from, while that row still exists. Deliberately not
+  /// a foreign key: a cascade from `sources` would take the bookmark with it.
+  IntColumn get articleId => integer().nullable()();
+
+  TextColumn get link => text().unique()();
+  TextColumn get canonicalUrl => text().withDefault(const Constant(''))();
+  TextColumn get title => text()();
+  TextColumn get summary => text().nullable()();
+
+  /// The extracted body, so a saved article opens offline and unchanged.
+  TextColumn get contentHtml => text().nullable()();
+  TextColumn get author => text().nullable()();
+  TextColumn get imageUrl => text().nullable()();
+
+  TextColumn get sourceTitle => text()();
+  TextColumn get language => text().withDefault(const Constant('en'))();
+  IntColumn get accentDark => integer()();
+  IntColumn get accentLight => integer()();
+
+  DateTimeColumn get publishedAt => dateTime()();
+  DateTimeColumn get savedAt => dateTime().withDefault(currentDateAndTime)();
 }

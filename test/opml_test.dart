@@ -24,6 +24,7 @@ SourceRow _source(String title, String category) => SourceRow(
   feedUrl: 'https://example.com/${title.toLowerCase()}',
   siteUrl: 'https://example.com',
   category: category,
+  language: 'en',
   accentDark: 0xFFE4A868,
   accentLight: 0xFF8A5518,
   type: SourceType.rss,

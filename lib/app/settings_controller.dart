@@ -37,6 +37,22 @@ class SettingsController extends Notifier<Settings> {
 
   Future<void> setMaxConsecutivePerSource(int max) =>
       _save(state.copyWith(maxConsecutivePerSource: max));
+
+  Future<void> setListSize(ListSize size) =>
+      _save(state.copyWith(listSize: size));
+
+  Future<void> setSpeechRate(SpeechRate rate) =>
+      _save(state.copyWith(speechRate: rate));
+
+  Future<void> setHighlightWords({required bool enabled}) =>
+      _save(state.copyWith(highlightWords: enabled));
+
+  /// Remembers the voice for one language, leaving the others alone.
+  Future<void> setVoice(String language, String voiceName) => _save(
+    state.copyWith(
+      voiceByLanguage: {...state.voiceByLanguage, language: voiceName},
+    ),
+  );
 }
 
 final settingsProvider = NotifierProvider<SettingsController, Settings>(

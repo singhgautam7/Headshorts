@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart' show Icons, Tooltip;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,6 +8,7 @@ import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/nav_visibility.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/refresh_controller.dart';
+import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
@@ -17,6 +19,7 @@ import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/pull_to_refresh.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/data/db/article_repository.dart';
+import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/features/today/headline_card.dart';
 import 'package:headshorts/features/today/source_filter_sheet.dart';
 import 'package:headshorts/features/today/today_controller.dart';
@@ -99,6 +102,7 @@ class _Briefing extends ConsumerWidget {
     // that only changes twice.
     final refreshing = ref.watch(refreshProvider.select((p) => p.isRunning));
     final lastUpdated = ref.watch(lastUpdatedProvider).value;
+    final size = ref.watch(settingsProvider.select((s) => s.listSize));
 
     final scoped = sources
         .where(
@@ -157,7 +161,7 @@ class _Briefing extends ConsumerWidget {
         itemBuilder: (context, index) {
           if (index == 0) {
             return Padding(
-              padding: const EdgeInsets.only(top: 14, bottom: 20),
+              padding: const EdgeInsets.only(top: 8, bottom: 14),
               child: Row(
                 children: [
                   Expanded(
@@ -183,6 +187,12 @@ class _Briefing extends ConsumerWidget {
                     isFiltered: isFiltered,
                     onTap: () => showSourceFilterSheet(context),
                   ),
+                  const SizedBox(width: HsSpace.x2),
+                  // Beside Filter, in Filter's dress: both narrow what this
+                  // list shows, so they belong to each other rather than to
+                  // the title. An anchored menu, not a sheet — the list has
+                  // to stay visible behind the choice.
+                  const _ListSizeButton(),
                 ],
               ),
             );
@@ -196,12 +206,18 @@ class _Briefing extends ConsumerWidget {
           if (index <= headlines.length) {
             final i = index - 1;
             return Padding(
-              padding: const EdgeInsets.only(bottom: 30),
+              padding: EdgeInsets.only(bottom: listGapFor(size)),
               child: HeadlineCard(
-                headlines[i],
+                ArticleView.fromHeadline(headlines[i]),
+                size: size,
                 offline: offline,
-                // The optional lead-card wash: paper only, unread only.
-                washed: i == 0 && !palette.isDark && !headlines[i].isRead,
+                // The optional lead-card wash: paper only, unread only, and
+                // only at the size that has room for it.
+                washed:
+                    i == 0 &&
+                    size == ListSize.large &&
+                    !palette.isDark &&
+                    !headlines[i].isRead,
                 onTap: () => context.push('/reader/${headlines[i].article.id}'),
               ),
             );
@@ -259,6 +275,68 @@ class _CaughtUpState extends ConsumerState<_CaughtUp> {
   }
 }
 
+/// The list-size control, beside Filter.
+///
+/// Icon only, so it carries its name on a long press rather than in a label
+/// the row has no room for. 32 visual to match the chip it sits next to, in
+/// a 44 target.
+class _ListSizeButton extends ConsumerWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.hs;
+    final size = ref.watch(settingsProvider.select((s) => s.listSize));
+
+    return Tooltip(
+      message: 'Change view',
+      child: Builder(
+        builder: (anchorContext) => Pressable(
+          onTap: () async {
+            final picked = await showHsMenu<ListSize>(
+              context: context,
+              anchorContext: anchorContext,
+              minWidth: 260,
+              entries: [
+                for (final option in ListSize.values)
+                  HsMenuEntry(
+                    value: option,
+                    label: option.label,
+                    sub: option.description,
+                    selected: option == size,
+                  ),
+              ],
+            );
+            if (picked != null) {
+              await ref.read(settingsProvider.notifier).setListSize(picked);
+            }
+          },
+          semanticLabel: 'Change view, ${size.label}',
+          child: SizedBox(
+            height: HsSize.navItem,
+            child: Center(
+              child: Container(
+                width: 32,
+                height: 32,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  border: Border.all(color: palette.stroke),
+                  borderRadius: HsRadius.pillBorder,
+                ),
+                child: Icon(
+                  Icons.view_agenda_outlined,
+                  size: 16,
+                  color: palette.textSecondary,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _ScopePill extends StatelessWidget {
   const new({
     required this.label,
@@ -277,30 +355,36 @@ class _ScopePill extends StatelessWidget {
       onTap: onTap,
       semanticLabel: 'Filter headlines',
       child: Container(
-        height: 32,
-        padding: const EdgeInsets.symmetric(horizontal: HsSpace.x3),
-        decoration: BoxDecoration(
-          border: Border.all(
-            color: isFiltered ? palette.textMuted : palette.stroke,
+        height: HsSize.navItem,
+        alignment: Alignment.center,
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: HsSpace.x3),
+          decoration: BoxDecoration(
+            border: Border.all(
+              color: isFiltered ? palette.textMuted : palette.stroke,
+            ),
+            borderRadius: HsRadius.pillBorder,
           ),
-          borderRadius: HsRadius.pillBorder,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              label,
-              style: HsType.chipSelected.copyWith(
-                color: isFiltered ? palette.textPrimary : palette.textSecondary,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                label,
+                style: HsType.chipSelected.copyWith(
+                  color: isFiltered
+                      ? palette.textPrimary
+                      : palette.textSecondary,
+                ),
               ),
-            ),
-            const SizedBox(width: HsSpace.x2),
-            HsGlyph.chevron(
-              isFiltered ? palette.textPrimary : palette.textSecondary,
-              direction: AxisDirection.down,
-              size: 6,
-            ),
-          ],
+              const SizedBox(width: HsSpace.x2),
+              HsGlyph.chevron(
+                isFiltered ? palette.textPrimary : palette.textSecondary,
+                direction: AxisDirection.down,
+                size: 6,
+              ),
+            ],
+          ),
         ),
       ),
     );

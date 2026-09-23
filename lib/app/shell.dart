@@ -7,7 +7,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/widgets/nav_pill.dart';
 
-/// The four destinations, with the pill floating over them.
+/// The five destinations, with the pill floating over them.
 ///
 /// Content is not inset by the pill: it scrolls beneath it and reserves
 /// clearance at the foot of each list, so the pill reads as an object over the
@@ -21,6 +21,9 @@ class AppShell extends ConsumerStatefulWidget {
 
   /// The branch whose ground is `HsPalette.lingerBackground`.
   static const lingerIndex = 1;
+
+  /// Home. Back from any other tab lands here; back from here exits.
+  static const homeIndex = 0;
 
   final StatefulNavigationShell navigationShell;
 
@@ -62,7 +65,9 @@ class _AppShellState extends ConsumerState<AppShell>
     if (velocity.abs() < 240) return;
     final index = widget.navigationShell.currentIndex;
     final next = velocity < 0 ? index + 1 : index - 1;
-    if (next < 0 || next >= 4) return;
+    if (next < 0 || next >= widget.navigationShell.route.branches.length) {
+      return;
+    }
     ref.read(navVisibilityProvider.notifier).show();
     widget.navigationShell.goBranch(next);
   }
@@ -79,16 +84,17 @@ class _AppShellState extends ConsumerState<AppShell>
       curve: HsMotion.curveOf(context, HsMotion.pageCurve),
     );
 
-    // Back from any other tab lands on Today, as in Perch. A pushed screen or
-    // a sheet sits above this route on the root navigator, so it pops first;
-    // only once nothing is over the shell does the press reach here. On Today
-    // the disposition is the platform's, and the app exits as usual.
+    // Back from any other tab lands on Headlines, as in Perch. A pushed
+    // screen or a sheet sits above this route on the root navigator, so it
+    // pops first; only once nothing is over the shell does the press reach
+    // here. On Headlines the disposition is the platform's, and the app exits
+    // as usual.
     return PopScope(
-      canPop: index == 0,
+      canPop: index == AppShell.homeIndex,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
         ref.read(navVisibilityProvider.notifier).show();
-        widget.navigationShell.goBranch(0);
+        widget.navigationShell.goBranch(AppShell.homeIndex);
       },
       child: AnimatedContainer(
         duration: HsMotion.of(context, HsMotion.page),

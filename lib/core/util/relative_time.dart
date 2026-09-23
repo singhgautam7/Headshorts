@@ -25,3 +25,31 @@ String articleDateline(DateTime when) =>
 
 /// "9:38" — the wall clock beside "updated".
 String clockTime(DateTime when) => DateFormat('H:mm').format(when);
+
+/// "12m", "3h", "5d", "16 Sep" — the compact form the small list uses.
+///
+/// Right-aligned beside a two-line headline, there is room for a stamp, not
+/// for a sentence. Still coarse: no seconds, and nothing that ticks.
+String shortRelativeTime(DateTime when, {DateTime? now}) {
+  final elapsed = (now ?? DateTime.now()).difference(when);
+
+  if (elapsed.isNegative || elapsed.inMinutes < 1) return 'now';
+  if (elapsed.inMinutes < 60) return '${elapsed.inMinutes}m';
+  if (elapsed.inHours < 24) return '${elapsed.inHours}h';
+  if (elapsed.inDays < 7) return '${elapsed.inDays}d';
+  return DateFormat('d MMM').format(when);
+}
+
+/// "Today", "Monday, 21 September" — the day heading above a run of search
+/// results.
+String dayHeading(DateTime when, {DateTime? now}) {
+  final today = now ?? DateTime.now();
+  final day = DateTime(when.year, when.month, when.day);
+  final start = DateTime(today.year, today.month, today.day);
+  final difference = start.difference(day).inDays;
+
+  if (difference == 0) return 'Today';
+  if (difference == 1) return 'Yesterday';
+  if (difference < 7) return DateFormat('EEEE, d MMMM').format(when);
+  return DateFormat('d MMMM y').format(when);
+}

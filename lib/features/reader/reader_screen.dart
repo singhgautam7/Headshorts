@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
@@ -11,20 +12,24 @@ import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/canonical_url.dart' show bodyHasImage;
+import 'package:headshorts/core/util/language.dart';
 import 'package:headshorts/core/util/open_in_web.dart';
 import 'package:headshorts/core/util/relative_time.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
+import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/nav_pill.dart';
 import 'package:headshorts/core/widgets/notice.dart';
-import 'package:headshorts/data/db/article_repository.dart';
-import 'package:headshorts/data/db/database.dart';
-import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/db/tables.dart';
 import 'package:headshorts/data/feed/feed_parser.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/data/readability/extraction_service.dart';
+import 'package:headshorts/features/bookmarks/bookmarks_controller.dart';
+import 'package:headshorts/features/bookmarks/bookmarks_screen.dart'
+    show showActionNotice, showUndoNotice;
 import 'package:headshorts/features/reader/article_body.dart';
+import 'package:headshorts/features/reader/listen_controller.dart';
+import 'package:headshorts/features/reader/listen_view.dart';
 import 'package:headshorts/features/reader/reader_controller.dart';
 import 'package:share_plus/share_plus.dart';
 
@@ -34,49 +39,101 @@ import 'package:share_plus/share_plus.dart';
 /// attributed, always one tap from the publisher, and when extraction comes
 /// back thin it says so plainly and hands off rather than showing an empty
 /// page.
+///
+/// Opened by article id normally, and by bookmark id for a saved article
+/// whose row has been pruned or unsubscribed away. Both resolve to one
+/// [ReaderDoc], so there is one Reader rather than two that drift apart.
 class ReaderScreen extends ConsumerStatefulWidget {
-  const new(this.articleId, {super.key});
+  const new(this.articleId, {this.bookmarkId, super.key});
 
-  final int articleId;
+  final int? articleId;
+  final int? bookmarkId;
 
   @override
   ConsumerState<ReaderScreen> createState() => _ReaderScreenState();
 }
 
-class _ReaderScreenState extends ConsumerState<ReaderScreen> {
+class _ReaderScreenState extends ConsumerState<ReaderScreen>
+    with WidgetsBindingObserver {
   final _opened = DateTime.now();
+  final _scroll = ScrollController();
+
+  /// The controller that is actually speaking, held directly rather than read
+  /// back through the provider: on the way out the provider may already be
+  /// gone, and the voice still has to stop.
+  ListenController? _listening;
   bool _sizePanelOpen = false;
   bool _pillVisible = true;
   double _scrollTravel = 0;
 
+  /// The page follows the reading until the reader scrolls away themselves,
+  /// at which point it stops and offers to take them back. Scrolling under
+  /// someone's thumb is worse than losing the place.
+  bool _following = true;
+  int _followedIndex = -1;
+  final _spokenKey = GlobalKey();
+
+  /// Whether the listen bar is up, mirrored here so the scroll handler can
+  /// see it without reaching for the provider on every frame.
+  bool _listenActive = false;
+
+  ReaderKey get _key =>
+      (articleId: widget.articleId, bookmarkId: widget.bookmarkId);
+
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final articleId = widget.articleId;
+    if (articleId == null) return;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       // Opening the full article is the only thing in the app that counts as
-      // reading it — from Today or from Linger alike.
+      // reading it — from Today, from Linger or from Bookmarks alike.
       unawaited(
         ref
             .read(articleRepositoryProvider)
-            .mark(widget.articleId, mode: ReadMode.full),
+            .mark(articleId, mode: ReadMode.full),
       );
     });
   }
 
+  /// Backgrounding stops the reading.
+  ///
+  /// Not pause: the reader has left, and a voice that starts talking again
+  /// when they come back to check the time is worse than losing the place.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state != AppLifecycleState.resumed) _listening?.shutdown();
+  }
+
   @override
   void deactivate() {
-    // Dwell is recorded once, on the way out, so Stats can report reading
-    // time without the article screen carrying a timer.
-    unawaited(
-      ref
-          .read(articleRepositoryProvider)
-          .mark(
-            widget.articleId,
-            mode: ReadMode.full,
-            dwell: DateTime.now().difference(_opened),
-          ),
-    );
+    // Leaving the Reader stops it too — the article is what was being read,
+    // and it is no longer on screen.
+    _listening?.shutdown();
+    final articleId = widget.articleId;
+    if (articleId != null) {
+      // Dwell is recorded once, on the way out, so Stats can report reading
+      // time without the article screen carrying a timer.
+      unawaited(
+        ref
+            .read(articleRepositoryProvider)
+            .mark(
+              articleId,
+              mode: ReadMode.full,
+              dwell: DateTime.now().difference(_opened),
+            ),
+      );
+    }
     super.deactivate();
+  }
+
+  @override
+  void dispose() {
+    _listening?.shutdown();
+    WidgetsBinding.instance.removeObserver(this);
+    _scroll.dispose();
+    super.dispose();
   }
 
   void _onScroll(ScrollNotification notification) {
@@ -84,6 +141,15 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
       if (_sizePanelOpen) setState(() => _sizePanelOpen = false);
       final delta = notification.scrollDelta ?? 0;
       final metrics = notification.metrics;
+      // While the page is following the reading, the scrolling is the app's
+      // own. Letting it drive the action row's hide means the row is already
+      // hidden when listening ends, and the reader is left with no controls
+      // at all until they scroll up to find them.
+      if (_listenActive && _following) return;
+      // A drag while it is reading is the reader taking the page back.
+      if (notification.dragDetails != null && _following) {
+        setState(() => _following = false);
+      }
       if (!metrics.hasContentDimensions ||
           metrics.maxScrollExtent <= 0 ||
           metrics.pixels <= metrics.minScrollExtent) {
@@ -101,21 +167,74 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     }
   }
 
+  /// Brings the action row back when listening ends.
+  ///
+  /// It hides on a scroll down, and the reading scrolls the page; without
+  /// this the row would return from a listen invisible.
+  void _syncListenState({required bool active}) {
+    if (active == _listenActive) return;
+    _listenActive = active;
+    if (active) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _pillVisible) return;
+      setState(() {
+        _pillVisible = true;
+        _scrollTravel = 0;
+      });
+    });
+  }
+
+  /// Keeps the paragraph being read in the upper third of the screen.
+  void _followReading(ListenState listen) {
+    if (!listen.active || !_following) return;
+    if (listen.index == _followedIndex) return;
+    _followedIndex = listen.index;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final context = _spokenKey.currentContext;
+      if (context == null || !mounted) return;
+      Scrollable.ensureVisible(
+        context,
+        alignment: 0.3,
+        duration: HsMotion.reduced(context) ? Duration.zero : HsMotion.tabSlide,
+        curve: HsMotion.tabSlideCurve,
+      );
+    });
+  }
+
+  Future<void> _startListening(ReaderDoc doc, Extraction extraction) async {
+    final html = switch (extraction) {
+      ExtractedArticle(:final html) => html,
+      // A thin extraction reads what there is — the standfirst — and says so
+      // rather than refusing.
+      ThinExtraction() => doc.summary ?? '',
+    };
+    if (html.trim().isEmpty) return;
+    final controller = ref.read(listenProvider(doc.language).notifier);
+    setState(() {
+      _following = true;
+      _followedIndex = -1;
+      _listening = controller;
+    });
+    await controller.start(html);
+  }
+
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final headline = ref.watch(articleProvider(widget.articleId)).value;
-    final extraction = ref.watch(extractionProvider(widget.articleId));
+    final doc = ref.watch(readerDocProvider(_key)).value;
+    final extraction = ref.watch(readerBodyProvider(_key));
     final textSize = ref.watch(settingsProvider).textSize;
 
-    if (headline == null) {
+    if (doc == null) {
       return ColoredBox(color: palette.background, child: const SizedBox());
     }
 
-    final accentTone = headline.source.accent;
+    final accentTone = doc.accent;
     final accent = accentTone.resolve(isDark: palette.isDark);
-    final article = headline.article;
     final thin = extraction.value is ThinExtraction;
+    final listen = ref.watch(listenProvider(doc.language));
+    _syncListenState(active: listen.active);
+    _followReading(listen);
 
     return AccentScope(
       accent: accentTone,
@@ -130,7 +249,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     _Bar(
-                      source: headline.source.title,
+                      source: doc.sourceTitle,
                       accent: accent,
                       sizePanelOpen: _sizePanelOpen,
                       onToggleSizePanel: () =>
@@ -143,6 +262,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           return false;
                         },
                         child: ListView(
+                          controller: _scroll,
                           padding: const EdgeInsets.fromLTRB(
                             HsSpace.x5,
                             26,
@@ -151,29 +271,31 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                           ),
                           children: [
                             Text(
-                              article.title,
-                              style: HsType.readerTitle.copyWith(
-                                color: palette.textPrimary,
-                              ),
+                              doc.title,
+                              style: HsType.forText(
+                                HsType.readerTitle,
+                                doc.title,
+                              ).copyWith(color: palette.textPrimary),
                             ),
                             // The feed's summary is the publisher's
                             // standfirst — The Hindu's `sub-title`, NDTV's
                             // `sp-descp` — and sits under the headline as it
                             // does on their page, unless the body opens with
                             // the same words, when it would only repeat.
-                            if (_standfirst(article, extraction.value)
+                            if (_standfirst(doc, extraction.value)
                                 case final dek?) ...[
                               const SizedBox(height: 14),
                               Text(
                                 dek,
-                                style: HsType.readerStandfirst.copyWith(
-                                  color: palette.textSecondary,
-                                ),
+                                style: HsType.forText(
+                                  HsType.readerStandfirst,
+                                  dek,
+                                ).copyWith(color: palette.textSecondary),
                               ),
                             ],
                             const SizedBox(height: 18),
                             _Attribution(
-                              headline: headline,
+                              doc: doc,
                               minutes: switch (extraction.value) {
                                 final ExtractedArticle a => a.minutes,
                                 _ => null,
@@ -182,37 +304,53 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                             const SizedBox(height: 18),
                             const HsDivider(),
                             const SizedBox(height: 18),
-                            // The feed's picture, unless the body carries
-                            // it — the publisher's own figure keeps its
-                            // caption and its place in the story.
-                            if (article.imageUrl != null &&
-                                !_bodyHasLead(
-                                  extraction.value,
-                                  article.imageUrl!,
-                                ))
-                              _LeadImage(
-                                url: article.imageUrl!,
-                                articleUrl: article.link,
-                              ),
-                            ...switch (extraction) {
-                              AsyncData(:final value) => _body(
-                                context,
-                                value,
-                                textSize,
-                                article.link,
-                                headline,
-                              ),
-                              AsyncError() => _body(
-                                context,
-                                const ThinExtraction(
-                                  'The article could not be fetched.',
+                            // While it reads, the plain-text listen view
+                            // stands in for the rendered body: the engine
+                            // reports a word as a range in the string it was
+                            // given, so that string has to be what is drawn.
+                            if (listen.active)
+                              ListenView(
+                                listen: listen,
+                                accent: accent,
+                                bodySize: textSize.fontSize,
+                                spokenKey: _spokenKey,
+                                highlightWords: ref.watch(
+                                  settingsProvider.select(
+                                    (s) => s.highlightWords,
+                                  ),
                                 ),
-                                textSize,
-                                article.link,
-                                headline,
-                              ),
-                              _ => [const _BodySkeleton()],
-                            },
+                              )
+                            else ...[
+                              // The feed's picture, unless the body carries
+                              // it — the publisher's own figure keeps its
+                              // caption and its place in the story.
+                              if (doc.imageUrl != null &&
+                                  !_bodyHasLead(
+                                    extraction.value,
+                                    doc.imageUrl!,
+                                  ))
+                                _LeadImage(
+                                  url: doc.imageUrl!,
+                                  articleUrl: doc.link,
+                                ),
+                              ...switch (extraction) {
+                                AsyncData(:final value) => _body(
+                                  context,
+                                  value,
+                                  textSize,
+                                  doc,
+                                ),
+                                AsyncError() => _body(
+                                  context,
+                                  const ThinExtraction(
+                                    'The article could not be fetched.',
+                                  ),
+                                  textSize,
+                                  doc,
+                                ),
+                                _ => [const _BodySkeleton()],
+                              },
+                            ],
                           ],
                         ),
                       ),
@@ -278,37 +416,131 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
                       : const SizedBox.shrink(),
                 ),
               ),
+              // Scrolled away from the line being spoken, a quiet chip brings
+              // the page back rather than the page taking itself back.
+              if (listen.active && !_following)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: 94,
+                  child: Center(
+                    child: _BackToReading(
+                      onTap: () => setState(() {
+                        _following = true;
+                        _followedIndex = -1;
+                      }),
+                    ),
+                  ),
+                ),
+              // The phone has no voice for this language. Said in words, with
+              // the one fix, rather than a control that quietly does nothing.
+              if (listen.unsupported != null)
+                Positioned(
+                  left: 20,
+                  right: 20,
+                  bottom: 88,
+                  child: UnsupportedLanguageCard(
+                    language: HsLanguage.of(doc.language).englishName,
+                    onDismiss: () => ref
+                        .read(listenProvider(doc.language).notifier)
+                        .dismissUnsupported(),
+                  ),
+                ),
               // The actions and the fade beneath them leave together on a
               // scroll down and return together on a scroll up, so the prose
-              // gets the whole screen while the reader is reading.
+              // gets the whole screen while the reader is reading. The listen
+              // bar takes their place and stays put, because losing the
+              // transport controls mid-article is not the same as losing a
+              // row of links.
               Positioned(
                 left: 0,
                 right: 0,
                 bottom: 0,
-                child: IgnorePointer(
-                  ignoring: !_pillVisible,
-                  child: AnimatedOpacity(
-                    opacity: _pillVisible ? 1 : 0,
-                    duration: HsMotion.of(context, HsMotion.navHide),
-                    curve: HsMotion.curveOf(context, HsMotion.navHideCurve),
-                    child: AnimatedSlide(
-                      offset: _pillVisible ? Offset.zero : const Offset(0, 1),
-                      duration: HsMotion.of(context, HsMotion.navHide),
-                      curve: HsMotion.curveOf(context, HsMotion.navHideCurve),
-                      child: _ReaderFloatingButtons(
-                        article: article,
-                        sourceTitle: headline.source.title,
-                        thin: thin,
-                        onRetry: thin
-                            ? () => ref.invalidate(
-                                extractionProvider(widget.articleId),
-                              )
-                            : null,
-                        onToggleSizePanel: () =>
-                            setState(() => _sizePanelOpen = !_sizePanelOpen),
-                      ),
-                    ),
+                // The two swap on navHide, sliding past the bottom edge:
+                // the listen bar drops away as the action row comes back up,
+                // rather than one blinking out and the other blinking in.
+                child: AnimatedSwitcher(
+                  duration: HsMotion.of(context, HsMotion.navHide),
+                  switchInCurve: HsMotion.curveOf(
+                    context,
+                    HsMotion.navHideCurve,
                   ),
+                  switchOutCurve: HsMotion.curveOf(
+                    context,
+                    HsMotion.navHideCurve,
+                  ),
+                  // Both stay in the tree while they cross, aligned to the
+                  // bottom so the taller one does not shove the other up.
+                  layoutBuilder: (current, previous) => Stack(
+                    alignment: Alignment.bottomCenter,
+                    children: [...previous, ?current],
+                  ),
+                  transitionBuilder: (child, animation) {
+                    final fade = FadeTransition(
+                      opacity: animation,
+                      child: child,
+                    );
+                    if (HsMotion.reduced(context)) return fade;
+                    // Played in reverse on the way out, so closing the bar
+                    // slides it down.
+                    return SlideTransition(
+                      position: Tween(
+                        begin: const Offset(0, 1),
+                        end: Offset.zero,
+                      ).animate(animation),
+                      child: fade,
+                    );
+                  },
+                  child: listen.active
+                      ? ListenBar(
+                          key: const ValueKey('listen'),
+                          listen: listen,
+                          accent: accent,
+                          language: doc.language,
+                        )
+                      : IgnorePointer(
+                          key: const ValueKey('actions'),
+                          ignoring: !_pillVisible,
+                          child: AnimatedOpacity(
+                            opacity: _pillVisible ? 1 : 0,
+                            duration: HsMotion.of(context, HsMotion.navHide),
+                            curve: HsMotion.curveOf(
+                              context,
+                              HsMotion.navHideCurve,
+                            ),
+                            child: AnimatedSlide(
+                              offset: _pillVisible
+                                  ? Offset.zero
+                                  : const Offset(0, 1),
+                              duration: HsMotion.of(context, HsMotion.navHide),
+                              curve: HsMotion.curveOf(
+                                context,
+                                HsMotion.navHideCurve,
+                              ),
+                              child: _ReaderFloatingButtons(
+                                doc: doc,
+                                readerKey: _key,
+                                thin: thin,
+                                onRetry: thin && doc.articleId != null
+                                    ? () => ref.invalidate(
+                                        extractionProvider(doc.articleId!),
+                                      )
+                                    : null,
+                                onToggleSizePanel: () =>
+                                    setState(() => _sizePanelOpen = true),
+                                onListen: () => unawaited(
+                                  _startListening(
+                                    doc,
+                                    extraction.value ??
+                                        const ThinExtraction(
+                                          'Not fetched yet.',
+                                        ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
                 ),
               ),
             ],
@@ -322,8 +554,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
     BuildContext context,
     Extraction extraction,
     TextSizeStep size,
-    String link,
-    Headline headline,
+    ReaderDoc doc,
   ) {
     final linkMode = ref.read(settingsProvider).linkOpenMode;
 
@@ -334,36 +565,29 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
           return _thinView(
             context,
             'The publisher did not provide readable body text.',
-            link,
-            headline,
+            doc,
           );
         }
         return [
           ArticleBody(
             html: html,
-            articleUrl: link,
+            articleUrl: doc.link,
             bodySize: size.fontSize,
             linkMode: linkMode,
           ),
           const SizedBox(height: HsSpace.x6),
-          _OriginalSourceCard(headline: headline, link: link),
+          _OriginalSourceCard(doc: doc),
         ];
       }(),
-      ThinExtraction(:final reason) =>
-        _thinView(context, reason, link, headline),
+      ThinExtraction(:final reason) => _thinView(context, reason, doc),
     };
   }
 
-  List<Widget> _thinView(
-    BuildContext context,
-    String reason,
-    String link,
-    Headline headline,
-  ) {
+  List<Widget> _thinView(BuildContext context, String reason, ReaderDoc doc) {
     // The summary already stands under the headline; the card is all that
     // is left to say.
     final palette = context.hs;
-    final author = headline.article.author?.trim();
+    final author = doc.author?.trim();
 
     return [
       Container(
@@ -382,7 +606,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             ),
             const SizedBox(height: HsSpace.x2),
             Text(
-              'Source: ${headline.source.title}${author != null && author.isNotEmpty ? ' · By $author' : ''}',
+              'Source: ${doc.sourceTitle}'
+              '${author != null && author.isNotEmpty ? ' · By $author' : ''}',
               style: HsType.rowSub.copyWith(color: palette.textSecondary),
             ),
             const SizedBox(height: HsSpace.x2),
@@ -393,7 +618,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
             const SizedBox(height: 14),
             HsButton(
               'Open in web',
-              onPressed: () => unawaited(openInWeb(link)),
+              onPressed: () => unawaited(openInWeb(doc.link)),
               height: HsSize.buttonSmall,
             ),
           ],
@@ -404,8 +629,8 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen> {
 
   /// The summary as a standfirst, or null when the body already opens with
   /// it (feeds whose description is the first paragraph) or it is missing.
-  static String? _standfirst(ArticleRow article, Extraction? extraction) {
-    final dek = article.summary?.trim();
+  static String? _standfirst(ReaderDoc doc, Extraction? extraction) {
+    final dek = doc.summary?.trim();
     if (dek == null || dek.length < 20) return null;
     if (extraction is! ExtractedArticle) return dek;
     final opening = FeedParser.plainText(extraction.html).trimLeft();
@@ -670,17 +895,16 @@ class TextSizeSlider extends StatelessWidget {
 }
 
 class _Attribution extends StatelessWidget {
-  const new({required this.headline, required this.minutes});
+  const new({required this.doc, required this.minutes});
 
-  final Headline headline;
+  final ReaderDoc doc;
   final int? minutes;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final tone = headline.source.accent;
-    final accent = tone.resolve(isDark: palette.isDark);
-    final author = headline.article.author?.trim();
+    final accent = doc.accent.resolve(isDark: palette.isDark);
+    final author = doc.author?.trim();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -694,16 +918,16 @@ class _Attribution extends StatelessWidget {
         ],
         Text(
           [
-            headline.source.title,
-            articleDateline(headline.article.publishedAt),
+            doc.sourceTitle,
+            articleDateline(doc.publishedAt),
             if (minutes != null) '$minutes min read',
           ].join(' · '),
           style: HsType.readerMeta.copyWith(color: palette.textMuted),
         ),
         const SizedBox(height: HsSpace.x2),
         Pressable(
-          onTap: () => unawaited(openInWeb(headline.article.link)),
-          semanticLabel: 'Open original article on ${headline.source.title}',
+          onTap: () => unawaited(openInWeb(doc.link)),
+          semanticLabel: 'Open original article on ${doc.sourceTitle}',
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -725,15 +949,14 @@ class _Attribution extends StatelessWidget {
 }
 
 class _OriginalSourceCard extends StatelessWidget {
-  const new({required this.headline, required this.link});
+  const new({required this.doc});
 
-  final Headline headline;
-  final String link;
+  final ReaderDoc doc;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final author = headline.article.author?.trim();
+    final author = doc.author?.trim();
 
     return Container(
       padding: const EdgeInsets.all(18),
@@ -746,7 +969,7 @@ class _OriginalSourceCard extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Original article from ${headline.source.title}',
+            'Original article from ${doc.sourceTitle}',
             style: HsType.statTitle.copyWith(color: palette.textPrimary),
           ),
           if (author != null && author.isNotEmpty) ...[
@@ -759,7 +982,7 @@ class _OriginalSourceCard extends StatelessWidget {
           const SizedBox(height: 14),
           HsButton(
             'Open original in web',
-            onPressed: () => unawaited(openInWeb(link)),
+            onPressed: () => unawaited(openInWeb(doc.link)),
             height: HsSize.buttonSmall,
           ),
         ],
@@ -768,24 +991,86 @@ class _OriginalSourceCard extends StatelessWidget {
   }
 }
 
+/// The chip that returns the page to the line being spoken.
+class _BackToReading extends StatelessWidget {
+  const new({required this.onTap});
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+    return Pressable(
+      onTap: onTap,
+      semanticLabel: 'Back to reading',
+      child: Container(
+        height: 36,
+        padding: const EdgeInsets.symmetric(horizontal: 14),
+        decoration: BoxDecoration(
+          color: palette.surface,
+          border: Border.all(color: palette.stroke),
+          borderRadius: HsRadius.pillBorder,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.arrow_downward_rounded,
+              size: 12,
+              color: palette.textPrimary,
+            ),
+            const SizedBox(width: HsSpace.x2),
+            Text(
+              'Back to reading',
+              style: HsType.chipSelected.copyWith(
+                fontSize: 12,
+                color: palette.textPrimary,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The overflow menu.
+///
+/// Listen leads it. When the phone is known to have no voice for the
+/// article's language, the item stays — in secondary ink, with the reason as
+/// a sub-line — rather than vanishing: an option that disappears leaves the
+/// reader wondering what they did wrong.
 Future<void> _showReaderMenu({
   required BuildContext context,
   required BuildContext anchorContext,
-  required ArticleRow article,
+  required ReaderDoc doc,
   required VoidCallback onToggleSizePanel,
+  required VoidCallback onListen,
+  String? listenUnavailable,
 }) async {
   final selected = await showHsMenu<String>(
     context: context,
     anchorContext: anchorContext,
     above: true,
-    entries: const [
-      HsMenuEntry(value: 'copy', label: 'Copy link', icon: Icons.link_rounded),
+    minWidth: 224,
+    entries: [
       HsMenuEntry(
+        value: 'listen',
+        label: 'Listen',
+        icon: Icons.volume_up_rounded,
+        sub: listenUnavailable,
+      ),
+      const HsMenuEntry(
+        value: 'copy',
+        label: 'Copy link',
+        icon: Icons.link_rounded,
+      ),
+      const HsMenuEntry(
         value: 'web',
         label: 'Open in browser',
         icon: Icons.open_in_browser_rounded,
       ),
-      HsMenuEntry(
+      const HsMenuEntry(
         value: 'text_size',
         label: 'Text size',
         icon: Icons.format_size_rounded,
@@ -793,42 +1078,107 @@ Future<void> _showReaderMenu({
     ],
   );
 
-  if (selected == 'copy') {
-    await Clipboard.setData(ClipboardData(text: article.link));
-    if (context.mounted) {
-      unawaited(HapticFeedback.selectionClick());
-      showNotice(context, 'Link copied');
-    }
-  } else if (selected == 'web') {
-    unawaited(openInWeb(article.link));
-  } else if (selected == 'text_size') {
-    onToggleSizePanel();
+  switch (selected) {
+    case 'listen':
+      onListen();
+    case 'copy':
+      await Clipboard.setData(ClipboardData(text: doc.link));
+      if (context.mounted) {
+        unawaited(HapticFeedback.selectionClick());
+        showNotice(context, 'Link copied');
+      }
+    case 'web':
+      unawaited(openInWeb(doc.link));
+    case 'text_size':
+      onToggleSizePanel();
   }
 }
 
 class _ReaderFloatingButtons extends ConsumerWidget {
   const new({
-    required this.article,
-    required this.sourceTitle,
+    required this.doc,
+    required this.readerKey,
     required this.thin,
     required this.onRetry,
     required this.onToggleSizePanel,
+    required this.onListen,
   });
 
-  final ArticleRow article;
-  final String sourceTitle;
+  final ReaderDoc doc;
+  final ReaderKey readerKey;
   final bool thin;
   final VoidCallback? onRetry;
   final VoidCallback onToggleSizePanel;
+  final VoidCallback onListen;
+
+  Future<void> _toggleSaved(
+    BuildContext context,
+    WidgetRef ref, {
+    required bool saved,
+  }) async {
+    final repository = ref.read(bookmarkRepositoryProvider);
+    unawaited(HapticFeedback.selectionClick());
+
+    if (saved) {
+      final row = await repository.byLink(doc.link);
+      await repository.removeByLink(doc.link);
+      if (!context.mounted || row == null) return;
+      showUndoNotice(
+        context,
+        'Removed from Bookmarks',
+        onUndo: () => unawaited(repository.restore(row)),
+      );
+      return;
+    }
+
+    final articleId = doc.articleId;
+    if (articleId == null) return;
+
+    final headline = await ref.read(articleProvider(articleId).future);
+    if (headline == null) return;
+
+    // Saved at once, with whatever body has arrived, so the confirmation is
+    // immediate — the row it is copied from will not outlive the cache.
+    final ready = ref.read(readerBodyProvider(readerKey)).value;
+    await repository.save(
+      headline,
+      contentHtml: switch (ready) {
+        ExtractedArticle(:final html) => html,
+        _ => doc.savedHtml,
+      },
+    );
+    if (context.mounted) {
+      showActionNotice(
+        context,
+        'Saved to Bookmarks',
+        actionLabel: 'View',
+        onAction: () => unawaited(context.push('/bookmarks')),
+      );
+    }
+
+    // Saved while extraction was still running: the text catches up when it
+    // lands, so a bookmark made on the way into an article still opens
+    // offline later.
+    if (ready == null) {
+      final settled = await ref.read(readerBodyProvider(readerKey).future);
+      if (settled is ExtractedArticle) {
+        await repository.attachBody(doc.link, settled.html);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
     final blur = ref.watch(settingsProvider.select((s) => s.blurBehindNav));
+    final saved = ref.watch(isBookmarkedProvider(doc.link)).value ?? false;
+    final listenSupported = ref
+        .watch(listenSupportedProvider(doc.language))
+        .value;
 
-    // Three separate objects in the home pill's dress — the nav tone, a
-    // hairline, the one soft shadow — with air between them. The primary
-    // action takes the width; share and more keep their place on the right.
+    // Separate objects in the home pill's dress — the nav tone, a hairline,
+    // the one soft shadow — with air between them. The primary action takes
+    // the width; the rest keep their place on the right.
     Widget pill(Widget child) => NavPillSurface(
       blur: blur,
       child: SizedBox(height: HsSize.navItem, child: child),
@@ -846,7 +1196,7 @@ class _ReaderFloatingButtons extends ConsumerWidget {
           child: Pressable(
             onTap: thin && onRetry != null
                 ? onRetry
-                : () => openInWeb(article.link),
+                : () => openInWeb(doc.link),
             child: pill(
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
@@ -857,10 +1207,17 @@ class _ReaderFloatingButtons extends ConsumerWidget {
                     color: palette.textPrimary,
                   ),
                   const SizedBox(width: HsSpace.x2),
-                  Text(
-                    thin ? 'Try again' : 'Open in web',
-                    style: HsType.buttonSmall.copyWith(
-                      color: palette.textPrimary,
+                  // Flexible since the bookmark toggle joined the row: at a
+                  // large font scale, or on a narrow screen, the label gives
+                  // way rather than pushing the other three off the edge.
+                  Flexible(
+                    child: Text(
+                      thin ? 'Try again' : 'Open in web',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: HsType.buttonSmall.copyWith(
+                        color: palette.textPrimary,
+                      ),
                     ),
                   ),
                 ],
@@ -879,8 +1236,8 @@ class _ReaderFloatingButtons extends ConsumerWidget {
               unawaited(
                 SharePlus.instance.share(
                   ShareParams(
-                    text: '${article.title}\n\n${article.link}',
-                    subject: article.title,
+                    text: '${doc.title}\n\n${doc.link}',
+                    subject: doc.title,
                     sharePositionOrigin: origin,
                   ),
                 ),
@@ -891,13 +1248,46 @@ class _ReaderFloatingButtons extends ConsumerWidget {
           ),
         ),
         const SizedBox(width: HsSpace.x3),
+        // Save for later, between Share and More. Ink only, never the source
+        // accent: the control belongs to the reader, not to the publisher.
+        Semantics(
+          toggled: saved,
+          label: 'Save for later',
+          child: Pressable(
+            onTap: () => unawaited(_toggleSaved(context, ref, saved: saved)),
+            child: pill(
+              SizedBox(
+                width: HsSize.navItem,
+                child: Center(
+                  child: AnimatedSwitcher(
+                    duration: HsMotion.micro,
+                    child: HsGlyph.bookmark(
+                      palette.textPrimary,
+                      filled: saved,
+                      key: ValueKey(saved),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(width: HsSpace.x3),
         Builder(
           builder: (btnContext) => Pressable(
             onTap: () => _showReaderMenu(
               context: context,
               anchorContext: btnContext,
-              article: article,
+              doc: doc,
               onToggleSizePanel: onToggleSizePanel,
+              onListen: onListen,
+              // Only when the answer is already in hand. Null — not yet
+              // asked — offers Listen, which explains itself if it cannot
+              // run. The menu never waits on the speech engine to open.
+              listenUnavailable: listenSupported == false
+                  ? 'No ${HsLanguage.of(doc.language).englishName} voice '
+                        'on this phone'
+                  : null,
             ),
             semanticLabel: 'More options',
             child: pill(glyph(Icons.more_horiz_rounded)),

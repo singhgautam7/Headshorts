@@ -16,6 +16,26 @@ const lingerQueueSize = 60;
 /// enforcing Google Play News & Magazines policy freshness requirements.
 const maxArticleAge = Duration(days: 90);
 
+/// The most results one search returns. Finite, like every other list: a
+/// search that matches more than this says so rather than growing a cursor.
+const searchResultLimit = 200;
+
+/// Turns what the reader typed into an FTS5 MATCH expression.
+///
+/// Every term is quoted and given a prefix star, so `heat wav` finds
+/// "heatwave warning" while a stray quote, hyphen or `AND` cannot become
+/// syntax and throw. Returns null when there is nothing to search for —
+/// a query of punctuation alone is not a query.
+String? ftsQuery(String raw) {
+  final terms = raw
+      .split(RegExp(r'\s+'))
+      .map((t) => t.replaceAll('"', '').trim())
+      .where((t) => t.isNotEmpty)
+      .toList();
+  if (terms.isEmpty) return null;
+  return terms.map((t) => '"$t"*').join(' ');
+}
+
 /// An article together with the source that published it — what every list in
 /// the app actually renders.
 class Headline {
@@ -216,6 +236,46 @@ class ArticleRepository {
     return dedupeStories(_headlines(await query.get())).take(limit).toList();
   }
 
+  /// Full-text search over the cache.
+  ///
+  /// The index is FTS5 in external-content mode (see `_createSearchIndex`),
+  /// so this costs a term lookup rather than a scan of every article, and it
+  /// works with no network at all.
+  ///
+  /// Deliberately **not ranked**. FTS5 will happily order by bm25 relevance;
+  /// this orders by publication date like every other list in the app, and
+  /// the result count is stated rather than paginated. Unlike the briefing,
+  /// a paused source is still searchable — the scope decides what is in, and
+  /// the scope is the reader's, not the subscription's.
+  Future<List<Headline>> search({
+    required String query,
+    Set<int>? sourceIds,
+    DateTime? from,
+    DateTime? to,
+    int limit = searchResultLimit,
+  }) async {
+    final match = ftsQuery(query);
+    if (match == null) return const [];
+
+    final ids = await _db.searchArticleIds(
+      match: match,
+      sourceIds: sourceIds,
+      from: from,
+      to: to,
+      limit: limit,
+    );
+    if (ids.isEmpty) return const [];
+
+    final rows = await (_db.select(_db.articles).join([
+      innerJoin(_db.sources, _db.sources.id.equalsExp(_db.articles.sourceId)),
+    ])..where(_db.articles.id.isIn(ids))).get();
+
+    final found = _headlines(rows);
+    // The ids came back in date order; the join did not promise to keep it.
+    final byId = {for (final item in found) item.article.id: item};
+    return dedupeStories([for (final id in ids) ?byId[id]]);
+  }
+
   /// The enabled, in-scope articles, newest first, as a total order.
   /// Enforces a strict 90-day (< 3 months) freshness limit.
   JoinedSelectStatement<HasResultSet, dynamic> _scoped({
@@ -303,11 +363,15 @@ class ArticleRepository {
 
   Stream<Headline?> watchOne(int articleId) {
     final cutoff = DateTime.now().subtract(maxArticleAge);
-    final query = _db.select(_db.articles).join([
-      innerJoin(_db.sources, _db.sources.id.equalsExp(_db.articles.sourceId)),
-    ])
-      ..where(_db.articles.id.equals(articleId))
-      ..where(_db.articles.publishedAt.isBiggerOrEqualValue(cutoff));
+    final query =
+        _db.select(_db.articles).join([
+            innerJoin(
+              _db.sources,
+              _db.sources.id.equalsExp(_db.articles.sourceId),
+            ),
+          ])
+          ..where(_db.articles.id.equals(articleId))
+          ..where(_db.articles.publishedAt.isBiggerOrEqualValue(cutoff));
 
     return query.watchSingleOrNull().map(
       (r) => r == null
@@ -413,7 +477,9 @@ class ArticleRepository {
     String html, {
     String? snippet,
   }) async {
-    final text = FeedParser.plainText(html);
+    // Blocks joined, not the whole document collapsed: a teaser that reads
+    // "…clash.Star Indian weightlifter…" is the block boundary going missing.
+    final text = FeedParser.blockText(html).join(' ');
     final derivedSnippet =
         snippet ?? (text.length > 300 ? '${text.substring(0, 300)}…' : text);
     final prior = await (_db.select(

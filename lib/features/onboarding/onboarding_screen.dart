@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -12,7 +13,6 @@ import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
-import 'package:headshorts/core/widgets/info_button.dart';
 import 'package:headshorts/core/widgets/search_field.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/sources/source_catalog.dart';
@@ -35,6 +35,11 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   final _chosen = <String>{};
   var _query = '';
 
+  /// Which language the catalog is narrowed to while picking, or null for
+  /// all of them. A filter on the list, nothing more: it never unpicks a
+  /// source that has scrolled out of view.
+  String? _language;
+
   SourceCatalog get _catalog =>
       ref.read(sourceCatalogProvider).value ?? SourceCatalog.empty;
 
@@ -43,12 +48,16 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   /// Calm defaults: a couple from each of the first few categories, rather
   /// than everything. Two or three good ones beat twenty you skim.
   ///
+  /// **English only.** A reader who wants a regional paper will pick it —
+  /// switching one on for them assumes a language they may not read, and an
+  /// unreadable headline in the first briefing is worse than a shorter one.
+  ///
   /// Seeded when the catalog actually arrives, not when the step changes —
   /// the asset is read asynchronously and may not be parsed yet.
   void _seedDefaults() {
     if (_seeded || _catalog.sources.isEmpty) return;
     _seeded = true;
-    for (final entry in _catalog.grouped('').entries.take(3)) {
+    for (final entry in _catalog.grouped('', language: 'en').entries.take(3)) {
       for (final source in entry.value.take(2)) {
         _chosen.add(source.feedUrl);
       }
@@ -84,8 +93,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   }
 
   void _toggleCategory(String category, {required bool selected}) {
-    final urls = (_catalog.grouped(_query)[category] ?? const <CatalogSource>[])
-        .map((s) => s.feedUrl);
+    // The same list the reader is looking at: "Select all" must not reach
+    // sources the language filter has hidden.
+    final urls =
+        (_catalog.grouped(_query, language: _language)[category] ??
+                const <CatalogSource>[])
+            .map((s) => s.feedUrl);
     setState(() {
       if (selected) {
         _chosen.addAll(urls);
@@ -144,9 +157,12 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       onImport: () => _leaveTo('/sources/opml'),
     ),
     _Step.pick => _Pick(
-      grouped: _catalog.grouped(_query),
+      grouped: _catalog.grouped(_query, language: _language),
+      languages: _catalog.languages,
+      language: _language,
       chosen: _chosen,
       onSearch: (query) => setState(() => _query = query),
+      onLanguage: (tag) => setState(() => _language = tag),
       onToggleCategory: _toggleCategory,
       onSkip: _skip,
       onToggle: (url) => setState(() {
@@ -301,10 +317,13 @@ class FadingBriefingMark extends StatelessWidget {
 class _Pick extends StatelessWidget {
   const new({
     required this.grouped,
+    required this.languages,
+    required this.language,
     required this.chosen,
     required this.onToggle,
     required this.onToggleCategory,
     required this.onSearch,
+    required this.onLanguage,
     required this.onContinue,
     required this.onSkip,
     required this.onAddOwn,
@@ -312,11 +331,17 @@ class _Pick extends StatelessWidget {
   });
 
   final Map<String, List<CatalogSource>> grouped;
+
+  /// Every language the catalog carries, not only the ones already picked —
+  /// the point of the first run is to find publishers you do not have.
+  final List<String> languages;
+  final String? language;
   final Set<String> chosen;
   final ValueChanged<String> onToggle;
   final void Function(String category, {required bool selected})
   onToggleCategory;
   final ValueChanged<String> onSearch;
+  final ValueChanged<String?> onLanguage;
   final VoidCallback? onContinue;
   final VoidCallback onSkip;
   final VoidCallback onAddOwn;
@@ -357,7 +382,7 @@ class _Pick extends StatelessWidget {
             onToggle: onToggle,
             onToggleCategory: onToggleCategory,
             leading: Padding(
-              padding: const EdgeInsets.only(top: HsSpace.x4),
+              padding: const EdgeInsets.only(top: HsSpace.x2),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -365,36 +390,14 @@ class _Pick extends StatelessWidget {
                     hint: 'Search publishers and categories',
                     onChanged: onSearch,
                   ),
-                  const SizedBox(height: HsSpace.x3),
-                  // The two other ways in sit with the search, not pinned
-                  // over the list: they are choices to make once, and the
-                  // foot is for leaving the step.
-                  Row(
-                    children: [
-                      Expanded(
-                        child: HsButton(
-                          'Add your own',
-                          onPressed: onAddOwn,
-                          kind: HsButtonKind.secondary,
-                          height: HsSize.buttonCompact,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: HsButton(
-                          'Import OPML',
-                          onPressed: onImport,
-                          kind: HsButtonKind.secondary,
-                          height: HsSize.buttonCompact,
-                        ),
-                      ),
-                      InfoButton(
-                        semanticLabel: 'About OPML',
-                        onTap: () =>
-                            showOpmlExplainer(context, onImport: onImport),
-                      ),
-                    ],
-                  ),
+                  if (languages.length > 1) ...[
+                    const SizedBox(height: HsSpace.x3),
+                    LanguageChips(
+                      languages: languages,
+                      value: language,
+                      onChanged: onLanguage,
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -419,11 +422,90 @@ class _Pick extends StatelessWidget {
                 ),
                 const SizedBox(width: 10),
                 Expanded(child: HsButton('Continue', onPressed: onContinue)),
+                const SizedBox(width: 10),
+                // The two other ways in — pasting an address, importing a
+                // file — are choices a handful of readers make once. They
+                // belong in an overflow beside the step's own action, not
+                // above the catalog competing with it.
+                _MoreWaysIn(onAddOwn: onAddOwn, onImport: onImport),
               ],
             ),
           ),
         ),
       ],
+    );
+  }
+}
+
+/// The overflow beside Continue: paste an address, or import a file.
+///
+/// Wears **Skip's** dress — a hairline outline, no fill — square. These are
+/// asides from the step, like Skip, and only Continue should carry the ink:
+/// two filled buttons side by side would read as two things to choose
+/// between.
+class _MoreWaysIn extends StatelessWidget {
+  const new({required this.onAddOwn, required this.onImport});
+
+  final VoidCallback onAddOwn;
+  final VoidCallback onImport;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+
+    return Builder(
+      builder: (anchorContext) => Pressable(
+        onTap: () async {
+          final picked = await showHsMenu<String>(
+            context: context,
+            anchorContext: anchorContext,
+            above: true,
+            minWidth: 240,
+            entries: const [
+              HsMenuEntry(
+                value: 'url',
+                label: 'Add your own',
+                icon: Icons.link_rounded,
+              ),
+              HsMenuEntry(
+                value: 'opml',
+                label: 'Import OPML',
+                icon: Icons.file_open_outlined,
+              ),
+              HsMenuEntry(
+                value: 'about',
+                label: 'About OPML',
+                icon: Icons.info_outline_rounded,
+              ),
+            ],
+          );
+          switch (picked) {
+            case 'url':
+              onAddOwn();
+            case 'opml':
+              onImport();
+            case 'about':
+              if (context.mounted) {
+                unawaited(showOpmlExplainer(context, onImport: onImport));
+              }
+          }
+        },
+        semanticLabel: 'Other ways to add sources',
+        child: Container(
+          width: HsSize.buttonLarge,
+          height: HsSize.buttonLarge,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            border: Border.all(color: palette.stroke),
+            borderRadius: HsRadius.buttonBorder,
+          ),
+          child: Icon(
+            Icons.more_horiz_rounded,
+            size: 20,
+            color: palette.textPrimary,
+          ),
+        ),
+      ),
     );
   }
 }
