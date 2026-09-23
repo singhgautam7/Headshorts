@@ -9,6 +9,7 @@ SourceRow _source(int id, String title) => SourceRow(
   title: title,
   feedUrl: 'https://example.com/$id',
   category: 'World',
+  language: 'en',
   accentDark: 0xFFE39191,
   accentLight: 0xFF9C3A3C,
   type: SourceType.rss,

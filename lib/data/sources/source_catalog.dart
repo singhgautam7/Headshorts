@@ -9,12 +9,16 @@ class CatalogSource {
     required this.feedUrl,
     required this.category,
     required this.accent,
+    this.language = 'en',
     this.siteUrl,
   });
 
   final String title;
   final String feedUrl;
   final String category;
+
+  /// BCP-47, from the file's own `language` attribute.
+  final String language;
   final String? siteUrl;
   final SourceAccent accent;
 
@@ -40,6 +44,7 @@ class SourceCatalog {
         title: entry.title,
         feedUrl: entry.feedUrl,
         category: entry.category,
+        language: entry.language,
         siteUrl: entry.siteUrl,
         // The design board's own accents are carried in the file; anything
         // without one gets the same deterministic tone the app would derive.
@@ -57,31 +62,38 @@ class SourceCatalog {
   static Future<SourceCatalog> load() async =>
       SourceCatalog.parse(await rootBundle.loadString(assetPath));
 
+  /// The languages the catalog carries, in the order they appear.
+  ///
+  /// Every language the catalog *has*, not only the ones the reader follows:
+  /// the point of browsing it is to find a publisher you do not have yet.
+  List<String> get languages => sources.map((s) => s.language).toSet().toList();
+
   /// The categories present, in the order they appear in the file.
   List<String> get categories =>
       sources.map((s) => s.category).toSet().toList();
 
-  /// Case-insensitive search over name and category.
+  /// Case-insensitive search over name and category, optionally narrowed to
+  /// one language.
   ///
   /// An empty query returns everything: the catalog is browsable, and typing
-  /// only narrows it.
-  List<CatalogSource> search(String query) {
+  /// only narrows it. A null [language] is every language.
+  List<CatalogSource> search(String query, {String? language}) {
     final terms = query
         .toLowerCase()
         .split(RegExp(r'\s+'))
         .where((t) => t.isNotEmpty)
         .toList();
-    if (terms.isEmpty) return sources;
 
     return sources
+        .where((s) => language == null || s.language == language)
         .where((s) => terms.every((term) => s.searchKey.contains(term)))
         .toList();
   }
 
   /// Search results grouped for display, in catalog order.
-  Map<String, List<CatalogSource>> grouped(String query) {
+  Map<String, List<CatalogSource>> grouped(String query, {String? language}) {
     final grouped = <String, List<CatalogSource>>{};
-    for (final source in search(query)) {
+    for (final source in search(query, language: language)) {
       grouped.putIfAbsent(source.category, () => []).add(source);
     }
     return grouped;

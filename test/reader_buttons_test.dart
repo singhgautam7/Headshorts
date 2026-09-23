@@ -10,6 +10,8 @@ import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/data/readability/extraction_service.dart';
 import 'package:headshorts/data/sources/source_adapter.dart';
+import 'package:headshorts/features/bookmarks/bookmarks_controller.dart';
+import 'package:headshorts/features/reader/listen_controller.dart';
 import 'package:headshorts/features/reader/reader_controller.dart';
 import 'package:headshorts/features/reader/reader_screen.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -62,7 +64,7 @@ void main() {
   tearDown(() => db.close());
 
   testWidgets(
-    'renders 3 separated floating buttons (open in web, share, more)',
+    'renders the four separated floating buttons, bookmark before overflow',
     (tester) async {
       await tester.binding.setSurfaceSize(const Size(372, 780));
       addTearDown(() => tester.binding.setSurfaceSize(null));
@@ -76,6 +78,13 @@ void main() {
             articleProvider.overrideWith(
               (ref, id) => Stream.value(Headline(articleRow, sourceRow)),
             ),
+            // A live drift stream on a Reader that is about to be torn
+            // down leaves a pending cancellation timer the test binding
+            // objects to. Saved state is not what these cases are about.
+            isBookmarkedProvider.overrideWith(
+              (ref, link) => Stream.value(false),
+            ),
+            listenSupportedProvider.overrideWith((ref, language) async => true),
             extractionProvider.overrideWith(
               (ref, id) async => const ExtractedArticle(
                 html: '<p>Paragraph 1 with enough content to be an extracted article.</p>',
@@ -92,21 +101,33 @@ void main() {
 
       final semantics = tester.ensureSemantics();
 
-      // Verify all 3 buttons are rendered with their accessibility semantics
       final webButton = find.bySemanticsLabel('Open in web');
       final shareButton = find.bySemanticsLabel('Share');
+      final saveButton = find.bySemanticsLabel('Save for later');
       final moreButton = find.bySemanticsLabel('More options');
 
       expect(webButton, findsOneWidget);
       expect(shareButton, findsOneWidget);
+      expect(saveButton, findsOneWidget);
       expect(moreButton, findsOneWidget);
 
       // Verify "Open in web" has visible text
       expect(find.text('Open in web'), findsOneWidget);
 
-      // Verify tapping "More options" opens the popup menu
+      // The board puts the bookmark between Share and More, and nowhere else.
+      expect(
+        tester.getCenter(saveButton).dx,
+        greaterThan(tester.getCenter(shareButton).dx),
+      );
+      expect(
+        tester.getCenter(saveButton).dx,
+        lessThan(tester.getCenter(moreButton).dx),
+      );
+
+      // Verify tapping "More options" opens the popup menu, Listen first
       await tester.tap(moreButton);
       await tester.pumpAndSettle();
+      expect(find.text('Listen'), findsOneWidget);
       expect(find.text('Copy link'), findsOneWidget);
       expect(find.text('Open in browser'), findsOneWidget);
       expect(find.text('Text size'), findsOneWidget);
@@ -130,6 +151,13 @@ void main() {
             articleProvider.overrideWith(
               (ref, id) => Stream.value(Headline(articleRow, sourceRow)),
             ),
+            // A live drift stream on a Reader that is about to be torn
+            // down leaves a pending cancellation timer the test binding
+            // objects to. Saved state is not what these cases are about.
+            isBookmarkedProvider.overrideWith(
+              (ref, link) => Stream.value(false),
+            ),
+            listenSupportedProvider.overrideWith((ref, language) async => true),
             extractionProvider.overrideWith(
               (ref, id) async => ExtractedArticle(
                 // Long enough that the Reader scrolls.

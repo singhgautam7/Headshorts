@@ -51,9 +51,7 @@ abstract final class FeedParser {
           summary: _snippet(description),
           contentSnippet: _snippet(content ?? description),
           fullContentHtml: _fullContent(content),
-          author: _cleanAuthor(
-            _firstNonEmpty([item.dc?.creator, item.author]),
-          ),
+          author: _cleanAuthor(_firstNonEmpty([item.dc?.creator, item.author])),
           imageUrl: _imageFromRss(item),
         ),
       );
@@ -169,6 +167,29 @@ abstract final class FeedParser {
     }
     return text.replaceAll(RegExp(r'\s+'), ' ').trim();
   }
+
+  /// A document as its blocks, in order, each already plain text.
+  ///
+  /// [plainText] collapses **all** whitespace, which is right for a title or
+  /// a summary and wrong for a body: every paragraph runs into the next and
+  /// "…a 45-minute clash." meets "Star Indian weightlifter…" with no space
+  /// between them. Read-aloud needs the paragraphs back — it speaks one at a
+  /// time and highlights inside the one it is on.
+  ///
+  /// Block *closers* rather than openers, so a paragraph's own inline markup
+  /// stays inside it.
+  static List<String> blockText(String html) => html
+      .replaceAll(_blockBoundary, '\n')
+      .split('\n')
+      .map(plainText)
+      .where((block) => block.isNotEmpty)
+      .toList();
+
+  static final _blockBoundary = RegExp(
+    r'<\s*(br\s*/?|/p|/div|/li|/h[1-6]|/figcaption|/blockquote|/tr|/section'
+    r'|/article|/pre)\s*>',
+    caseSensitive: false,
+  );
 
   /// Two rounds handles single and double encoding. A third would only ever
   /// mangle prose that legitimately contains something entity-shaped.

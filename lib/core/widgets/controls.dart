@@ -9,6 +9,7 @@ import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/oklab.dart';
 import 'package:headshorts/core/tokens/palette.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/util/language.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 
 export 'app_icon_button.dart';
@@ -345,6 +346,65 @@ class FadingFooter extends StatelessWidget {
         ),
       ),
       child: child,
+    );
+  }
+}
+
+/// The language filter: "All" and one chip per language, naming itself in its
+/// own script.
+///
+/// A scrolling row rather than a segmented control. The board draws three
+/// segments because that reader follows two languages; the **catalog** offers
+/// eight, and eight equal-width segments wrap every label into a broken
+/// stack. A row that scrolls holds any number and keeps each name whole.
+///
+/// It shows nothing at all when there is one language: a filter with a single
+/// option is furniture.
+class LanguageChips extends StatelessWidget {
+  const new({
+    required this.languages,
+    required this.value,
+    required this.onChanged,
+    super.key,
+  });
+
+  final List<String> languages;
+
+  /// Null is "all of them".
+  final String? value;
+  final ValueChanged<String?> onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    if (languages.length < 2) return const SizedBox.shrink();
+
+    return SizedBox(
+      height: 36,
+      child: Semantics(
+        label: 'Language',
+        container: true,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            HsChip(
+              'All',
+              selected: value == null,
+              onTap: () => onChanged(null),
+            ),
+            for (final tag in languages) ...[
+              const SizedBox(width: HsSpace.x2),
+              Semantics(
+                label: HsLanguage.of(tag).englishName,
+                child: HsChip(
+                  HsLanguage.of(tag).endonym,
+                  selected: value == tag,
+                  onTap: () => onChanged(tag),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

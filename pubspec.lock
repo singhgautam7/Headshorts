@@ -451,6 +451,13 @@ packages:
     description: flutter
     source: sdk
     version: "0.0.0"
+  flutter_tts:
+    dependency: "direct main"
+    description:
+      path: "third_party/flutter_tts"
+      relative: true
+    source: path
+    version: "4.2.5"
   flutter_web_plugins:
     dependency: transitive
     description: flutter

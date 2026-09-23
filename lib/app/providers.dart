@@ -1,6 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:headshorts/data/db/article_repository.dart';
+import 'package:headshorts/data/db/bookmark_repository.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/db/stats_repository.dart';
@@ -37,6 +38,10 @@ final sourceRepositoryProvider = Provider<SourceRepository>(
 
 final articleRepositoryProvider = Provider<ArticleRepository>(
   (ref) => ArticleRepository(ref.watch(databaseProvider)),
+);
+
+final bookmarkRepositoryProvider = Provider<BookmarkRepository>(
+  (ref) => BookmarkRepository(ref.watch(databaseProvider)),
 );
 
 final statsRepositoryProvider = Provider<StatsRepository>(

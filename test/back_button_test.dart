@@ -30,7 +30,14 @@ void main() {
         StatefulShellRoute.indexedStack(
           builder: (context, state, shell) => AppShell(shell),
           branches: [
-            for (final tab in const ['today', 'linger', 'sources', 'more'])
+            // The v2 order, as the board's pill draws it.
+            for (final tab in const [
+              'today',
+              'linger',
+              'sources',
+              'search',
+              'more',
+            ])
               StatefulShellBranch(
                 routes: [
                   GoRoute(
@@ -69,9 +76,9 @@ void main() {
 
   Finder page(String name) => find.text('page:$name', skipOffstage: false);
 
-  testWidgets('back from every other tab lands on Today', (tester) async {
+  testWidgets('back from every other tab lands on Headlines', (tester) async {
     await pump(tester);
-    for (final tab in const ['linger', 'sources', 'more']) {
+    for (final tab in const ['linger', 'sources', 'search', 'more']) {
       router.go('/$tab');
       await tester.pumpAndSettle();
       expect(router.state.uri.path, '/$tab');
@@ -111,7 +118,7 @@ void main() {
     expect(router.state.uri.path, '/more');
   });
 
-  testWidgets('on Today the press is left to the platform', (tester) async {
+  testWidgets('on Headlines the press is left to the platform', (tester) async {
     await pump(tester);
     // Nothing to pop: the shell must not swallow the event, or the app can
     // never be left with the back button.

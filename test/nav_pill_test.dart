@@ -22,20 +22,37 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Headlines'), findsOneWidget);
+      expect(find.text('Search'), findsNothing);
       expect(find.text('Linger'), findsNothing);
       expect(find.text('Sources'), findsNothing);
       expect(find.text('More'), findsNothing);
     });
 
-    testWidgets('hugs its four items rather than spanning the screen', (
+    testWidgets('hugs its five items rather than spanning the screen', (
       tester,
     ) async {
-      await pumpThemed(tester, _pill(0));
+      await pumpThemed(tester, _pill(1));
       await tester.pumpAndSettle();
 
       final pill = tester.getSize(find.byType(NavPill));
       expect(pill.height, HsSize.navPillHeight + HsSize.navPillInset);
       expect(pill.width, lessThan(372 * 0.9));
+    });
+
+    testWidgets('the widest label fits rather than overflowing', (
+      tester,
+    ) async {
+      // The board's note: at a large font scale the active label gives way.
+      // Only the selected item flexes — making all five flexible splits the
+      // free space five ways and clips the one label to a third of itself.
+      await pumpThemed(tester, _pill(0));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getSize(find.byType(NavPill)).width,
+        lessThanOrEqualTo(372),
+      );
     });
 
     testWidgets('reports the tapped destination', (tester) async {
@@ -44,22 +61,22 @@ void main() {
       await tester.pumpAndSettle();
 
       await tester.tap(find.bySemanticsLabel('Sources'));
-      await tester.tap(find.bySemanticsLabel('More'));
+      await tester.tap(find.bySemanticsLabel('Search'));
       expect(tapped, [2, 3]);
     });
 
     testWidgets('the label morphs in over motion-nav-morph', (tester) async {
-      await pumpThemed(tester, _pill(3));
+      await pumpThemed(tester, _pill(4));
       await tester.pumpAndSettle();
       final closed = tester.getSize(find.byType(NavPill)).width;
 
-      await pumpThemed(tester, _pill(0));
+      await pumpThemed(tester, _pill(1));
       await tester.pump();
       final midMorph = tester.getSize(find.byType(NavPill)).width;
       await tester.pumpAndSettle();
       final open = tester.getSize(find.byType(NavPill)).width;
 
-      // "Headlines" is a longer label than "More", so the pill grows, and it
+      // "Linger" is a longer label than "More", so the pill grows, and it
       // arrives there over time rather than jumping.
       expect(open, greaterThan(closed));
       expect(midMorph, lessThan(open));
@@ -73,7 +90,7 @@ void main() {
     });
 
     testWidgets('renders on paper as well as on black', (tester) async {
-      await pumpThemed(tester, _pill(3), palette: HsPalette.light);
+      await pumpThemed(tester, _pill(4), palette: HsPalette.light);
       await tester.pumpAndSettle();
 
       expect(find.text('More'), findsOneWidget);

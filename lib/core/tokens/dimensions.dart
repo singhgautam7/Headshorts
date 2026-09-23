@@ -71,6 +71,9 @@ abstract final class HsSize {
   static const checkbox = 20.0;
 
   static const thumbnail = 76.0;
+
+  /// The medium list's thumbnail, and the one on a bookmark row.
+  static const thumbnailMedium = 60.0;
   static const appBarHeight = 52.0;
 
   static const hairline = 1.0;

@@ -1,5 +1,3 @@
-import 'dart:ui' show Color;
-
 import 'package:drift/drift.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/data/db/database.dart';
@@ -43,6 +41,7 @@ class SourceRepository {
     required String category,
     String? siteUrl,
     SourceAccent? accent,
+    String language = 'en',
     SourceType type = SourceType.rss,
   }) async {
     final existing = await (_db.select(
@@ -58,6 +57,7 @@ class SourceRepository {
             title: title,
             feedUrl: feedUrl,
             category: category,
+            language: Value(language),
             accentDark: tone.darkValue,
             accentLight: tone.lightValue,
             type: type,
@@ -78,6 +78,21 @@ class SourceRepository {
           accentLight: Value(accent.lightValue),
         ),
       );
+
+  /// The language label on a source. Like the category, it filters and
+  /// nothing more — it never changes what is fetched.
+  Future<void> setLanguage(int id, String language) =>
+      (_db.update(_db.sources)..where((s) => s.id.equals(id))).write(
+        SourcesCompanion(language: Value(language)),
+      );
+
+  /// The languages the reader actually has enabled sources in, so a filter
+  /// never offers a language with nothing behind it.
+  Stream<List<String>> watchLanguages() => watchAll().map(
+    (rows) =>
+        rows.where((r) => r.enabled).map((r) => r.language).toSet().toList()
+          ..sort(),
+  );
 
   Future<void> setCategory(int id, String category) =>
       (_db.update(_db.sources)..where((s) => s.id.equals(id))).write(
@@ -145,8 +160,7 @@ class SourceRepository {
 }
 
 extension SourceRowAccent on SourceRow {
-  SourceAccent get accent =>
-      SourceAccent(Color(accentDark), Color(accentLight));
+  SourceAccent get accent => SourceAccent.fromValues(accentDark, accentLight);
 
   SourceRef get ref => SourceRef(
     id: id,

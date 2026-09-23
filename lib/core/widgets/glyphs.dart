@@ -25,6 +25,49 @@ abstract final class HsGlyph {
     ),
   );
 
+  /// Search — a 12dp ring with a 6dp handle off its lower right, drawn in a
+  /// 16 square so it sits on the same baseline as the other four.
+  static Widget search(Color color) => SizedBox(
+    width: 16,
+    height: 16,
+    child: Stack(
+      children: [
+        Container(
+          width: 12,
+          height: 12,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(color: color, width: _stroke),
+          ),
+        ),
+        Positioned(
+          left: 10,
+          top: 11,
+          child: Transform.rotate(
+            angle: 0.7853981633974483,
+            alignment: Alignment.centerLeft,
+            child: Container(
+              width: 6,
+              height: _stroke,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(1),
+              ),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  /// A filled or outlined bookmark — the save-for-later toggle's two states.
+  static Widget bookmark(Color color, {bool filled = false, Key? key}) =>
+      CustomPaint(
+        key: key,
+        size: const Size(19, 19),
+        painter: _BookmarkPainter(color: color, filled: filled),
+      );
+
   /// Linger — a single card, upright.
   static Widget linger(Color color) => Container(
     width: 13,
@@ -275,4 +318,38 @@ class _SharePainter extends CustomPainter {
 
   @override
   bool shouldRepaint(_SharePainter old) => old.color != color;
+}
+
+/// The bookmark pennant: `M6.5 3.8h11v16.4L12 16.3l-5.5 3.9z` from the board,
+/// scaled from its 24 viewBox to whatever size it is drawn at.
+class _BookmarkPainter extends CustomPainter {
+  const new({required this.color, required this.filled});
+
+  final Color color;
+  final bool filled;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final k = size.width / 24;
+    final path = Path()
+      ..moveTo(6.5 * k, 3.8 * k)
+      ..lineTo(17.5 * k, 3.8 * k)
+      ..lineTo(17.5 * k, 20.2 * k)
+      ..lineTo(12 * k, 16.3 * k)
+      ..lineTo(6.5 * k, 20.2 * k)
+      ..close();
+
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = color
+        ..style = filled ? PaintingStyle.fill : PaintingStyle.stroke
+        ..strokeWidth = 1.8 * k
+        ..strokeJoin = StrokeJoin.round,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BookmarkPainter old) =>
+      old.color != color || old.filled != filled;
 }

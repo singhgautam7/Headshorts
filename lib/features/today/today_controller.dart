@@ -67,6 +67,34 @@ final activeCategoryProvider = Provider<String>((ref) {
   return categories.contains(selected) ? selected : latestScope;
 });
 
+/// The language the briefing is narrowed to, or null for all of them.
+///
+/// Sits above Category in the Filter sheet and narrows the source chips
+/// beneath it, exactly as Category already does. A view filter: a paused
+/// language is not a thing, and nothing here changes a subscription.
+class BriefingLanguage extends Notifier<String?> {
+  @override
+  String? build() => null;
+
+  /// Records the chosen language.
+  ///
+  // A setter would read as assigning `state` from outside the notifier.
+  // ignore: use_setters_to_change_properties
+  void select(String? language) => state = language;
+}
+
+final briefingLanguageProvider = NotifierProvider<BriefingLanguage, String?>(
+  BriefingLanguage.new,
+);
+
+/// The languages the reader's enabled sources are in. One entry means the
+/// control hides itself — a filter with a single option is furniture.
+final briefingLanguagesProvider = Provider<List<String>>((ref) {
+  final sources = ref.watch(sourcesProvider).value ?? const [];
+  final tags = sources.where((s) => s.enabled).map((s) => s.language).toSet();
+  return [if (tags.contains('en')) 'en', ...tags..remove('en')];
+});
+
 /// Sources hidden from the current view only — the "All sources" filter.
 ///
 /// A lens on the briefing, not a subscription change: nothing here alters
@@ -100,6 +128,21 @@ final sourcesProvider = StreamProvider<List<SourceRow>>(
   (ref) => ref.watch(sourceRepositoryProvider).watchAll(),
 );
 
+/// The sources the language filter is currently excluding.
+///
+/// Folded in with the reader's own muted set rather than adding a second
+/// parameter to every query: to the briefing, "hidden by language" and
+/// "hidden by the filter" are the same thing.
+final offLanguageSourcesProvider = Provider<Set<int>>((ref) {
+  final language = ref.watch(briefingLanguageProvider);
+  if (language == null) return const {};
+  final sources = ref.watch(sourcesProvider).value ?? const [];
+  return {
+    for (final source in sources)
+      if (source.language != language) source.id,
+  };
+});
+
 /// How much of Today is loaded.
 ///
 /// Keyset paging: the window is bounded by the cursor of the last item on the
@@ -122,7 +165,8 @@ class TodayPagination extends Notifier<TodayPage> {
     // A new sub-tab or filter change is a new list; start it at the top.
     ref
       ..watch(activeCategoryProvider)
-      ..watch(mutedSourcesProvider);
+      ..watch(mutedSourcesProvider)
+      ..watch(offLanguageSourcesProvider);
     return const TodayPage();
   }
 
@@ -134,7 +178,10 @@ class TodayPagination extends Notifier<TodayPage> {
     _loading = true;
 
     final category = ref.read(activeCategoryProvider);
-    final muted = ref.read(mutedSourcesProvider);
+    final muted = {
+      ...ref.read(mutedSourcesProvider),
+      ...ref.read(offLanguageSourcesProvider),
+    };
     final next = await ref
         .read(articleRepositoryProvider)
         .nextFloor(
@@ -164,7 +211,10 @@ final todayPaginationProvider = NotifierProvider<TodayPagination, TodayPage>(
 /// finite, and paginated.
 final briefingProvider = StreamProvider<List<Headline>>((ref) {
   final category = ref.watch(activeCategoryProvider);
-  final muted = ref.watch(mutedSourcesProvider);
+  final muted = {
+    ...ref.watch(mutedSourcesProvider),
+    ...ref.watch(offLanguageSourcesProvider),
+  };
   final page = ref.watch(todayPaginationProvider);
   final maxRun = ref.watch(
     settingsProvider.select((s) => s.maxConsecutivePerSource),

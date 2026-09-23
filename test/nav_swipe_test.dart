@@ -22,7 +22,14 @@ void main() {
         StatefulShellRoute.indexedStack(
           builder: (context, state, shell) => AppShell(shell),
           branches: [
-            for (final tab in const ['today', 'linger', 'sources', 'more'])
+            // The v2 order, as the board's pill draws it.
+            for (final tab in const [
+              'today',
+              'linger',
+              'sources',
+              'search',
+              'more',
+            ])
               StatefulShellBranch(
                 routes: [
                   GoRoute(
@@ -64,7 +71,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(router.state.uri.path, '/sources');
 
-    // Sources -> More
+    // Sources -> Search
+    await tester.fling(find.byType(AppShell), const Offset(-300, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, '/search');
+
+    // Search -> More
     await tester.fling(find.byType(AppShell), const Offset(-300, 0), 1000);
     await tester.pumpAndSettle();
     expect(router.state.uri.path, '/more');
@@ -83,7 +95,12 @@ void main() {
     await tester.pumpAndSettle();
     expect(router.state.uri.path, '/more');
 
-    // Swipe right (positive dx) moves from More -> Sources
+    // Swipe right (positive dx) moves from More -> Search
+    await tester.fling(find.byType(AppShell), const Offset(300, 0), 1000);
+    await tester.pumpAndSettle();
+    expect(router.state.uri.path, '/search');
+
+    // Search -> Sources
     await tester.fling(find.byType(AppShell), const Offset(300, 0), 1000);
     await tester.pumpAndSettle();
     expect(router.state.uri.path, '/sources');
