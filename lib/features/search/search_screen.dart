@@ -16,6 +16,7 @@ import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/screen.dart';
+import 'package:headshorts/features/search/cache_explainer.dart';
 import 'package:headshorts/features/search/date_range_sheet.dart';
 import 'package:headshorts/features/search/search_controller.dart';
 import 'package:headshorts/features/search/search_scope_sheet.dart';
@@ -61,7 +62,7 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                   children: [
                     _FilterChip(
                       label: range.chipLabel,
-                      active: !range.isDefault,
+                      active: !range.isInitial,
                       onTap: () => showDateRangeSheet(context),
                       semanticLabel: 'Date range, ${range.chipLabel}',
                     ),
@@ -82,27 +83,41 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
           Expanded(
             child: query.trim().isEmpty
                 ? const _EmptyState()
-                : results.when(
-                    skipLoadingOnReload: false,
-                    loading: _ResultsSkeleton.new,
-                    error: (_, _) => _NoResults(
-                      query: query,
-                      scope: scope.length,
-                      range: range,
-                    ),
-                    data: (outcome) => outcome.hits.isEmpty
-                        ? _NoResults(
-                            query: query,
-                            scope: scope.length,
-                            range: range,
-                          )
-                        : _Results(outcome: outcome, query: query),
+                : _resultsFor(
+                    results,
+                    query: query,
+                    scope: scope.length,
+                    range: range,
                   ),
           ),
         ],
       ),
     );
   }
+}
+
+/// Which of the three states the results area is in.
+///
+/// Asked directly rather than through `AsyncValue.when`, because an errored
+/// future does not leave the loading state in this version of Riverpod: it
+/// stays `isLoading` and merely *carries* the error, so `when`'s `error`
+/// branch never runs and a failed search would show its skeleton for ever.
+/// `skipError` does not change that either — both were checked.
+Widget _resultsFor(
+  AsyncValue<SearchOutcome> results, {
+  required String query,
+  required int scope,
+  required SearchDateRange range,
+}) {
+  final nothing = _NoResults(query: query, scope: scope, range: range);
+  if (results.hasError) return nothing;
+
+  // Still working — including a reload, where the previous results must not
+  // stand in for the new query's.
+  final outcome = results.value;
+  if (results.isLoading || outcome == null) return const _ResultsSkeleton();
+
+  return outcome.isEmpty ? nothing : _Results(outcome: outcome, query: query);
 }
 
 /// The field. Its own widget so the debounce and the clear button live with
@@ -282,6 +297,7 @@ class _EmptyState extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
     final entries = ref.watch(searchScopeEntriesProvider);
+    final web = ref.watch(settingsProvider.select((s) => s.searchTheWeb));
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(
@@ -308,6 +324,16 @@ class _EmptyState extends ConsumerWidget {
                     'search; it will not be followed.',
           style: HsType.caughtUpBody.copyWith(color: palette.textSecondary),
         ),
+        if (web) ...[
+          const SizedBox(height: 12),
+          Text(
+            'Your sources carry only what their feeds still list, so Google '
+            'News is searched as well and its results are grouped on their '
+            'own. Your search term is sent to Google; nothing else is, and '
+            'those results open in your browser.',
+            style: HsType.note.copyWith(color: palette.textMuted),
+          ),
+        ],
         if (entries.isNotEmpty) ...[
           const SizedBox(height: 22),
           SectionLabel('In scope · ${entries.length}'),
@@ -350,6 +376,7 @@ class _Results extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
     final size = ref.watch(settingsProvider.select((s) => s.listSize));
+    final linkMode = ref.watch(settingsProvider.select((s) => s.linkOpenMode));
     final hits = outcome.hits;
 
     // Headings and rows flattened into one lazy list, as the Sources screen
@@ -365,8 +392,21 @@ class _Results extends ConsumerWidget {
       rows.add(hit);
     }
 
-    final oldest = hits.last.view.publishedAt;
-    final newest = hits.first.view.publishedAt;
+    // Google News last and under its own heading, never mixed into the day
+    // groups above: these are not the reader's publishers.
+    if (outcome.webHits.isNotEmpty) {
+      rows
+        ..add(_WebHeading(tight: hits.isEmpty))
+        ..addAll(outcome.webHits);
+    }
+
+    final all = [...hits, ...outcome.webHits];
+    final oldest = all
+        .map((h) => h.view.publishedAt)
+        .reduce((a, b) => a.isBefore(b) ? a : b);
+    final newest = all
+        .map((h) => h.view.publishedAt)
+        .reduce((a, b) => a.isAfter(b) ? a : b);
 
     return ListView.builder(
       padding: const EdgeInsets.fromLTRB(
@@ -378,14 +418,43 @@ class _Results extends ConsumerWidget {
       itemCount: rows.length + 2,
       itemBuilder: (context, index) {
         if (index == 0) {
+          final count = hits.length + outcome.webHits.length;
           return Padding(
             padding: const EdgeInsets.only(bottom: 18),
             child: Semantics(
               liveRegion: true,
-              child: Text(
-                '${hits.length} '
-                '${hits.length == 1 ? 'result' : 'results'} · newest first',
-                style: HsType.timestamp.copyWith(color: palette.textMuted),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '$count ${count == 1 ? 'result' : 'results'} · '
+                    'newest first',
+                    style: HsType.timestamp.copyWith(color: palette.textMuted),
+                  ),
+                  // Everything below is from the web. Said here rather than
+                  // left as a gap, so the heading further down is not the
+                  // first hint that the reader's own sources came up empty.
+                  if (hits.isEmpty) ...[
+                    const SizedBox(height: 10),
+                    // A Wrap rather than a Row: at a large font size, or with
+                    // a three-digit source count, the link drops to its own
+                    // line instead of overflowing the sentence.
+                    Wrap(
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: HsSpace.x2,
+                      children: [
+                        Text(
+                          'Nothing from your ${outcome.sourcesSearched} '
+                          '${outcome.sourcesSearched == 1 ? 'source' : 'sources'}.',
+                          style: HsType.caughtUpBody.copyWith(
+                            color: palette.textSecondary,
+                          ),
+                        ),
+                        const _SeeWhy(),
+                      ],
+                    ),
+                  ],
+                ],
               ),
             ),
           );
@@ -395,6 +464,7 @@ class _Results extends ConsumerWidget {
         }
 
         final row = rows[index - 1];
+        if (row is _WebHeading) return row;
         if (row is String) {
           return Padding(
             padding: EdgeInsets.only(
@@ -414,13 +484,78 @@ class _Results extends ConsumerWidget {
             size: size,
             highlight: query.trim(),
             // A cached item has a row to open; one fetched for this search
-            // does not, so it goes to the publisher.
+            // or found on the web does not, so it goes to the publisher —
+            // through the reader's own "Open links" choice, as every other
+            // hand-off in the app does. Passing nothing here forced a Custom
+            // Tab on somebody who had asked for their own browser.
             onTap: () => id == null
-                ? unawaited(openInWeb(hit.link))
+                ? unawaited(openInWeb(hit.link, mode: linkMode))
                 : context.push('/reader/$id'),
           ),
         );
       },
+    );
+  }
+}
+
+/// Where the reader's own sources stop and the wider net begins.
+///
+/// Its own heading, its own words, and the one place in the app that says
+/// something left the device. Not a warning and not an apology — a label, so
+/// nobody has to wonder where a result came from.
+class _WebHeading extends StatelessWidget {
+  const new({this.tight = false});
+
+  /// Straight after the count, with no results of the reader's above it. The
+  /// divider is there to separate two groups; with only one group it is just
+  /// a gap.
+  final bool tight;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(top: tight ? 0 : HsSpace.x6, bottom: HsSpace.x3),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        if (!tight) ...[const HsDivider(), const SizedBox(height: HsSpace.x4)],
+        Semantics(header: true, child: const SectionLabel('From Google News')),
+      ],
+    ),
+  );
+}
+
+/// "See why?", beside the line saying the reader's own sources found nothing.
+///
+/// The same mastheads appear in the Google group below, which reads as a
+/// fault rather than an explanation. This is where the question gets asked,
+/// so it is where the answer is offered.
+///
+/// Underlined rather than a button: it is a footnote on the sentence beside
+/// it, not a third action competing with the two real ones further down. The
+/// padding is what carries it to a 44dp target — the text alone is 16.
+class _SeeWhy extends StatelessWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+    return GestureDetector(
+      onTap: () => showCacheExplainer(context),
+      child: Semantics(
+        button: true,
+        label: 'See why your sources found nothing',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 13),
+          child: Text(
+            'See why?',
+            style: HsType.caughtUpBody.copyWith(
+              color: palette.textSecondary,
+              decoration: TextDecoration.underline,
+              decorationColor: palette.textMuted,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -436,7 +571,10 @@ class _EndOfResults extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final count = outcome.hits.length;
+    // Everything the reader was shown, the web group included — the line at
+    // the top counts the same way, and two different totals on one screen
+    // read as a bug.
+    final count = outcome.hits.length + outcome.webHits.length;
 
     return Padding(
       padding: const EdgeInsets.only(top: 14),
@@ -453,7 +591,8 @@ class _EndOfResults extends StatelessWidget {
           const SizedBox(height: HsSpace.x2),
           Text(
             'From ${outcome.sourcesSearched} '
-            '${outcome.sourcesSearched == 1 ? 'source' : 'sources'}, '
+            '${outcome.sourcesSearched == 1 ? 'source' : 'sources'}'
+            '${outcome.webHits.isEmpty ? '' : ' and Google News'}, '
             '${SearchDateRange.shortDate(from)} – '
             '${SearchDateRange.shortDate(to)}',
             textAlign: TextAlign.center,
@@ -489,6 +628,7 @@ class _NoResults extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
+    final web = ref.watch(settingsProvider.select((s) => s.searchTheWeb));
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(32, 56, 32, HsSpace.navClearance),
@@ -507,17 +647,32 @@ class _NoResults extends ConsumerWidget {
                     'through.'
               : 'None of your $scope ${scope == 1 ? 'source' : 'sources'} '
                     'published a match'
-                    '${range.isDefault ? '' : ' in the '
-                              '${range.chipLabel.toLowerCase()}'}. '
-                    'A wider range or more sources may find it.',
+                    '${range.isUnbounded ? '' : ' in the '
+                              '${range.chipLabel.toLowerCase()}'}'
+                    // Said plainly, so nobody wonders whether the wider net
+                    // was cast: with it on, this really is the end of it.
+                    '${web ? ', and Google News had nothing either.' : '. '
+                              'A wider range or more sources may find it.'}',
           style: HsType.caughtUpBody.copyWith(color: palette.textSecondary),
         ),
         const SizedBox(height: 14),
-        if (!range.isDefault) ...[
+        if (!range.isUnbounded) ...[
           HsButton(
-            'Search any time',
+            'Search everything cached',
             onPressed: () =>
                 ref.read(searchDateProvider.notifier).set(SearchDateRange.any),
+            kind: HsButtonKind.secondary,
+            height: 46,
+          ),
+          const SizedBox(height: 10),
+        ],
+        // Offered where it is missed, rather than left to be found in More.
+        if (!web) ...[
+          HsButton(
+            'Also search Google News',
+            onPressed: () => ref
+                .read(settingsProvider.notifier)
+                .setSearchTheWeb(enabled: true),
             kind: HsButtonKind.secondary,
             height: 46,
           ),

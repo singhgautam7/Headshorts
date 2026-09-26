@@ -47,7 +47,8 @@ and five screenshots, exported under `project/exports/`). Recreate the
 | An AI summaries row under More | No row | Nothing to open until the summariser exists; a "Coming soon" screen was one more tap to nowhere. The row returns with the feature. |
 | Bundle a Noto face per Indic script | Devanagari bundled; the rest named as fallbacks | Nine more variable fonts is several megabytes for feeds most readers never take up. Android ships the Noto families, so `fontFamilyFallback` resolves them by name; Devanagari is bundled because it is the catalog's second script and must look designed rather than found. |
 | Listen's unsupported card offers "Speech settings" | One action, "Not now", and the copy names where to go | Opening Android's text-to-speech settings needs a platform intent, and neither `url_launcher` nor anything else already here can raise one. A button that does nothing is worse than a sentence that does. |
-| The v2 no-results screen lists both levers unconditionally | "Search any time" appears only when a range is set | Offering to widen a range that is already "any time" is a control that cannot do anything. |
+| The v2 no-results screen lists both levers unconditionally | "Search everything cached" appears only when a range is set | Offering to widen a range that is already unbounded is a control that cannot do anything. Under the past-week default it now appears by default, which is where it earns its place. |
+| Search's date filter offers "Any time", and opens on it | The longest option is "Everything cached", and Search opens on **Past week** | Both were the same lie in two places: "any time" over a cache holding a few days of feed implies an archive the app has never had. A week is about as deep as a cache search usefully reaches for a daily publisher, so the default states the scope rather than hiding it. The option is kept, not removed — a low-volume feed genuinely has 90 days cached, and that is reachable without the reader constructing a custom range. |
 
 ---
 
@@ -204,7 +205,29 @@ list you have to keep checking.
   normal drift query — nothing downstream has to read prefixed result columns.
 - Results are deduped by the same `dedupeStories` as every other list, and
   capped at `searchResultLimit` (200). The list ends in a plain count, never
-  a "load more".
+  a "load more". **There is no pagination and there should not be**: the cap
+  is what makes the list finite, and `ListView.builder` over the flattened
+  rows already builds only what is on screen. The range opens at **past
+  week** (`SearchDateRange.initial`), never unbounded.
+
+**What Search must not be rebuilt by.** It covers a *set of sources*, so it
+watches `sourceEntriesProvider` — the catalog and subscriptions **without**
+the unseen counts. Those counts stream out of `articles` and tick on every
+refresh and every article opened; watching the counted list meant **opening
+an article fired a fresh Google News request**, which was measured with a
+probe before the split and after it. `allSourceEntriesProvider` layers the
+counts back on for the Sources screen, and nothing that only needs the set of
+sources should watch it.
+
+**A feed fetched for a search is remembered for five minutes**
+(`_fetchedFeedsProvider`). A source in scope with nothing cached is fetched
+on every search, and refining a query runs several — so an unfollowed source
+added to the scope was re-downloaded on each one, for identical items. In
+memory only: a search must never quietly subscribe anybody to anything.
+
+**Settings are read before the first `await`.** `ref.watch` past an await
+registers a dependency on a provider that may already have moved on, and
+Riverpod is entitled to throw for it.
 
 **Scope is a lens, exactly like Filter.** `searchScopeProvider` holds feed
 addresses, and **null means "whatever I follow and have switched on"** rather
@@ -225,8 +248,138 @@ range reaches back exactly as far as that publisher's current feed does and
 no further, which the end of the results says in words — an RSS feed is not
 an archive, and implying one would be a lie the reader only discovers later.
 
+**The trigger is an empty cache, not an absent subscription.** These are not
+the same thing, and conflating them is what shipped in the first v2 build:
+the rule was `!isSubscribed`, so a source added a minute ago, one the prune
+had emptied, or one paused long enough to lose its items was skipped — it was
+subscribed, so it "had" a cache, and searching it returned nothing while
+looking like it had looked. `ArticleRepository.sourcesWithCache` answers the
+real question, and `search_live_test` pins both halves.
+
+### Google News is the wider net, and it is labelled
+
+A feed carries only its most recent items, so a cache-only search cannot
+answer "has anyone written about *this person*". Measured on a real install:
+six sources, one fetch, 369 articles spanning six days — and the word the
+reader searched for appeared in none of them, nor in any article body. No
+amount of re-fetching the same feeds changes that. Searching *beyond* the
+feeds needs a different source of results.
+
+`GoogleNewsSearch` asks `news.google.com/rss/search`, parses the RSS, and
+returns `WebResult`s — a **separate type** from `ParsedArticle`, so nothing
+from the web can drift into the briefing by accident. Nothing is stored.
+
+- **Its own group, always labelled.** Results land in `SearchOutcome.webHits`,
+  never mixed into the day headings above, under a "From Google News" heading.
+  The reader's own publishers are the answer; this is the net under it.
+- **The heading is the label and nothing else.** It carried a paragraph
+  explaining the group and the privacy position, which is both the wrong
+  moment — the term has already been sent by the time it is read — and a wall
+  of small print between the count and the first result. That copy now sits on
+  the **empty state**, where it is a heads-up before the reader types.
+- **A story the reader already has is dropped**, matched on the headline
+  fingerprint — a Google News link is a redirect and shares no address with
+  the publisher's own, so `canonicalUrl` cannot catch it. A headline too
+  short to fingerprint is kept, as everywhere else: a false merge is worse
+  than a duplicate.
+- **The publisher comes from the `<source>` element**, and Google's trailing
+  " - Publisher" is stripped from the title, because the card already prints
+  the publisher above the headline. Only the *trailing* occurrence, and only
+  when it matches the publisher — real headlines are full of dashes.
+- Its accent is derived per publisher, the way a pasted feed's is. Nothing
+  here is subscribed, so there is no accent of the reader's to use.
+- `when:1d`/`7d`/`1m` narrows at Google's end so a "past week" search does
+  not drag a year back to throw most of it away; the range is applied again
+  to what returns.
+- **Failure is ordinary.** No contract is published for this endpoint. A
+  timeout or a parse failure returns nothing and the reader's own results
+  stand alone — the group simply does not appear.
+- Header count and footer total both count the web group. Two different
+  totals on one screen read as a bug, and did.
+- **When the reader's own sources found nothing, the count line says so**
+  ("Nothing from your 6 sources.") and the group's divider is dropped.
+  Without it there is a stretch of empty screen between the count and the
+  heading, and the heading becomes the first hint that the cache came up
+  empty — which reads as a rendering fault rather than an answer.
+- **A result opens through the reader's own "Open links" choice.** Search
+  used to pass nothing and so forced a Custom Tab on somebody who had asked
+  for their own browser.
+
+**A Google News link cannot be opened in the Reader**, and this was measured
+rather than assumed. The `<link>` is an opaque token
+(`/rss/articles/CBMi…`), which decodes to `AU_yqL…` and not to a URL; the
+page it serves is 590KB of Google with no destination in it, resolved
+client-side; and not one of a hundred items carried a direct publisher link.
+The only way through is Google's private `batchexecute` RPC — a second
+undocumented dependency that would break without notice and leave a tap
+doing nothing. So these hand off to the browser, and the group says so.
+
+**The query leaves the device, and that is the only thing that does.** It is
+the single exception to "nothing is ever sent anywhere", so it is stated in
+three places: on Search's own empty state **before** anything is typed, on the
+Privacy screen, and as a setting (More → Search the web) that turns it off.
+The empty-state line is shown only while the setting is on, and says the same
+three things the heading used to: the feeds are shallow, so Google News is
+searched as well; the search term is sent and nothing else is; those results
+open in the browser. `search_loader_test` pins all three and pins that the
+heading no longer repeats them. On by default, because a search
+that cannot see past the last few days of six feeds is the thing readers
+report as broken.
+
+**Search does not refresh what is already cached.** A source with items is
+read, never re-fetched, so a search costs nothing and works on a plane. The
+consequence is worth stating plainly, because it surprises people: for a
+reader whose sources are all subscribed and populated — which is everyone,
+by default — **Search never touches the network**. It searches what the last
+refresh brought in. Anything a feed dropped before that refresh was never
+cached and cannot be found, and re-fetching would not find it either: a feed
+carries its most recent items and nothing else. Searching *beyond* the feed
+needs a different source of results, not a fresher fetch of the same one.
+
 The date range is by **publication** date, never by when an item was fetched:
 a feed that arrives late is still the day's news.
+
+### Why the cache misses what Google finds from the same publisher
+
+The most confusing thing about Search, and the one readers report as a bug:
+Google News returns results from The Hindu, the Times of India and Livemint —
+all of them subscribed, enabled and refreshing — while the reader's own copy
+of those publishers finds nothing. Nothing is broken. The two are searching
+different corpora, for three compounding reasons:
+
+1. **A feed is not an archive.** It carries a publisher's most recent items,
+   usually a few dozen. The cache is what those feeds handed over since the
+   reader subscribed; Google indexes the publisher's whole site, months back.
+   Measured on a real install: six sources, 369 articles, **six days** of
+   span.
+2. **The prune caps 200 items per source.** For a publisher running hundreds
+   of stories a day that is well under a day of depth, whatever the date
+   range says.
+3. **Only headlines and summaries are indexed** — `articles_fts` covers
+   `title`, `summary` and `content_snippet`, which is what a feed provides.
+   Google matches full article text, so a person named halfway down a story
+   matches there and not here. This is **not** worth fixing by indexing
+   `full_content_html`: it is null for almost every row, because a body is
+   only fetched when the reader opens that article. There is no body text to
+   index.
+
+So the same story is often *in* the cache and simply not matching, and just as
+often was never in the feed window at all. Neither is a fetch away — which is
+why the lever is Google News rather than a fresher refresh, and why the
+explainer says so instead of the app quietly widening the query.
+
+**"See why?" is the answer, offered where the question is asked.** An
+underlined link **beside** "Nothing from your 6 sources.", in a `Wrap` so it
+drops to its own line rather than overflowing the sentence, opening
+`showCacheExplainer` — one `InfoSheet` (`features/search/cache_explainer.dart`),
+no new design. Its shape is a one-line summary, the two reasons as a numbered
+list, and the caveat as the muted note: three dense paragraphs said the same
+thing and filled the screen, which is a sheet a reader closes rather than
+reads. The **third** reason — headlines and summaries are indexed, not bodies
+— is left to this file; it is the rarest case and the one least worth a
+screenful. It sits there rather than in More because that line, with the
+same mastheads listed directly below it, is the exact moment the reader
+concludes the app is broken.
 
 ### Where subscription lives
 
@@ -744,6 +897,21 @@ the board's chroma ceiling and moved into its lightness band, keeping the hue
 and dropping the shout. The bounds are measured from the board's own accents,
 not invented.
 
+**`AsyncValue.when`'s `error` branch does not run.** In this Riverpod
+version a `FutureProvider` whose future rejects does not leave the loading
+state: it stays `isLoading: true` and merely *carries* the error, so `when`
+picks `loading` for ever — `skipError: true` does not change it either, and
+both were checked against the package. A screen that maps `error` to its own
+view through `when` therefore shows its skeleton until the reader gives up.
+Ask `hasError` directly instead (`_resultsFor` in `search_screen.dart`).
+Today is unaffected only because it maps `loading` and `error` to the same
+skeleton; anywhere the two differ, do not use `when`.
+
+**A failed provider is retried on a backoff timer**, which is Riverpod's
+default and wanted here — a search that failed on a flaky connection tries
+again on its own. In a widget test it is a pending timer the binding objects
+to, so those containers pass `retry: (_, _) => null`.
+
 **Every wait shows a skeleton**, and every skeleton is a flat fill: Today's
 first load and category swipe, Linger's queue build, the Reader's body, the
 Sources list while the catalog asset is read, Search's results while a query
@@ -758,6 +926,17 @@ a 76dp thumbnail, a debounced search field, and `select` on any provider that
 emits more often than the widget needs — `refreshProvider` fires once per
 feed, and Today has no business rebuilding forty-five times for a word that
 changes twice.
+
+**Nothing is parsed in a `build`.** Measured at 8.9ms for one 26,000-character
+article, which is half a frame budget every time the widget rebuilds — and
+the Reader rebuilds several times a second while reading aloud, as the word
+highlight advances. The Reader derives its standfirst, its lead-image check
+and whether the body has any text at all from **one** parse held in
+`_derive`, re-run only when the document or the extraction changes; the
+Linger card memoises its extract on the article's id, because a drag rebuilds
+it on every frame. The same rule is why the Reader watches
+`settingsProvider.select((s) => s.textSize)` rather than the whole object: a
+rebuild for an unrelated setting would have paid that cost too.
 
 **Motion** fires only from a gesture or a tap. Nothing loops, nothing is
 ambient. Skeletons are flat fills with no shimmer sweep. The single exception
@@ -1027,6 +1206,13 @@ runs on the same clock as everything after it.
 `useRootNavigator`). Presented on a branch navigator they render *beneath* the
 shell's floating pill, which then covers the sheet's own actions.
 
+**`HsSheet`'s content scrolls, and only when it has to.** The view sizes
+itself to its content, so a three-row option sheet still hugs the bottom of
+the screen — but a sheet taller than the screen used to overflow its column
+and clip the actions at the foot, which are the part that must always be
+reachable. Any long explainer hit it, and so would every sheet in the app at
+a large system font size.
+
 **Tab switches slide directionally in `AppShell`, ported from Perch.**
 `StatefulShellRoute.indexedStack` hosts the branches while `AppShell` animates
 the incoming tab using `FractionalTranslation` on `HsMotion.page` (240ms,
@@ -1111,6 +1297,7 @@ only the card.
 | Custom Tabs | `url_launcher` (`LaunchMode.inAppBrowserView`) |
 | Read aloud | `flutter_tts` — the phone's own engine; nothing leaves the device. **Vendored and patched**, see below |
 | Full-text search | SQLite FTS5 through `drift` — no package; see §Search |
+| Web search | Google News' public RSS endpoint, read with `xml` — no package, no key |
 | Images | `cached_network_image` |
 | OPML / XML | `xml` |
 | Models | `freezed` |
@@ -1213,6 +1400,10 @@ only the card.
 - Republishing publisher body text beyond on-device reader-view parity.
 - **A server-side search index.** Search reads the cache on the device; a
   source with nothing cached is fetched once, for that search, and stored
-  nowhere.
+  nowhere. Google News is asked directly from the device, with the reader's
+  search term and nothing else.
+- **Storing anything Google News returns.** Its results are shown and
+  forgotten. They are not the reader's sources, they never enter the
+  briefing, and they open in the browser rather than the Reader.
 - **A cloud voice for Listen.** The phone's engine or nothing, said plainly.
 - iOS release targeting.

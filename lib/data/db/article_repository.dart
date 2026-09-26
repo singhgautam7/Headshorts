@@ -276,6 +276,23 @@ class ArticleRepository {
     return dedupeStories([for (final id in ids) ?byId[id]]);
   }
 
+  /// Which of [sourceIds] have anything cached at all.
+  ///
+  /// What decides whether Search has to go and fetch a source: a subscription
+  /// is not the same thing as a cache. A source added a minute ago, one whose
+  /// items the prune has taken, or one paused long enough to be emptied, is
+  /// subscribed and has nothing to search.
+  Future<Set<int>> sourcesWithCache(Set<int> sourceIds) async {
+    if (sourceIds.isEmpty) return const {};
+    final rows =
+        await (_db.selectOnly(_db.articles)
+              ..addColumns([_db.articles.sourceId])
+              ..where(_db.articles.sourceId.isIn(sourceIds))
+              ..groupBy([_db.articles.sourceId]))
+            .get();
+    return {for (final row in rows) row.read(_db.articles.sourceId)!};
+  }
+
   /// The enabled, in-scope articles, newest first, as a total order.
   /// Enforces a strict 90-day (< 3 months) freshness limit.
   JoinedSelectStatement<HasResultSet, dynamic> _scoped({

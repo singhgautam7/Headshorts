@@ -129,6 +129,7 @@ class Settings {
     this.speechRate = SpeechRate.slow,
     this.highlightWords = true,
     this.voiceByLanguage = const {},
+    this.searchTheWeb = true,
   });
 
   /// Which [ThemeFamily] is in force; unknown ids fall back to the board's.
@@ -168,6 +169,14 @@ class Settings {
   /// language, because a voice picked for English says nothing about Hindi.
   final Map<String, String> voiceByLanguage;
 
+  /// Whether Search also asks Google News.
+  ///
+  /// The only setting in the app that decides whether something leaves the
+  /// device, which is why it is a setting at all rather than just behaviour.
+  /// On by default: a search that cannot see past the last few days of six
+  /// feeds is the thing readers report as broken.
+  final bool searchTheWeb;
+
   Settings copyWith({
     String? familyId,
     ThemeMode? themeMode,
@@ -182,6 +191,7 @@ class Settings {
     SpeechRate? speechRate,
     bool? highlightWords,
     Map<String, String>? voiceByLanguage,
+    bool? searchTheWeb,
   }) => Settings(
     familyId: familyId ?? this.familyId,
     themeMode: themeMode ?? this.themeMode,
@@ -197,6 +207,7 @@ class Settings {
     speechRate: speechRate ?? this.speechRate,
     highlightWords: highlightWords ?? this.highlightWords,
     voiceByLanguage: voiceByLanguage ?? this.voiceByLanguage,
+    searchTheWeb: searchTheWeb ?? this.searchTheWeb,
   );
 }
 
@@ -223,6 +234,7 @@ class SettingsStore {
   static const _speechRate = 'speechRate';
   static const _highlight = 'highlightWords';
   static const _voices = 'voiceByLanguage';
+  static const _searchWeb = 'searchTheWeb';
 
   Settings read() {
     const fallback = Settings();
@@ -281,6 +293,7 @@ class SettingsStore {
     await _prefs.setString(_listSize, s.listSize.name);
     await _prefs.setString(_speechRate, s.speechRate.name);
     await _prefs.setBool(_highlight, s.highlightWords);
+    await _prefs.setBool(_searchWeb, s.searchTheWeb);
     await _prefs.setStringList(_voices, [
       for (final entry in s.voiceByLanguage.entries)
         '${entry.key}=${entry.value}',

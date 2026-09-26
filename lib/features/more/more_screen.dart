@@ -154,6 +154,42 @@ class MoreScreen extends ConsumerWidget {
                 },
               ),
               SettingsRow(
+                icon: Icons.travel_explore_rounded,
+                label: 'Search the web',
+                value: s.searchTheWeb ? 'Google News' : 'Off',
+                onTap: () async {
+                  final picked = await showOptionSheet<bool>(
+                    context,
+                    title: 'Search the web',
+                    description:
+                        'Your own feeds carry only their most recent items, '
+                        'so a search of them alone cannot reach far back. '
+                        'With this on, Search also asks Google News and '
+                        'shows what it finds under its own heading.',
+                    selected: s.searchTheWeb,
+                    options: const [
+                      SheetOption(
+                        value: true,
+                        label: 'Also search Google News',
+                        description:
+                            'Your search term is sent to Google. Nothing '
+                            'else is — not what you read, follow or save',
+                      ),
+                      SheetOption(
+                        value: false,
+                        label: 'Off',
+                        description:
+                            'Search only what is on this device. Nothing '
+                            'leaves it',
+                      ),
+                    ],
+                  );
+                  if (picked != null) {
+                    await controller.setSearchTheWeb(enabled: picked);
+                  }
+                },
+              ),
+              SettingsRow(
                 icon: Icons.balance_rounded,
                 label: 'Reading fairness',
                 value: s.maxConsecutivePerSource == 0

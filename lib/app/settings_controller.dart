@@ -47,6 +47,9 @@ class SettingsController extends Notifier<Settings> {
   Future<void> setHighlightWords({required bool enabled}) =>
       _save(state.copyWith(highlightWords: enabled));
 
+  Future<void> setSearchTheWeb({required bool enabled}) =>
+      _save(state.copyWith(searchTheWeb: enabled));
+
   /// Remembers the voice for one language, leaving the others alone.
   Future<void> setVoice(String language, String voiceName) => _save(
     state.copyWith(

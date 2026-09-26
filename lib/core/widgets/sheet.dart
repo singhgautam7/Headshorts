@@ -32,44 +32,51 @@ class HsSheet extends StatelessWidget {
         borderRadius: HsRadius.sheetTop,
         border: Border(top: BorderSide(color: palette.divider)),
       ),
-      padding: EdgeInsets.only(
-        left: HsSpace.x5,
-        right: HsSpace.x5,
-        top: 20,
-        bottom: 28 + MediaQuery.viewInsetsOf(context).bottom,
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(
-                color: palette.divider,
-                borderRadius: BorderRadius.circular(2),
+      // Scrolls only when it has to: the view sizes itself to its content, so
+      // a three-row option sheet still hugs the bottom of the screen. Without
+      // it a sheet longer than the screen — a long explainer, or any sheet at
+      // a large system font size — overflowed its column and clipped the
+      // actions at the foot, which are the part that must always be reachable.
+      child: SingleChildScrollView(
+        padding: EdgeInsets.only(
+          left: HsSpace.x5,
+          right: HsSpace.x5,
+          top: 20,
+          bottom: 28 + MediaQuery.viewInsetsOf(context).bottom,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Center(
+              child: Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: palette.divider,
+                  borderRadius: BorderRadius.circular(2),
+                ),
               ),
             ),
-          ),
-          const SizedBox(height: 20),
-          Text(
-            title,
-            style: HsType.stepTitle.copyWith(
-              fontSize: 20,
-              color: palette.textPrimary,
-            ),
-          ),
-          if (sub != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 20),
             Text(
-              sub,
-              style: HsType.note.copyWith(color: palette.textSecondary),
+              title,
+              style: HsType.stepTitle.copyWith(
+                fontSize: 20,
+                color: palette.textPrimary,
+              ),
             ),
+            if (sub != null) ...[
+              const SizedBox(height: 6),
+              Text(
+                sub,
+                style: HsType.note.copyWith(color: palette.textSecondary),
+              ),
+            ],
+            const SizedBox(height: 20),
+            ...children,
           ],
-          const SizedBox(height: 20),
-          ...children,
-        ],
+        ),
       ),
     );
   }

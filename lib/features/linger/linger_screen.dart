@@ -378,7 +378,18 @@ class _LingerCardState extends ConsumerState<LingerCard> {
     super.dispose();
   }
 
+  int? _extractFor;
+  String _extract = '';
+
+  /// Cached on the article's own id: a drag rebuilds the card on every frame,
+  /// and the body parse below costs milliseconds each time.
   String _resolveExtract() {
+    if (_extractFor == widget.headline.article.id) return _extract;
+    _extractFor = widget.headline.article.id;
+    return _extract = _computeExtract();
+  }
+
+  String _computeExtract() {
     final article = widget.headline.article;
     if (article.contentSnippet != null &&
         article.contentSnippet!.trim().isNotEmpty) {

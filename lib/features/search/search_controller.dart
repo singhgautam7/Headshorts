@@ -1,8 +1,12 @@
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:headshorts/app/providers.dart';
+import 'package:headshorts/app/settings_controller.dart';
+import 'package:headshorts/core/tokens/accents.dart';
+import 'package:headshorts/core/util/canonical_url.dart';
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/tables.dart';
+import 'package:headshorts/data/feed/google_news_search.dart';
 import 'package:headshorts/data/sources/source_adapter.dart';
 import 'package:headshorts/features/sources/sources_controller.dart';
 import 'package:headshorts/features/today/headline_card.dart';
@@ -10,7 +14,10 @@ import 'package:headshorts/features/today/headline_card.dart';
 /// The presets the date chip offers, plus the pair of dates behind
 /// [DateRangePreset.between].
 enum DateRangePreset {
-  anyTime('Any time'),
+  // Not "Any time": there is no archive behind it. It is the whole of what
+  // the last refreshes brought in, which is a corpus rather than a period,
+  // and naming it as one is what stops it reading as a promise.
+  anyTime('Everything cached'),
   day('Past 24 hours'),
   week('Past week'),
   month('Past month'),
@@ -32,6 +39,12 @@ class SearchDateRange {
 
   static const any = SearchDateRange(DateRangePreset.anyTime);
 
+  /// What Search opens on. A week, not everything, because a week is about as
+  /// deep as a cache search usefully reaches for a daily publisher — so the
+  /// first thing the reader sees states the scope instead of implying there
+  /// is none. See "Search looks through the cache" in CLAUDE.md.
+  static const initial = SearchDateRange(DateRangePreset.week);
+
   final DateRangePreset preset;
 
   /// Only meaningful for [DateRangePreset.between]. A null [to] is "today".
@@ -51,7 +64,13 @@ class SearchDateRange {
       ? DateTime(to!.year, to!.month, to!.day, 23, 59, 59)
       : null;
 
-  bool get isDefault => preset == DateRangePreset.anyTime;
+  /// No time constraint at all — every cached item is in range. Drives the
+  /// copy and the widening offer, both of which are about the *constraint*.
+  bool get isUnbounded => preset == DateRangePreset.anyTime;
+
+  /// Untouched since Search opened. Drives the chip's active dress, which is
+  /// about whether the reader has narrowed anything.
+  bool get isInitial => preset == DateRangePreset.week;
 
   /// What the chip says. "14 Sep – today" rather than a pair of full dates:
   /// the chip is a statement of scope, not a field.
@@ -101,6 +120,18 @@ class SearchDateRange {
 class SearchHit {
   const new({required this.view, required this.link, this.articleId});
 
+  factory fromWeb(WebResult result) => SearchHit(
+    view: ArticleView(
+      sourceTitle: result.publisher,
+      // A stable tone per publisher, the same way a pasted feed gets one.
+      // Nothing here is subscribed, so there is no accent of the reader's.
+      accent: SourceAccent.fromKey(result.publisher),
+      title: result.title,
+      publishedAt: result.publishedAt,
+    ),
+    link: result.link,
+  );
+
   final ArticleView view;
   final String link;
   final int? articleId;
@@ -112,6 +143,7 @@ class SearchOutcome {
   const new({
     required this.hits,
     required this.sourcesSearched,
+    this.webHits = const [],
     this.fetchedLive = 0,
     this.truncated = false,
   });
@@ -119,6 +151,16 @@ class SearchOutcome {
   static const empty = SearchOutcome(hits: [], sourcesSearched: 0);
 
   final List<SearchHit> hits;
+
+  /// Results from Google News, kept in their own list rather than mixed in.
+  /// They are not the reader's sources and must never read as though they
+  /// are — the screen gives them their own heading and their own note.
+  final List<SearchHit> webHits;
+
+  /// Nothing was found anywhere, which is the only case the "nothing for…"
+  /// screen should appear for.
+  bool get isEmpty => hits.isEmpty && webHits.isEmpty;
+
   final int sourcesSearched;
 
   /// How many in-scope sources had to be fetched because nothing of theirs is
@@ -145,7 +187,7 @@ final searchQueryProvider = NotifierProvider<SearchQuery, String>(
 
 class SearchDateFilter extends Notifier<SearchDateRange> {
   @override
-  SearchDateRange build() => SearchDateRange.any;
+  SearchDateRange build() => SearchDateRange.initial;
 
   /// Records the chosen range.
   ///
@@ -187,7 +229,9 @@ final searchScopeProvider = NotifierProvider<SearchScope, Set<String>?>(
 /// The scope resolved against what actually exists: the chosen feed addresses
 /// as source entries, or the enabled subscriptions when nothing was chosen.
 final searchScopeEntriesProvider = Provider<List<SourceEntry>>((ref) {
-  final entries = ref.watch(allSourceEntriesProvider);
+  // The count-free list: unseen counts change constantly and have nothing to
+  // do with which sources a search covers.
+  final entries = ref.watch(sourceEntriesProvider);
   final chosen = ref.watch(searchScopeProvider);
   if (chosen == null) {
     return [
@@ -206,6 +250,10 @@ final searchResultsProvider = FutureProvider<SearchOutcome>((ref) async {
   final query = ref.watch(searchQueryProvider).trim();
   final range = ref.watch(searchDateProvider);
   final scope = ref.watch(searchScopeEntriesProvider);
+  // Read before the first await. `ref.watch` past an await registers a
+  // dependency on a provider that may already have moved on, and Riverpod is
+  // entitled to throw for it.
+  final alsoWeb = ref.watch(settingsProvider.select((s) => s.searchTheWeb));
   if (query.isEmpty || scope.isEmpty) return SearchOutcome.empty;
 
   // Cached first: an indexed lookup, offline, over everything ever fetched
@@ -233,12 +281,33 @@ final searchResultsProvider = FutureProvider<SearchOutcome>((ref) async {
 
   // Then the sources with nothing in the cache to look through. One fetch
   // each, nothing stored: this is a search, not a subscription.
-  final unsubscribed = [
+  //
+  // Keyed on **having a cache**, not on being subscribed. The two are not the
+  // same: a source added a minute ago, one the prune has emptied, or one
+  // paused long enough to lose its items is subscribed and has nothing to
+  // search, and skipping it would return nothing while looking like it
+  // looked.
+  final withCache = await ref.watch(articleRepositoryProvider).sourcesWithCache(
+    {
+      for (final entry in scope)
+        if (entry.subscription case final row?) row.id,
+    },
+  );
+  final needFetching = [
     for (final entry in scope)
-      if (!entry.isSubscribed) entry,
+      if (!withCache.contains(entry.subscription?.id ?? -1)) entry,
   ];
-  for (final entry in unsubscribed) {
-    hits.addAll(await _searchLive(ref, entry, query, range));
+
+  // In parallel, and bounded: a search that has to fetch eight feeds must
+  // not take eight feeds' worth of waiting one after another. The same
+  // ceiling the refresh pipeline uses, for the same reason — a phone does
+  // not go faster by opening more sockets.
+  for (var i = 0; i < needFetching.length; i += searchFetchConcurrency) {
+    final batch = needFetching.skip(i).take(searchFetchConcurrency);
+    final fetched = await Future.wait([
+      for (final entry in batch) _searchLive(ref, entry, query, range),
+    ]);
+    fetched.forEach(hits.addAll);
   }
 
   hits.sort((a, b) => b.view.publishedAt.compareTo(a.view.publishedAt));
@@ -248,11 +317,74 @@ final searchResultsProvider = FutureProvider<SearchOutcome>((ref) async {
 
   return SearchOutcome(
     hits: capped,
+    webHits: alsoWeb ? await _searchWeb(ref, query, range, capped) : const [],
     sourcesSearched: scope.length,
-    fetchedLive: unsubscribed.length,
+    fetchedLive: needFetching.length,
     truncated: hits.length > searchResultLimit,
   );
 });
+
+/// Asks Google News, when the reader has left that switched on.
+///
+/// Runs **after** their own sources and lands in its own list: the reader's
+/// publishers are the answer, and this is the wider net under it. A story
+/// their own feeds already carried is dropped rather than shown twice —
+/// matched on the headline fingerprint, because a Google News link is a
+/// redirect and shares no address with the publisher's own.
+Future<List<SearchHit>> _searchWeb(
+  Ref ref,
+  String query,
+  SearchDateRange range,
+  List<SearchHit> own,
+) async {
+  final results = await ref
+      .read(googleNewsSearchProvider)
+      .search(query, since: range.start)
+      .timeout(GoogleNewsSearch.timeout, onTimeout: () => const []);
+
+  final seen = {for (final hit in own) titleFingerprint(hit.view.title)}
+    ..remove('');
+  final end = range.end;
+
+  return [
+    for (final result in results)
+      if (end == null || result.publishedAt.isBefore(end))
+        if (seen.add(titleFingerprint(result.title))) SearchHit.fromWeb(result),
+  ];
+}
+
+/// How many feeds a search fetches at once, and how long it waits for each.
+///
+/// The ceiling matches the refresh pipeline's. The timeout is shorter: a
+/// refresh happens behind the content and can afford fifteen seconds, while a
+/// search has somebody watching a skeleton. A feed that has not answered in
+/// eight seconds is one fewer source searched, said in the footer, rather
+/// than a spinner that never ends.
+const searchFetchConcurrency = 6;
+const searchFetchTimeout = Duration(seconds: 8);
+
+/// Feeds fetched for a search, kept for a few minutes.
+///
+/// A source in scope with nothing cached is fetched on every search, and a
+/// reader refining a query runs several — so "The Guardian, added to the
+/// scope but not followed" was re-downloaded on each one. The items are the
+/// same either way; only the filtering changes. Deliberately in memory and
+/// not in the database: a search must not quietly subscribe anybody to
+/// anything.
+final _fetchedFeedsProvider = Provider<Map<String, _FetchedFeed>>((ref) => {});
+
+/// How long a fetched feed stands in for the real thing. Long enough to cover
+/// refining a query, short enough that a search started later is current.
+const _fetchedFeedTtl = Duration(minutes: 5);
+
+class _FetchedFeed {
+  new(this.articles) : at = DateTime.now();
+
+  final List<ParsedArticle> articles;
+  final DateTime at;
+
+  bool get isFresh => DateTime.now().difference(at) < _fetchedFeedTtl;
+}
 
 /// Fetches one feed and filters it in memory.
 ///
@@ -271,17 +403,33 @@ Future<List<SearchHit>> _searchLive(
     ..removeWhere((t) => t.isEmpty);
 
   try {
-    final result = await ref
-        .read(adapterRegistryProvider)
-        .resolve(SourceType.rss)
-        .fetch(SourceRef(id: -1, feedUrl: entry.feedUrl, type: SourceType.rss));
-    if (result is! FetchFresh) return const [];
+    final cache = ref.read(_fetchedFeedsProvider);
+    final remembered = cache[entry.feedUrl];
+
+    final List<ParsedArticle> fetched;
+    if (remembered != null && remembered.isFresh) {
+      fetched = remembered.articles;
+    } else {
+      final result = await ref
+          .read(adapterRegistryProvider)
+          .resolve(SourceType.rss)
+          .fetch(
+            SourceRef(id: -1, feedUrl: entry.feedUrl, type: SourceType.rss),
+          )
+          .timeout(
+            searchFetchTimeout,
+            onTimeout: () => const FetchResult.failed('Took too long.'),
+          );
+      if (result is! FetchFresh) return const [];
+      fetched = result.articles;
+      cache[entry.feedUrl] = _FetchedFeed(fetched);
+    }
 
     final start = range.start;
     final end = range.end;
 
     return [
-      for (final item in result.articles)
+      for (final item in fetched)
         if (_matches(item, terms) &&
             (start == null || item.publishedAt.isAfter(start)) &&
             (end == null || item.publishedAt.isBefore(end)))

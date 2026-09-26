@@ -53,6 +53,10 @@ class PrivacyScreen extends StatelessWidget {
       'Device-only storage',
       'Your subscriptions, read history, and cached stories stay on your device and are wiped upon uninstall.',
     ),
+    (
+      'One exception, and you control it',
+      'If "Search the web" is on, a search term you type is sent to Google News to look beyond your own feeds. Nothing else goes with it, and More lets you switch it off.',
+    ),
   ];
 
   @override
@@ -73,7 +77,9 @@ class PrivacyScreen extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
           'Feeds and articles are fetched directly from the sources you choose. '
-          'There is no HeadShorts server, so nothing you read is ever tracked or sent anywhere.',
+          'There is no HeadShorts server, so nothing you read is ever tracked. '
+          'The one thing that can leave this device is a search term, and only '
+          'while "Search the web" is switched on.',
           style: HsType.bodySans.copyWith(
             color: palette.textSecondary,
             height: 1.45,

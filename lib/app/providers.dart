@@ -6,6 +6,7 @@ import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/db/stats_repository.dart';
 import 'package:headshorts/data/feed/feed_discovery.dart';
+import 'package:headshorts/data/feed/google_news_search.dart';
 import 'package:headshorts/data/feed/http_client.dart';
 import 'package:headshorts/data/feed/refresh_service.dart';
 import 'package:headshorts/data/prefs/settings.dart';
@@ -62,6 +63,12 @@ final refreshServiceProvider = Provider<RefreshService>(
     articles: ref.watch(articleRepositoryProvider),
     registry: ref.watch(adapterRegistryProvider),
   ),
+);
+
+/// The one call in the app that leaves the device with something the reader
+/// typed. Behind `Settings.searchTheWeb`, and stated wherever its results are.
+final googleNewsSearchProvider = Provider<GoogleNewsSearch>(
+  (ref) => GoogleNewsSearch(ref.watch(httpClientProvider)),
 );
 
 final feedDiscoveryProvider = Provider<FeedDiscovery>(

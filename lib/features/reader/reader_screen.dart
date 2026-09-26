@@ -77,6 +77,35 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
   /// see it without reaching for the provider on every frame.
   bool _listenActive = false;
 
+  /// Answers derived from the article body, worked out once per body.
+  ///
+  /// Both used to be computed in `build`, and both walk the whole extracted
+  /// document. That costs about 9ms on a modest article — fine once, ruinous
+  /// while reading aloud, where the word highlight rebuilds this screen
+  /// several times a second and every one of them re-parsed the article.
+  Extraction? _derivedFrom;
+  ReaderDoc? _derivedFor;
+  String? _standfirstText;
+  bool _bodyCarriesLead = false;
+  bool _bodyIsEmpty = false;
+
+  void _derive(ReaderDoc doc, Extraction? extraction) {
+    if (identical(_derivedFrom, extraction) && identical(_derivedFor, doc)) {
+      return;
+    }
+    _derivedFrom = extraction;
+    _derivedFor = doc;
+    // One parse of the body, shared: the standfirst compares against its
+    // opening and the body itself only needs to know whether there is any.
+    final text = extraction is ExtractedArticle
+        ? FeedParser.plainText(extraction.html).trim()
+        : '';
+    _bodyIsEmpty = extraction is ExtractedArticle && text.isEmpty;
+    _standfirstText = _standfirst(doc, extraction, text);
+    final image = doc.imageUrl;
+    _bodyCarriesLead = image != null && _bodyHasLead(extraction, image);
+  }
+
   ReaderKey get _key =>
       (articleId: widget.articleId, bookmarkId: widget.bookmarkId);
 
@@ -223,7 +252,10 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     final palette = context.hs;
     final doc = ref.watch(readerDocProvider(_key)).value;
     final extraction = ref.watch(readerBodyProvider(_key));
-    final textSize = ref.watch(settingsProvider).textSize;
+    // Selected, not the whole of Settings: the Reader has no business
+    // rebuilding because a speech rate or a list size changed — and while
+    // read-aloud is running, the speed control writes settings.
+    final textSize = ref.watch(settingsProvider.select((s) => s.textSize));
 
     if (doc == null) {
       return ColoredBox(color: palette.background, child: const SizedBox());
@@ -233,6 +265,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     final accent = accentTone.resolve(isDark: palette.isDark);
     final thin = extraction.value is ThinExtraction;
     final listen = ref.watch(listenProvider(doc.language));
+    _derive(doc, extraction.value);
     _syncListenState(active: listen.active);
     _followReading(listen);
 
@@ -282,8 +315,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
                             // `sp-descp` — and sits under the headline as it
                             // does on their page, unless the body opens with
                             // the same words, when it would only repeat.
-                            if (_standfirst(doc, extraction.value)
-                                case final dek?) ...[
+                            if (_standfirstText case final dek?) ...[
                               const SizedBox(height: 14),
                               Text(
                                 dek,
@@ -324,11 +356,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
                               // The feed's picture, unless the body carries
                               // it — the publisher's own figure keeps its
                               // caption and its place in the story.
-                              if (doc.imageUrl != null &&
-                                  !_bodyHasLead(
-                                    extraction.value,
-                                    doc.imageUrl!,
-                                  ))
+                              if (doc.imageUrl != null && !_bodyCarriesLead)
                                 _LeadImage(
                                   url: doc.imageUrl!,
                                   articleUrl: doc.link,
@@ -560,8 +588,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
 
     return switch (extraction) {
       ExtractedArticle(:final html) => () {
-        final text = FeedParser.plainText(html).trim();
-        if (text.isEmpty) {
+        if (_bodyIsEmpty) {
           return _thinView(
             context,
             'The publisher did not provide readable body text.',
@@ -629,13 +656,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
 
   /// The summary as a standfirst, or null when the body already opens with
   /// it (feeds whose description is the first paragraph) or it is missing.
-  static String? _standfirst(ReaderDoc doc, Extraction? extraction) {
+  static String? _standfirst(
+    ReaderDoc doc,
+    Extraction? extraction,
+    String bodyText,
+  ) {
     final dek = doc.summary?.trim();
     if (dek == null || dek.length < 20) return null;
     if (extraction is! ExtractedArticle) return dek;
-    final opening = FeedParser.plainText(extraction.html).trimLeft();
     final probe = dek.substring(0, dek.length.clamp(0, 40));
-    return opening.startsWith(probe) ? null : dek;
+    return bodyText.startsWith(probe) ? null : dek;
   }
 
   static bool _bodyHasLead(Extraction? extraction, String url) =>

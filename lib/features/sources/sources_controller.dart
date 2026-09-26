@@ -43,6 +43,18 @@ class SourceEntry {
 
   final int unseen;
 
+  /// The same entry, carrying its unseen count.
+  SourceEntry withUnseen(int count) => SourceEntry(
+    title: title,
+    feedUrl: feedUrl,
+    category: category,
+    accent: accent,
+    language: language,
+    siteUrl: siteUrl,
+    subscription: subscription,
+    unseen: count,
+  );
+
   bool get isSubscribed => subscription != null;
 
   /// Whether it is currently feeding the briefing.
@@ -90,16 +102,22 @@ final sourcesLanguageProvider = NotifierProvider<SourcesLanguage, String?>(
   SourcesLanguage.new,
 );
 
-/// The catalog and the reader's subscriptions as one flat list.
+/// The catalog and the reader's subscriptions as one flat list — **without**
+/// the unseen counts.
 ///
 /// A source the reader added by URL is not in the catalog, so it is appended;
 /// a catalog source they subscribed to carries its live state rather than
-/// appearing twice. Search's scope sheet and the Sources screen both read
-/// this, so "every source there is" has one definition.
-final allSourceEntriesProvider = Provider<List<SourceEntry>>((ref) {
+/// appearing twice.
+///
+/// Separate from [allSourceEntriesProvider] because the unseen counts come
+/// from a stream over `articles`, which ticks on every refresh and every
+/// article opened. Anything that only needs to know *which* sources exist
+/// must not be rebuilt by that: Search watches this one, and watching the
+/// counted version meant reading an article fired a fresh Google News
+/// request. Measured, not guessed.
+final sourceEntriesProvider = Provider<List<SourceEntry>>((ref) {
   final catalog = ref.watch(sourceCatalogProvider).value ?? SourceCatalog.empty;
   final subscribed = ref.watch(sourcesProvider).value ?? const [];
-  final unseen = ref.watch(unseenBySourceProvider).value ?? const {};
 
   final byFeed = {for (final row in subscribed) row.feedUrl: row};
   return [
@@ -112,7 +130,6 @@ final allSourceEntriesProvider = Provider<List<SourceEntry>>((ref) {
         language: byFeed[source.feedUrl]?.language ?? source.language,
         siteUrl: source.siteUrl,
         subscription: byFeed[source.feedUrl],
-        unseen: unseen[byFeed[source.feedUrl]?.id] ?? 0,
       ),
     // Anything the reader added themselves, which the catalog knows
     // nothing about.
@@ -126,8 +143,21 @@ final allSourceEntriesProvider = Provider<List<SourceEntry>>((ref) {
           language: row.language,
           siteUrl: row.siteUrl,
           subscription: row,
-          unseen: unseen[row.id] ?? 0,
         ),
+  ];
+});
+
+/// The same list, with each source's unseen count on it.
+///
+/// What the Sources screen shows; nothing that only needs the set of sources
+/// should watch this.
+final allSourceEntriesProvider = Provider<List<SourceEntry>>((ref) {
+  final entries = ref.watch(sourceEntriesProvider);
+  final unseen = ref.watch(unseenBySourceProvider).value ?? const {};
+  if (unseen.isEmpty) return entries;
+  return [
+    for (final entry in entries)
+      entry.withUnseen(unseen[entry.subscription?.id] ?? 0),
   ];
 });
 

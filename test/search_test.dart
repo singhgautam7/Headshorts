@@ -4,6 +4,7 @@ import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/sources/source_adapter.dart';
+import 'package:headshorts/features/search/search_controller.dart';
 
 /// Full-text search over the cache: the FTS5 index, the scope, and the date
 /// range. Everything here runs with no network at all, which is the point.
@@ -217,6 +218,43 @@ void main() {
       ]);
       final hits = await articles.search(query: 'Vidarbha');
       expect(hits, hasLength(1));
+    });
+  });
+
+  /// What the date chip opens on, and what each flag means.
+  ///
+  /// The two flags look interchangeable and are not: one is about whether
+  /// there is a time constraint at all (the copy, and the offer to widen),
+  /// the other about whether the reader has narrowed anything (the chip's
+  /// dress). Swapping them hides the widening offer on the one screen that
+  /// exists to offer it.
+  group('the date presets', () {
+    test('Search opens on the past week, not on everything', () {
+      // "Any time" as the default implied an archive the app has never had:
+      // a feed carries its most recent items, so an unbounded search is
+      // unbounded over a few days of cache. The default states the scope.
+      expect(SearchDateRange.initial.preset, DateRangePreset.week);
+      final start = SearchDateRange.initial.start;
+      expect(start, isNotNull);
+      expect(DateTime.now().difference(start!).inHours, closeTo(24 * 7, 1));
+    });
+
+    test('only the unbounded preset applies no constraint', () {
+      expect(SearchDateRange.any.start, isNull);
+      expect(SearchDateRange.any.isUnbounded, isTrue);
+      expect(SearchDateRange.initial.isUnbounded, isFalse);
+    });
+
+    test('only the opening range reads as untouched', () {
+      expect(SearchDateRange.initial.isInitial, isTrue);
+      expect(SearchDateRange.any.isInitial, isFalse);
+      expect(const SearchDateRange(DateRangePreset.day).isInitial, isFalse);
+    });
+
+    test('the longest option names a corpus, not a period', () {
+      // It is the whole of what the last refreshes brought in. Calling it
+      // "Any time" is the thing readers reported as broken search.
+      expect(DateRangePreset.anyTime.label, 'Everything cached');
     });
   });
 }

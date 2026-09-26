@@ -101,11 +101,11 @@ class _DateRangeSheetState extends ConsumerState<_DateRangeSheet> {
           children: [
             Expanded(
               child: HsButton(
-                'Any time',
+                'Reset',
                 onPressed: () {
                   ref
                       .read(searchDateProvider.notifier)
-                      .set(SearchDateRange.any);
+                      .set(SearchDateRange.initial);
                   Navigator.of(context).pop();
                 },
                 kind: HsButtonKind.secondary,
