@@ -1263,23 +1263,15 @@ dart format lib test
 flutter test
 flutter run -d <device>
 flutter build apk --profile --target-platform android-arm64   # small enough to install on a full emulator
-dart run flutter_launcher_icons      # after changing assets/icon/
 dart run flutter_native_splash:create
 ```
 
-The launcher icon is generated from the design board's mark by
-`tool/make_icon.py` (pure stdlib, no image library) into `assets/icon/`: a
-paper ground carrying a slate-teal headline card with two ghost cards behind
-it, every shape a rotated rounded box under a signed-distance function. The
-adaptive background is the paper (`#F4F1EA`), the foreground the whole stack
-inside the safe zone, the monochrome layer the front card's silhouette with
-its lines knocked out. The splash is `splash.png` on both Android
-generations: a paper disc carrying the stack on the AMOLED ground. Android
-12 shows only the inner two thirds of the drawable through its circular
-mask, over `icon_background_color` in the same paper, so the seam is
-invisible; the stack is drawn small enough (0.36 of the disc) to clear that
-crop. The foreground alone over a black disc, which is what it was, showed
-only the card.
+The launcher icon, its monochrome layer and the splash art come from the icon
+family in `specs/design/app-icon/` (see its `icon.md`): an H whose right stem
+carries an RSS mark, dark `#791A18` and mid `#D3453D` on `#FFDDD9`. The SVGs
+are converted to vector drawables in `res/`, and the legacy launcher PNGs and
+the splash art in `assets/icon/` are rendered from the same SVGs. The splash
+ground is the icon's pale tint in light mode and `#291412` in dark.
 
 ---
 
