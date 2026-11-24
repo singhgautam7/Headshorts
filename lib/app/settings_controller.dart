@@ -71,6 +71,9 @@ class SettingsController extends Notifier<Settings> {
   Future<void> setWallpaperColor({required bool enabled}) =>
       _save(state.copyWith(wallpaperColor: enabled));
 
+  Future<void> setWallpaperSeed(int argb) =>
+      _save(state.copyWith(wallpaperSeed: argb));
+
   Future<void> setFloatingHeader({required bool enabled}) =>
       _save(state.copyWith(floatingHeader: enabled));
 

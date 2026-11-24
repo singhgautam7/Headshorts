@@ -3,6 +3,7 @@ package com.grs.news
 import android.app.ActivityManager
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import android.os.Bundle
 import com.grs.news.widget.WidgetChannel
 import io.flutter.embedding.android.FlutterActivity
@@ -42,6 +43,13 @@ class MainActivity : FlutterActivity() {
                     val am = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
                     val info = ActivityManager.MemoryInfo().also { am.getMemoryInfo(it) }
                     result.success(mapOf("ramMb" to (info.totalMem / (1024 * 1024)).toInt(), "lowRam" to am.isLowRamDevice))
+                } else if (call.method == "wallpaperSeed") {
+                    // The accent Android derives from the wallpaper; Material You starts at 12.
+                    result.success(
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                            resources.getColor(android.R.color.system_accent1_600, theme)
+                        else null
+                    )
                 } else {
                     result.notImplemented()
                 }

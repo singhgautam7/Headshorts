@@ -154,7 +154,8 @@ class HeadlinesWidgetProvider : AppWidgetProvider() {
                     PendingIntent.getActivity(ctx, 0, it, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT),
                 )
             }
-            v.setBoolean(R.id.widget_refresh, "setEnabled", !refreshing)
+            // Never disabled: taps during a refresh are ignored in onReceive, and if the refresh
+            // process is killed the button must still work once the flag is stale.
             v.setFloat(R.id.widget_refresh, "setAlpha", if (refreshing) 0.4f else 1f)
             v.setContentDescription(
                 R.id.widget_refresh,

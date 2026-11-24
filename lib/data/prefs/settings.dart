@@ -130,7 +130,7 @@ enum SpeechRate {
 @immutable
 class Settings {
   const new({
-    this.familyId = 'paper',
+    this.familyId = 'signature',
     this.themeMode = ThemeMode.dark,
     this.amoled = true,
     this.blurBehindNav = false,
@@ -149,11 +149,12 @@ class Settings {
     this.haptics = true,
     this.expressiveColors = true,
     this.wallpaperColor = false,
+    this.wallpaperSeed,
     this.floatingHeader = true,
     this.pillMode = PillMode.always,
   });
 
-  /// Which [ThemeFamily] is in force; unknown ids fall back to the board's.
+  /// Which [ThemeFamily] is in force; unknown ids fall back to Signature.
   final String familyId;
   final ThemeMode themeMode;
 
@@ -213,6 +214,10 @@ class Settings {
   /// The accent comes from the phone's wallpaper (Android 12 and later).
   final bool wallpaperColor;
 
+  /// The last wallpaper seed (ARGB) the phone handed over, so a cold start
+  /// paints the right colours before the platform has answered.
+  final int? wallpaperSeed;
+
   /// The header turns into a pill on scroll; off, it scrolls away.
   final bool floatingHeader;
 
@@ -244,6 +249,7 @@ class Settings {
     bool? haptics,
     bool? expressiveColors,
     bool? wallpaperColor,
+    int? wallpaperSeed,
     bool? floatingHeader,
     PillMode? pillMode,
   }) => Settings(
@@ -267,6 +273,7 @@ class Settings {
     haptics: haptics ?? this.haptics,
     expressiveColors: expressiveColors ?? this.expressiveColors,
     wallpaperColor: wallpaperColor ?? this.wallpaperColor,
+    wallpaperSeed: wallpaperSeed ?? this.wallpaperSeed,
     floatingHeader: floatingHeader ?? this.floatingHeader,
     pillMode: pillMode ?? this.pillMode,
   );
@@ -301,6 +308,7 @@ class SettingsStore {
   static const _haptics = 'haptics';
   static const _expressive = 'expressiveColors';
   static const _wallpaper = 'wallpaperColor';
+  static const _wallpaperSeed = 'wallpaperSeed';
   static const _floatingHeader = 'floatingHeader';
   static const _pillMode = 'pillMode';
 
@@ -347,6 +355,7 @@ class SettingsStore {
       expressiveColors:
           _prefs.getBool(_expressive) ?? fallback.expressiveColors,
       wallpaperColor: _prefs.getBool(_wallpaper) ?? fallback.wallpaperColor,
+      wallpaperSeed: _prefs.getInt(_wallpaperSeed),
       floatingHeader:
           _prefs.getBool(_floatingHeader) ?? fallback.floatingHeader,
       pillMode:
@@ -383,6 +392,9 @@ class SettingsStore {
     await _prefs.setBool(_haptics, s.haptics);
     await _prefs.setBool(_expressive, s.expressiveColors);
     await _prefs.setBool(_wallpaper, s.wallpaperColor);
+    if (s.wallpaperSeed != null) {
+      await _prefs.setInt(_wallpaperSeed, s.wallpaperSeed!);
+    }
     await _prefs.setBool(_floatingHeader, s.floatingHeader);
     await _prefs.setString(_pillMode, s.pillMode.name);
     await _prefs.setStringList(_voices, [

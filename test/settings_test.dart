@@ -23,7 +23,11 @@ void main() {
     test('defaults are the calm ones', () async {
       final settings = (await store()).read();
 
-      expect(settings.familyId, 'paper');
+      expect(
+        settings.familyId,
+        'signature',
+        reason: 'the icon is the default for anyone who has not picked',
+      );
       expect(settings.themeMode, ThemeMode.dark);
       expect(settings.amoled, isTrue);
       expect(settings.blurBehindNav, isFalse);
@@ -34,6 +38,17 @@ void main() {
         0,
         reason: 'strictly chronological unless asked otherwise',
       );
+    });
+
+    test('a stored family and wallpaper seed survive a restart', () async {
+      final written = await store();
+      await written.write(
+        const Settings(familyId: 'paper', wallpaperSeed: 0xFF3366CC),
+      );
+      final read = (await store()).read();
+      expect(read.familyId, 'paper', reason: 'a stored pick is kept');
+      expect(read.wallpaperSeed, 0xFF3366CC);
+      expect(const Settings().wallpaperSeed, isNull);
     });
 
     test('round-trips every field', () async {

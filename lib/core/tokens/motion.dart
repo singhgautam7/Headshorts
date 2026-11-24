@@ -145,6 +145,10 @@ abstract final class HsMotion {
     fontVariations: <FontVariation>[FontVariation('wght', wght)],
   );
 
+  /// Kuber's tab pager: the whole page over, ease in and out.
+  static const pageSlide = Duration(milliseconds: 300);
+  static const pageSlideCurve = Curves.easeInOut;
+
   /// One turn of the pull-to-refresh ring while a fetch runs.
   static const refreshTurn = Duration(milliseconds: 900);
 

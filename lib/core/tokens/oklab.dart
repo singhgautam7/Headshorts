@@ -39,6 +39,15 @@ abstract final class Oklab {
     return _toColor(lab, alpha: color.a);
   }
 
+  /// WCAG contrast ratio between two opaque colours, 1 to 21. The theme
+  /// families use it to guard their derived text roles, and the tests use it
+  /// to hold every family to the same floors.
+  static double contrast(Color a, Color b) {
+    final x = a.computeLuminance();
+    final y = b.computeLuminance();
+    return (math.max(x, y) + 0.05) / (math.min(x, y) + 0.05);
+  }
+
   /// The chroma (colourfulness) of a colour in oklab units. The design board's
   /// accents all sit below about 0.09.
   static double chroma(Color color) {

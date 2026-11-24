@@ -8,11 +8,11 @@ import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/refresh_controller.dart';
 import 'package:headshorts/app/router.dart';
 import 'package:headshorts/app/settings_controller.dart';
+import 'package:headshorts/app/wallpaper_seed.dart';
 import 'package:headshorts/core/motion/haptics.dart';
 import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/motion/theme_ripple.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
-import 'package:headshorts/core/tokens/theme_family.dart';
 
 class HeadShortsApp extends ConsumerStatefulWidget {
   const new({super.key});
@@ -63,19 +63,42 @@ class _HeadShortsAppState extends ConsumerState<HeadShortsApp>
   Widget build(BuildContext context) {
     // Only the fields that decide the theme — a text-size change must not
     // rebuild the whole app.
-    final (familyId, mode, amoled) = ref.watch(
-      settingsProvider.select((s) => (s.familyId, s.themeMode, s.amoled)),
+    final (familyId, mode, amoled, expressive, wallpaperOn, storedSeed) = ref
+        .watch(
+          settingsProvider.select(
+            (s) => (
+              s.familyId,
+              s.themeMode,
+              s.amoled,
+              s.expressiveColors,
+              s.wallpaperColor,
+              s.wallpaperSeed,
+            ),
+          ),
+        );
+    // The platform is asked only while wallpaper colour is on. Until it
+    // answers on a cold start, the last seed it gave stands in, so there is
+    // no flash of the chosen family first.
+    Color? seed;
+    if (wallpaperOn) {
+      ref.listen(wallpaperSeedProvider, (_, next) {
+        final argb = next.value?.toARGB32();
+        if (argb != null && argb != storedSeed) {
+          unawaited(ref.read(settingsProvider.notifier).setWallpaperSeed(argb));
+        }
+      });
+      seed =
+          ref.watch(wallpaperSeedProvider).value ??
+          (storedSeed == null ? null : Color(storedSeed));
+    }
+    final theme = themeFor(
+      familyId: familyId,
+      mode: mode,
+      amoled: amoled,
+      systemDark: MediaQuery.platformBrightnessOf(context) == Brightness.dark,
+      expressive: expressive,
+      seed: seed,
     );
-    final systemDark =
-        MediaQuery.platformBrightnessOf(context) == Brightness.dark;
-    final darkInEffect =
-        mode == ThemeMode.dark || (mode == ThemeMode.system && systemDark);
-    final tone = !darkInEffect
-        ? Tone.light
-        : amoled
-        ? Tone.amoled
-        : Tone.dark;
-    final theme = hsThemeOf(ThemeFamily.byId(familyId), tone);
     final palette = theme.extension<HsThemeExtension>()!.palette;
 
     // The system bars take the app's ground, so the pill is the only thing

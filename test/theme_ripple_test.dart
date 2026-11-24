@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/settings_controller.dart';
+import 'package:headshorts/app/wallpaper_seed.dart';
 import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/motion/theme_ripple.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
@@ -25,13 +26,18 @@ class _Spy implements ThemeRippleHandle {
 }
 
 void main() {
-  Future<ProviderContainer> pump(WidgetTester tester, _Spy spy) async {
+  Future<ProviderContainer> pump(
+    WidgetTester tester,
+    _Spy spy, {
+    Color? seed,
+  }) async {
     SharedPreferences.setMockInitialValues({});
     final c = ProviderContainer(
       overrides: [
         settingsStoreProvider.overrideWithValue(
           SettingsStore(await SharedPreferences.getInstance()),
         ),
+        wallpaperSeedProvider.overrideWith((ref) async => seed),
       ],
     );
     addTearDown(c.dispose);
@@ -54,35 +60,72 @@ void main() {
         ),
       ),
     );
+    await tester.pumpAndSettle();
     return c;
   }
 
-  testWidgets('mode, true black and family all go through the ripple', (
+  /// The list is lazy: back to the top, then down to [text].
+  Future<void> show(WidgetTester tester, String text) async {
+    await tester.drag(find.byType(ListView), const Offset(0, 5000));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(find.text(text), 300);
+  }
+
+  Future<void> tapText(WidgetTester tester, String text) async {
+    await show(tester, text);
+    await tester.tap(find.text(text));
+    await tester.pumpAndSettle();
+  }
+
+  /// The toggle of the option card titled [title]; the list is lazy, so the
+  /// card is scrolled into being first.
+  Future<Finder> toggleOf(WidgetTester tester, String title) async {
+    await show(tester, title);
+    return find.descendant(
+      of: find.ancestor(of: find.text(title), matching: find.byType(Row)).at(1),
+      matching: find.byType(HsToggle),
+    );
+  }
+
+  Future<void> tapToggle(WidgetTester tester, String title) async {
+    final f = await toggleOf(tester, title);
+    await tester.tap(f);
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('every control on the screen goes through the ripple', (
     tester,
   ) async {
     final spy = _Spy();
-    final c = await pump(tester, spy);
+    final c = await pump(tester, spy, seed: const Color(0xFF2E7D32));
+    var taps = 0;
+    void expectRipple() => expect(spy.taps, hasLength(++taps));
 
-    await tester.tap(find.text('Light'));
-    await tester.pumpAndSettle();
-    expect(spy.taps, hasLength(1));
-    expect(c.read(settingsProvider).themeMode, ThemeMode.light);
+    await tapToggle(tester, 'Expressive colours');
+    expectRipple();
+    expect(c.read(settingsProvider).expressiveColors, isFalse);
 
-    await tester.tap(find.text('Dark'));
-    await tester.pumpAndSettle();
-    expect(spy.taps, hasLength(2));
-
-    await tester.tap(find.byType(HsToggle).first);
-    await tester.pumpAndSettle();
-    expect(spy.taps, hasLength(3));
+    await tapToggle(tester, 'Pure black');
+    expectRipple();
     expect(c.read(settingsProvider).amoled, isFalse);
 
-    await tester.tap(
-      find.bySemanticsLabel(RegExp('${ThemeFamily.all.last.name} theme')),
-    );
-    await tester.pumpAndSettle();
-    expect(spy.taps, hasLength(4));
+    await tapToggle(tester, 'From your wallpaper');
+    expectRipple();
+    expect(c.read(settingsProvider).wallpaperColor, isTrue);
+
+    await tapText(tester, 'Light');
+    expectRipple();
+    expect(c.read(settingsProvider).themeMode, ThemeMode.light);
+    await tapText(tester, 'Dark');
+    expectRipple();
+    await tapText(tester, 'System');
+    expectRipple();
+
+    // A family card, which also turns the wallpaper colour back off.
+    await tapText(tester, ThemeFamily.all.last.name);
+    expectRipple();
     expect(c.read(settingsProvider).familyId, ThemeFamily.all.last.id);
+    expect(c.read(settingsProvider).wallpaperColor, isFalse);
   });
 
   testWidgets('the ripple starts where the finger went down', (tester) async {
@@ -94,18 +137,12 @@ void main() {
     expect(spy.taps.single, at);
   });
 
-  testWidgets('haptics and motion rows exist and Haptics toggles', (
+  testWidgets('motion and haptics rows live in More, not on this screen', (
     tester,
   ) async {
-    final spy = _Spy();
-    final c = await pump(tester, spy);
-    await tester.scrollUntilVisible(find.text('Haptics'), 200);
-    expect(find.text('Automatic'), findsOneWidget);
-    // The row is not itself tappable; the toggle is. (True black is the
-    // first toggle while dark is in effect.)
-    await tester.tap(find.byType(HsToggle).at(1));
-    await tester.pumpAndSettle();
-    expect(c.read(settingsProvider).haptics, isFalse);
-    expect(spy.taps, isEmpty, reason: 'haptics is not a theme control');
+    await pump(tester, _Spy());
+    expect(find.text('Haptics'), findsNothing);
+    expect(find.text('Motion'), findsNothing);
+    expect(find.text('Blur behind the nav'), findsNothing);
   });
 }

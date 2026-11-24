@@ -39,7 +39,12 @@ class WidgetRefreshService : JobService() {
                 }
             }
             e.dartExecutor.executeDartEntrypoint(
-                DartExecutor.DartEntrypoint(loader.findAppBundlePath(), "widgetRefreshMain"),
+                // The library is named so the entrypoint resolves whatever file the app was built from.
+                DartExecutor.DartEntrypoint(
+                    loader.findAppBundlePath(),
+                    "package:headshorts/main.dart",
+                    "widgetRefreshMain",
+                ),
             )
             // Dart has its own 45 s deadline; this is the backstop for a dead isolate.
             handler.postDelayed({ finish(params, null) }, WATCHDOG_MS)

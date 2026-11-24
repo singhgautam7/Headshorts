@@ -9,7 +9,6 @@ import 'package:headshorts/app/refresh_controller.dart';
 import 'package:headshorts/app/router.dart';
 import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
-import 'package:headshorts/core/tokens/theme_family.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 const _channel = MethodChannel('headshorts/widget');
@@ -50,17 +49,18 @@ Map<String, int> widgetThemeValues({
   required ThemeMode mode,
   required bool amoled,
   required bool systemDark,
+  bool expressive = true,
+  Color? seed,
 }) {
   final dark =
       mode == ThemeMode.dark || (mode == ThemeMode.system && systemDark);
-  final tone = !dark
-      ? Tone.light
-      : amoled
-      ? Tone.amoled
-      : Tone.dark;
-  final p = hsThemeOf(
-    ThemeFamily.byId(familyId),
-    tone,
+  final p = themeFor(
+    familyId: familyId,
+    mode: mode,
+    amoled: amoled,
+    systemDark: systemDark,
+    expressive: expressive,
+    seed: seed,
   ).extension<HsThemeExtension>()!.palette;
   return {
     'widget_bg': p.surface.toARGB32(),
@@ -100,7 +100,16 @@ class HomeWidgetBridge with WidgetsBindingObserver {
         if (finished) unawaited(notifyHomeWidgets());
       })
       ..listen(
-        settingsProvider.select((s) => (s.familyId, s.themeMode, s.amoled)),
+        settingsProvider.select(
+          (s) => (
+            s.familyId,
+            s.themeMode,
+            s.amoled,
+            s.expressiveColors,
+            s.wallpaperColor,
+            s.wallpaperSeed,
+          ),
+        ),
         (_, _) => unawaited(_pushTheme()),
       );
     _channel.setMethodCallHandler((call) async {
@@ -133,6 +142,11 @@ class HomeWidgetBridge with WidgetsBindingObserver {
       familyId: s.familyId,
       mode: s.themeMode,
       amoled: s.amoled,
+      expressive: s.expressiveColors,
+      // The stored seed only: the bridge never asks the platform itself.
+      seed: s.wallpaperColor && s.wallpaperSeed != null
+          ? Color(s.wallpaperSeed!)
+          : null,
       systemDark:
           WidgetsBinding.instance.platformDispatcher.platformBrightness ==
           Brightness.dark,

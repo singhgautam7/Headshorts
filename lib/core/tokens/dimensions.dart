@@ -70,6 +70,9 @@ abstract final class HsSize {
   static const buttonSmall = 46.0;
   static const buttonCompact = 44.0;
 
+  /// The shape loader inside a button.
+  static const buttonLoader = 28.0;
+
   static const rowHeight = 56.0;
   static const sourceRowHeight = 60.0;
   static const settingsRowHeight = 58.0;
