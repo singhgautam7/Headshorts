@@ -4,6 +4,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/providers.dart';
+import 'package:headshorts/core/motion/cross_fade.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
@@ -14,6 +15,7 @@ import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/core/widgets/search_field.dart';
+import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/features/sources/category_sheet.dart';
 import 'package:headshorts/features/sources/sources_controller.dart';
 import 'package:headshorts/features/today/today_controller.dart';
@@ -27,62 +29,91 @@ final unseenBySourceProvider = StreamProvider<Map<int, int>>(
 /// The same list the onboarding picker shows, so the place you chose sources
 /// is the place you change them. A toggle turns a source on or off; the quiet
 /// state line says what it is doing. No unread counts on the nav, ever.
+///
+/// The structure (which rows, in which groups) is built from
+/// [sourceEntriesProvider], which carries no unseen counts. The counts stream
+/// out of `articles` and tick on every refresh, so each row reads its own
+/// through a `select` and only that row's state line rebuilds.
 class SourcesScreen extends ConsumerWidget {
   const new({super.key});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
-    final grouped = ref.watch(manageableSourcesProvider);
+    final language = ref.watch(sourcesLanguageProvider);
+    final grouped = _group(
+      ref.watch(sourceEntriesProvider),
+      language,
+      ref.watch(sourcesQueryProvider),
+    );
     final loading =
         ref.watch(sourceCatalogProvider).isLoading ||
         (ref.watch(sourcesProvider).isLoading && grouped.isEmpty);
-    final subscribed = (ref.watch(sourcesProvider).value ?? const [])
-        .where((s) => s.enabled)
-        .length;
-    final languages = ref.watch(sourceLanguagesProvider);
+    final subscribed = ref.watch(
+      sourcesProvider.select(
+        (s) => (s.value ?? const <SourceRow>[]).where((r) => r.enabled).length,
+      ),
+    );
+    // A string, so the list rebuilds when the languages change and not each
+    // time the counts behind them tick.
+    final languageKey = ref.watch(
+      sourceLanguagesProvider.select((l) => l.join('|')),
+    );
+    final languages = languageKey.isEmpty
+        ? const <String>[]
+        : languageKey.split('|');
 
     // Headers and rows in one flat list, so the whole catalog builds lazily
     // rather than forty-five rows deep on every keystroke.
     final rows = <Object>[
       for (final entry in grouped.entries) ...[
-        _CategoryHeader(entry.key, entry.value),
+        _CategoryHeader(entry.key, entry.value, key: ValueKey(entry.key)),
         ...entry.value,
       ],
     ];
+    final indexOfKey = <Key, int>{
+      for (var i = 0; i < rows.length; i++)
+        if (rows[i] case _CategoryHeader(:final key?))
+          key: i
+        else if (rows[i] case final SourceEntry e)
+          ValueKey(e.feedUrl): i,
+    };
 
     return HsScreen(
       title: 'Sources',
       titlePadding: const EdgeInsets.fromLTRB(HsSpace.x5, 6, HsSpace.x5, 18),
       trailing: Pressable(
+        kind: PressKind.button,
         onTap: () => context.push('/sources/add-url'),
         semanticLabel: 'Add a source by address',
-        child: Container(
-          height: 36,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            border: Border.all(color: palette.stroke),
-            borderRadius: HsRadius.pillBorder,
-          ),
-          child: Text(
-            'Add',
-            style: HsType.buttonSmall.copyWith(color: palette.textSecondary),
+        restRadius: _addHeight / 2,
+        builder: (context, radius, _) => ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: HsSize.tapTarget),
+          child: Center(
+            child: Container(
+              constraints: const BoxConstraints(minHeight: _addHeight),
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                border: Border.all(color: palette.stroke),
+                borderRadius: BorderRadius.circular(radius),
+              ),
+              child: Text(
+                'Add',
+                style: HsType.buttonSmall.copyWith(
+                  color: palette.textSecondary,
+                ),
+              ),
+            ),
           ),
         ),
       ),
-      child: ListView.builder(
-        padding: const EdgeInsets.only(
-          left: HsSpace.x5,
-          right: HsSpace.x5,
-          bottom: HsSpace.navClearance,
-        ),
-        // The header block, then the rows — or the skeleton standing in for
-        // them while the catalog asset is being read.
-        itemCount: 1 + (loading ? _skeletonRows : rows.length) + 1,
-        itemBuilder: (context, i) {
-          if (i == 0) {
-            return Column(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
+            child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 HsSearchField(
@@ -95,7 +126,7 @@ class SourcesScreen extends ConsumerWidget {
                   const SizedBox(height: HsSpace.x3),
                   LanguageChips(
                     languages: languages,
-                    value: ref.watch(sourcesLanguageProvider),
+                    value: language,
                     onChanged: ref
                         .read(sourcesLanguageProvider.notifier)
                         .select,
@@ -111,34 +142,120 @@ class SourcesScreen extends ConsumerWidget {
                   style: HsType.note.copyWith(color: palette.textMuted),
                 ),
               ],
-            );
-          }
-          if (loading) return const _RowSkeleton();
+            ),
+          ),
+          Expanded(
+            child: SkeletonCrossFade(
+              loading: loading,
+              // The skeleton standing in for the rows while the catalog asset
+              // is being read. Flat, like every skeleton here.
+              placeholder: ListView.builder(
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
+                itemCount: _skeletonRows,
+                itemBuilder: (context, _) => const _RowSkeleton(),
+              ),
+              child: ListView.builder(
+                padding: const EdgeInsets.only(
+                  left: HsSpace.x5,
+                  right: HsSpace.x5,
+                  bottom: HsSpace.navClearance,
+                ),
+                itemCount: rows.length + 1,
+                findChildIndexCallback: (key) => indexOfKey[key],
+                itemBuilder: (context, index) {
+                  if (index == rows.length) {
+                    return rows.isEmpty
+                        ? _NoMatches(
+                            onAddByUrl: () => context.push('/sources/add-url'),
+                          )
+                        : const SizedBox.shrink();
+                  }
 
-          final index = i - 1;
-          if (index == rows.length) {
-            return rows.isEmpty
-                ? _NoMatches(onAddByUrl: () => context.push('/sources/add-url'))
-                : const SizedBox.shrink();
-          }
+                  final row = rows[index];
+                  if (row is _CategoryHeader) return row;
 
-          final row = rows[index];
-          if (row is _CategoryHeader) return row;
-
-          final entry = row as SourceEntry;
-          final group = grouped[entry.category] ?? const <SourceEntry>[];
-          return SourceRowTile(
-            entry: entry,
-            showLanguage: languages.length > 1,
-            showDivider: entry.feedUrl != group.last.feedUrl,
-            onTap: () {
-              final id = entry.subscription?.id;
-              if (id != null) unawaited(context.push('/sources/$id'));
-            },
-            onToggle: (on) => unawaited(setSourceOn(ref, entry, on: on)),
-          );
-        },
+                  final entry = row as SourceEntry;
+                  final group =
+                      grouped[entry.category] ?? const <SourceEntry>[];
+                  return _LiveRow(
+                    key: ValueKey(entry.feedUrl),
+                    entry: entry,
+                    showLanguage: languages.length > 1,
+                    showDivider: entry.feedUrl != group.last.feedUrl,
+                    onTap: () {
+                      final id = entry.subscription?.id;
+                      if (id != null) unawaited(context.push('/sources/$id'));
+                    },
+                    onToggle: (on) =>
+                        unawaited(setSourceOn(ref, entry, on: on)),
+                  );
+                },
+              ),
+            ),
+          ),
+        ],
       ),
+    );
+  }
+}
+
+/// The height of the Add pill's visual; its target is 48.
+const _addHeight = 36.0;
+
+/// The catalog, narrowed by language and query, grouped by category in the
+/// order the entries arrive. The same rule as [manageableSourcesProvider],
+/// over the list that carries no counts.
+Map<String, List<SourceEntry>> _group(
+  List<SourceEntry> entries,
+  String? language,
+  String query,
+) {
+  final terms = query
+      .toLowerCase()
+      .split(RegExp(r'\s+'))
+      .where((t) => t.isNotEmpty)
+      .toList();
+  final grouped = <String, List<SourceEntry>>{};
+  for (final entry in entries) {
+    if (language != null && entry.language != language) continue;
+    final haystack = '${entry.title} ${entry.category}'.toLowerCase();
+    if (!terms.every(haystack.contains)) continue;
+    grouped.putIfAbsent(entry.category, () => []).add(entry);
+  }
+  return grouped;
+}
+
+/// One row, reading its own unseen count so a refresh rebuilds this row's
+/// state line and nothing around it.
+class _LiveRow extends ConsumerWidget {
+  const new({
+    required this.entry,
+    required this.showLanguage,
+    required this.showDivider,
+    required this.onTap,
+    required this.onToggle,
+    super.key,
+  });
+
+  final SourceEntry entry;
+  final bool showLanguage;
+  final bool showDivider;
+  final VoidCallback onTap;
+  final ValueChanged<bool> onToggle;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final id = entry.subscription?.id;
+    final unseen = id == null
+        ? 0
+        : ref.watch(unseenBySourceProvider.select((m) => m.value?[id] ?? 0));
+    return SourceRowTile(
+      entry: entry.withUnseen(unseen),
+      showLanguage: showLanguage,
+      showDivider: showDivider,
+      onTap: onTap,
+      onToggle: onToggle,
     );
   }
 }
@@ -150,7 +267,7 @@ const _skeletonRows = 7;
 
 /// A category heading, doubling as the rename affordance.
 class _CategoryHeader extends StatelessWidget {
-  const new(this.category, this.entries);
+  const new(this.category, this.entries, {super.key});
 
   final String category;
   final List<SourceEntry> entries;
@@ -159,25 +276,32 @@ class _CategoryHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.hs;
     return Padding(
-      padding: const EdgeInsets.only(bottom: HsSpace.x3, top: HsSpace.x5),
+      padding: const EdgeInsets.only(top: HsSpace.x2),
       child: Pressable(
         // Renaming is the whole of category management: rename onto a new
         // name to create one, onto an existing name to merge.
+        kind: PressKind.chip,
+        morphCorners: false,
         onTap: () => showRenameCategorySheet(context, category),
         semanticLabel: 'Rename $category',
-        child: Row(
-          children: [
-            SectionLabel(
-              '$category · ${entries.where((s) => s.isOn).length}'
-              ' of ${entries.length}',
-            ),
-            const SizedBox(width: HsSpace.x2),
-            HsGlyph.chevron(
-              palette.textMuted,
-              direction: AxisDirection.right,
-              size: 6,
-            ),
-          ],
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: HsSize.tapTarget),
+          child: Row(
+            children: [
+              Flexible(
+                child: SectionLabel(
+                  '$category · ${entries.where((s) => s.isOn).length}'
+                  ' of ${entries.length}',
+                ),
+              ),
+              const SizedBox(width: HsSpace.x2),
+              HsGlyph.chevron(
+                palette.textMuted,
+                direction: AxisDirection.right,
+                size: 6,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -250,32 +374,40 @@ class SourceRowTile extends StatelessWidget {
     final accent = entry.accent.resolve(isDark: palette.isDark);
     final state = entry.state;
 
+    // An untaken source is quieter than a paused one, which is quieter than a
+    // working one. Alpha on the colours rather than an `Opacity` layer: sixty
+    // rows would otherwise each paint into an offscreen buffer.
+    final fade = entry.isOn ? 1.0 : (entry.isSubscribed ? 0.55 : 0.75);
+
     return AccentScope(
       accent: entry.accent,
-      child: Opacity(
-        // An untaken source is quieter than a paused one, which is quieter
-        // than a working one.
-        opacity: entry.isOn ? 1 : (entry.isSubscribed ? 0.55 : 0.75),
-        child: DecoratedBox(
-          decoration: BoxDecoration(
-            border: showDivider
-                ? Border(bottom: BorderSide(color: palette.divider))
-                : null,
-          ),
-          child: SizedBox(
-            height: HsSize.sourceRowHeight,
-            child: Row(
-              children: [
-                Expanded(
-                  child: Pressable(
-                    onTap: entry.isSubscribed ? onTap : null,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: showDivider
+              ? Border(bottom: BorderSide(color: palette.divider))
+              : null,
+        ),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: HsSize.sourceRowHeight),
+          child: Row(
+            children: [
+              Expanded(
+                child: Pressable(
+                  kind: PressKind.row,
+                  enabled: entry.isSubscribed,
+                  onTap: entry.isSubscribed ? onTap : null,
+                  semanticLabel: state == null
+                      ? entry.title
+                      : '${entry.title}, $state',
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: HsSpace.x2),
                     child: Row(
                       children: [
                         Container(
                           width: HsSize.accentBar,
                           height: 28,
                           decoration: BoxDecoration(
-                            color: accent,
+                            color: accent.withValues(alpha: fade),
                             borderRadius: BorderRadius.circular(2),
                           ),
                         ),
@@ -289,10 +421,12 @@ class SourceRowTile extends StatelessWidget {
                                 entry.title,
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: HsType.forText(
-                                  HsType.row,
-                                  entry.title,
-                                ).copyWith(color: palette.textPrimary),
+                                style: HsType.forText(HsType.row, entry.title)
+                                    .copyWith(
+                                      color: palette.textPrimary.withValues(
+                                        alpha: fade,
+                                      ),
+                                    ),
                               ),
                               if (state != null || showLanguage) ...[
                                 const SizedBox(height: HsSpace.x1),
@@ -303,10 +437,14 @@ class SourceRowTile extends StatelessWidget {
                                       const SizedBox(width: 6),
                                     ],
                                     if (state != null)
-                                      Text(
-                                        state,
-                                        style: HsType.rowSub.copyWith(
-                                          color: palette.textMuted,
+                                      Flexible(
+                                        child: Text(
+                                          state,
+                                          style: HsType.rowSub.copyWith(
+                                            color: palette.textMuted.withValues(
+                                              alpha: fade,
+                                            ),
+                                          ),
                                         ),
                                       ),
                                   ],
@@ -319,10 +457,10 @@ class SourceRowTile extends StatelessWidget {
                     ),
                   ),
                 ),
-                const SizedBox(width: 14),
-                HsToggle(value: entry.isOn, onChanged: onToggle),
-              ],
-            ),
+              ),
+              const SizedBox(width: 14),
+              HsToggle(value: entry.isOn, onChanged: onToggle),
+            ],
           ),
         ),
       ),

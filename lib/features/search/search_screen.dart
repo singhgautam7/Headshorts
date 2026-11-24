@@ -6,6 +6,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/settings_controller.dart';
+import 'package:headshorts/core/motion/cross_fade.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
@@ -21,6 +22,9 @@ import 'package:headshorts/features/search/date_range_sheet.dart';
 import 'package:headshorts/features/search/search_controller.dart';
 import 'package:headshorts/features/search/search_scope_sheet.dart';
 import 'package:headshorts/features/today/headline_card.dart';
+
+/// A chip's hit region adds half of (48 - 32) above and below its visual.
+const _hitPad = (HsSize.tapTarget - HsSize.chipVisual) / 2;
 
 /// Search — the sources you choose, in date order, and then it stops.
 ///
@@ -57,8 +61,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 _SearchBar(
                   onChanged: ref.read(searchQueryProvider.notifier).set,
                 ),
-                const SizedBox(height: HsSpace.x2 + 2),
-                Row(
+                const SizedBox(height: HsSpace.x2 + 2 - _hitPad),
+                Wrap(
+                  spacing: HsSpace.x2,
+                  runSpacing: HsChip.runSpacing(HsSpace.x2),
                   children: [
                     _FilterChip(
                       label: range.chipLabel,
@@ -66,7 +72,6 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                       onTap: () => showDateRangeSheet(context),
                       semanticLabel: 'Date range, ${range.chipLabel}',
                     ),
-                    const SizedBox(width: HsSpace.x2),
                     _FilterChip(
                       label:
                           '${scope.length} '
@@ -109,15 +114,24 @@ Widget _resultsFor(
   required int scope,
   required SearchDateRange range,
 }) {
-  final nothing = _NoResults(query: query, scope: scope, range: range);
-  if (results.hasError) return nothing;
+  if (results.hasError) {
+    return _NoResults(query: query, scope: scope, range: range, failed: true);
+  }
 
-  // Still working — including a reload, where the previous results must not
+  // Still working, including a reload, where the previous results must not
   // stand in for the new query's.
   final outcome = results.value;
-  if (results.isLoading || outcome == null) return const _ResultsSkeleton();
+  final loading = results.isLoading || outcome == null;
 
-  return outcome.isEmpty ? nothing : _Results(outcome: outcome, query: query);
+  return SkeletonCrossFade(
+    loading: loading,
+    placeholder: const _ResultsSkeleton(),
+    child: loading
+        ? const SizedBox.shrink()
+        : outcome.isEmpty
+        ? _NoResults(query: query, scope: scope, range: range)
+        : _Results(outcome: outcome, query: query),
+  );
 }
 
 /// The field. Its own widget so the debounce and the clear button live with
@@ -211,11 +225,13 @@ class _SearchBarState extends State<_SearchBar> {
           ),
           if (hasText)
             Pressable(
+              kind: PressKind.iconButton,
+              morphCorners: false,
               onTap: _clear,
-              semanticLabel: 'Clear',
+              semanticLabel: 'Clear search',
               child: SizedBox(
-                width: 40,
-                height: 40,
+                width: HsSize.tapTarget,
+                height: HsSize.tapTarget,
                 child: Center(
                   child: Text(
                     '×',
@@ -232,7 +248,8 @@ class _SearchBarState extends State<_SearchBar> {
   }
 }
 
-/// A chip that opens a sheet. 34 visual, 44 target.
+/// A chip that opens a sheet, in the shared chip dress: selected while the
+/// range or scope differs from its default.
 class _FilterChip extends StatelessWidget {
   const new({
     required this.label,
@@ -247,45 +264,13 @@ class _FilterChip extends StatelessWidget {
   final String semanticLabel;
 
   @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    return Pressable(
-      onTap: onTap,
-      semanticLabel: semanticLabel,
-      child: SizedBox(
-        height: HsSize.navItem,
-        child: Center(
-          child: Container(
-            height: 34,
-            padding: const EdgeInsets.symmetric(horizontal: HsSpace.x3),
-            decoration: BoxDecoration(
-              color: active ? palette.surfaceVariant : null,
-              border: Border.all(color: palette.stroke),
-              borderRadius: HsRadius.pillBorder,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  label,
-                  style: HsType.chipSelected.copyWith(
-                    fontSize: 12,
-                    color: active ? palette.textPrimary : palette.textSecondary,
-                  ),
-                ),
-                const SizedBox(width: HsSpace.x2),
-                HsGlyph.chevron(
-                  active ? palette.textPrimary : palette.textSecondary,
-                  direction: AxisDirection.down,
-                  size: 6,
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) => Semantics(
+    label: semanticLabel,
+    button: true,
+    excludeSemantics: true,
+    onTap: onTap,
+    child: HsChip(label, selected: active, onTap: onTap),
+  );
 }
 
 /// Before the first search: what the scope is, shown rather than described,
@@ -337,13 +322,14 @@ class _EmptyState extends ConsumerWidget {
         if (entries.isNotEmpty) ...[
           const SizedBox(height: 22),
           SectionLabel('In scope · ${entries.length}'),
-          const SizedBox(height: HsSpace.x3),
+          const SizedBox(height: HsSpace.x3 - _hitPad),
           Wrap(
             spacing: HsSpace.x2,
-            runSpacing: HsSpace.x2,
+            runSpacing: HsChip.runSpacing(HsSpace.x2),
             children: [
               for (final entry in entries)
                 AccentScope(
+                  key: ValueKey(entry.feedUrl),
                   accent: entry.accent,
                   child: HsChip(entry.title, accentDot: true),
                 ),
@@ -539,13 +525,15 @@ class _SeeWhy extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    return GestureDetector(
+    return Pressable(
+      kind: PressKind.chip,
+      morphCorners: false,
       onTap: () => showCacheExplainer(context),
-      child: Semantics(
-        button: true,
-        label: 'See why your sources found nothing',
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 13),
+      semanticLabel: 'See why your sources found nothing',
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(minHeight: HsSize.tapTarget),
+        child: Center(
+          widthFactor: 1,
           child: Text(
             'See why?',
             style: HsType.caughtUpBody.copyWith(
@@ -619,16 +607,52 @@ class _EndOfResults extends StatelessWidget {
 /// Nothing matched. Says what was searched, and offers the two levers the
 /// reader already has. No spelling suggestions, no "people also searched".
 class _NoResults extends ConsumerWidget {
-  const new({required this.query, required this.scope, required this.range});
+  const new({
+    required this.query,
+    required this.scope,
+    required this.range,
+    this.failed = false,
+  });
 
   final String query;
   final int scope;
   final SearchDateRange range;
 
+  /// The search itself errored, as opposed to finding nothing.
+  final bool failed;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
     final web = ref.watch(settingsProvider.select((s) => s.searchTheWeb));
+
+    if (failed) {
+      return ListView(
+        padding: const EdgeInsets.fromLTRB(32, 56, 32, HsSpace.navClearance),
+        children: [
+          Text(
+            'The search did not finish',
+            style: HsType.stepTitle.copyWith(
+              fontSize: 20,
+              color: palette.textPrimary,
+            ),
+          ),
+          const SizedBox(height: HsSpace.x3),
+          Text(
+            'Something went wrong while looking through your sources. '
+            'Nothing was changed.',
+            style: HsType.caughtUpBody.copyWith(color: palette.textSecondary),
+          ),
+          const SizedBox(height: 14),
+          HsButton(
+            'Try again',
+            onPressed: () => ref.invalidate(searchResultsProvider),
+            kind: HsButtonKind.secondary,
+            height: HsSize.buttonSmall,
+          ),
+        ],
+      );
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(32, 56, 32, HsSpace.navClearance),
@@ -662,7 +686,7 @@ class _NoResults extends ConsumerWidget {
             onPressed: () =>
                 ref.read(searchDateProvider.notifier).set(SearchDateRange.any),
             kind: HsButtonKind.secondary,
-            height: 46,
+            height: HsSize.buttonSmall,
           ),
           const SizedBox(height: 10),
         ],
@@ -674,7 +698,7 @@ class _NoResults extends ConsumerWidget {
                 .read(settingsProvider.notifier)
                 .setSearchTheWeb(enabled: true),
             kind: HsButtonKind.secondary,
-            height: 46,
+            height: HsSize.buttonSmall,
           ),
           const SizedBox(height: 10),
         ],
@@ -682,7 +706,7 @@ class _NoResults extends ConsumerWidget {
           'Add sources to this search',
           onPressed: () => showSearchScopeSheet(context),
           kind: HsButtonKind.secondary,
-          height: 46,
+          height: HsSize.buttonSmall,
         ),
       ],
     );

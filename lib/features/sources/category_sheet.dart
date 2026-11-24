@@ -91,10 +91,12 @@ class _RenameSheetState extends ConsumerState<_RenameCategorySheet> {
           style: HsType.note.copyWith(color: palette.textMuted),
         ),
         if (existing.isNotEmpty) ...[
-          const SizedBox(height: HsSpace.x4),
+          const SizedBox(
+            height: HsSpace.x4 - (HsSize.tapTarget - HsSize.chipVisual) / 2,
+          ),
           Wrap(
             spacing: HsSpace.x2,
-            runSpacing: HsSpace.x2,
+            runSpacing: HsChip.runSpacing(HsSpace.x2),
             children: [
               for (final category in existing)
                 HsChip(

@@ -185,39 +185,50 @@ class _Welcome extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(HsSpace.x5, 26, HsSpace.x5, 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const FadingBriefingMark(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'A briefing that ends.',
-                style: HsType.welcome.copyWith(color: palette.textPrimary),
-              ),
-              const SizedBox(height: HsSpace.x5),
-              Text(
-                'HeadShorts reads the feeds you choose, in the order they were '
-                'published. No algorithm, no counts, no infinite scroll. When '
-                'you reach the bottom, that is the news.',
-                style: HsType.lead.copyWith(color: palette.textSecondary),
-              ),
-              const SizedBox(height: HsSpace.x6),
-              HsButton('Choose your sources', onPressed: onChoose),
-              const SizedBox(height: 14),
-              HsButton(
-                'Import OPML instead',
-                onPressed: onImport,
-                kind: HsButtonKind.secondary,
-              ),
-            ],
+    // Scrolls only when it has to: at a large system font the copy and the
+    // two buttons are taller than a small phone.
+    return CustomScrollView(
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(HsSpace.x5, 26, HsSpace.x5, 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const FadingBriefingMark(),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Text(
+                      'A briefing that ends.',
+                      style: HsType.welcome.copyWith(
+                        color: palette.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: HsSpace.x5),
+                    Text(
+                      'HeadShorts reads the feeds you choose, in the order they were '
+                      'published. No algorithm, no counts, no infinite scroll. When '
+                      'you reach the bottom, that is the news.',
+                      style: HsType.lead.copyWith(color: palette.textSecondary),
+                    ),
+                    const SizedBox(height: HsSpace.x6),
+                    HsButton('Choose your sources', onPressed: onChoose),
+                    const SizedBox(height: 14),
+                    HsButton(
+                      'Import OPML instead',
+                      onPressed: onImport,
+                      kind: HsButtonKind.secondary,
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -299,11 +310,13 @@ class FadingBriefingMark extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: HsSpace.x3),
-              Text(
-                'END OF BRIEFING',
-                style: HsType.sectionLabel.copyWith(
-                  fontSize: 10,
-                  color: palette.textMuted,
+              Flexible(
+                child: Text(
+                  'END OF BRIEFING',
+                  style: HsType.sectionLabel.copyWith(
+                    fontSize: 10,
+                    color: palette.textMuted,
+                  ),
                 ),
               ),
             ],
@@ -350,6 +363,7 @@ class _Pick extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
+    final large = MediaQuery.textScalerOf(context).scale(1) >= 1.4;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -367,11 +381,15 @@ class _Pick extends StatelessWidget {
                 'Choose your sources',
                 style: HsType.stepTitle.copyWith(color: palette.textPrimary),
               ),
-              const SizedBox(height: 6),
-              Text(
-                'Pick a few. You can change them any time in Sources.',
-                style: HsType.note.copyWith(color: palette.textMuted),
-              ),
+              // The hint gives way at a very large system font: the picker
+              // between the header and the buttons must keep some height.
+              if (MediaQuery.textScalerOf(context).scale(1) < 1.6) ...[
+                const SizedBox(height: 6),
+                Text(
+                  'Pick a few. You can change them any time in Sources.',
+                  style: HsType.note.copyWith(color: palette.textMuted),
+                ),
+              ],
             ],
           ),
         ),
@@ -411,25 +429,50 @@ class _Pick extends StatelessWidget {
               HsSpace.x5,
               26,
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: HsButton(
-                    'Skip',
-                    onPressed: onSkip,
-                    kind: HsButtonKind.secondary,
+            // At a large system font three controls abreast would break a
+            // label mid-word, so Continue takes its own row and Skip keeps
+            // the overflow beside it.
+            child: large
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      HsButton('Continue', onPressed: onContinue),
+                      const SizedBox(height: HsSpace.x3),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: HsButton(
+                              'Skip',
+                              onPressed: onSkip,
+                              kind: HsButtonKind.secondary,
+                            ),
+                          ),
+                          const SizedBox(width: HsSpace.x3),
+                          _MoreWaysIn(onAddOwn: onAddOwn, onImport: onImport),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: HsButton(
+                          'Skip',
+                          onPressed: onSkip,
+                          kind: HsButtonKind.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: HsButton('Continue', onPressed: onContinue),
+                      ),
+                      const SizedBox(width: 10),
+                      // The two other ways in: pasting an address, importing
+                      // a file. Choices a handful of readers make once, so
+                      // they sit in an overflow beside the step's own action.
+                      _MoreWaysIn(onAddOwn: onAddOwn, onImport: onImport),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(child: HsButton('Continue', onPressed: onContinue)),
-                const SizedBox(width: 10),
-                // The two other ways in — pasting an address, importing a
-                // file — are choices a handful of readers make once. They
-                // belong in an overflow beside the step's own action, not
-                // above the catalog competing with it.
-                _MoreWaysIn(onAddOwn: onAddOwn, onImport: onImport),
-              ],
-            ),
           ),
         ),
       ],
@@ -521,50 +564,57 @@ class InitialFetch extends ConsumerWidget {
     final sources = ref.watch(sourcesProvider).value ?? const [];
     final enabled = sources.where((s) => s.enabled).toList();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(40, 0, 40, 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var i = 0; i < enabled.length; i++) ...[
-            if (i > 0) const SizedBox(height: 10),
-            AnimatedContainer(
-              // Each bar takes its source's colour as that feed lands. The
-              // motion is the arrival, not a loop — nothing here animates on
-              // its own.
-              duration: HsMotion.page,
-              curve: HsMotion.pageCurve,
-              height: 2,
-              decoration: BoxDecoration(
-                color: progress.pending.contains(enabled[i].id)
-                    ? palette.skeleton
-                    : enabled[i].accent.resolve(isDark: palette.isDark),
-                borderRadius: BorderRadius.circular(1),
-              ),
+    return CustomScrollView(
+      slivers: [
+        SliverFillRemaining(
+          hasScrollBody: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(40, 0, 40, 40),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                for (var i = 0; i < enabled.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 10),
+                  AnimatedContainer(
+                    // Each bar takes its source's colour as that feed lands. The
+                    // motion is the arrival, not a loop — nothing here animates on
+                    // its own.
+                    duration: HsMotion.page,
+                    curve: HsMotion.pageCurve,
+                    height: 2,
+                    decoration: BoxDecoration(
+                      color: progress.pending.contains(enabled[i].id)
+                          ? palette.skeleton
+                          : enabled[i].accent.resolve(isDark: palette.isDark),
+                      borderRadius: BorderRadius.circular(1),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: HsSpace.x6),
+                Text(
+                  'Fetching your first briefing',
+                  style: HsType.headline.copyWith(color: palette.textPrimary),
+                ),
+                const SizedBox(height: HsSpace.x2),
+                Text(
+                  '${progress.done} of ${progress.total == 0 ? enabled.length : progress.total} '
+                  'feeds in. This is the only time the app will make you wait — '
+                  'after this it opens straight from cache.',
+                  style: HsType.bodySans.copyWith(color: palette.textSecondary),
+                ),
+                const SizedBox(height: HsSpace.x7),
+                Text(
+                  'One bar per feed, filling as each returns. No spinner, no '
+                  'percentage.',
+                  textAlign: TextAlign.center,
+                  style: HsType.noteTight.copyWith(color: palette.textMuted),
+                ),
+              ],
             ),
-          ],
-          const SizedBox(height: HsSpace.x6),
-          Text(
-            'Fetching your first briefing',
-            style: HsType.headline.copyWith(color: palette.textPrimary),
           ),
-          const SizedBox(height: HsSpace.x2),
-          Text(
-            '${progress.done} of ${progress.total == 0 ? enabled.length : progress.total} '
-            'feeds in. This is the only time the app will make you wait — '
-            'after this it opens straight from cache.',
-            style: HsType.bodySans.copyWith(color: palette.textSecondary),
-          ),
-          const SizedBox(height: HsSpace.x7),
-          Text(
-            'One bar per feed, filling as each returns. No spinner, no '
-            'percentage.',
-            textAlign: TextAlign.center,
-            style: HsType.noteTight.copyWith(color: palette.textMuted),
-          ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }

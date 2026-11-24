@@ -10,6 +10,12 @@ import 'package:headshorts/core/widgets/sheet.dart';
 import 'package:headshorts/features/search/search_controller.dart';
 import 'package:headshorts/features/sources/sources_controller.dart';
 
+/// A chip's hit region adds half of (48 - 32) above and below its visual, so
+/// the spacers around a chip run are shortened to keep the sheet as drawn.
+const _hitPad = (HsSize.tapTarget - HsSize.chipVisual) / 2;
+const _chipLead = HsSpace.x3 - _hitPad;
+const _section = 26 - _hitPad;
+
 /// Which sources a search looks through.
 ///
 /// A **lens**, exactly like Headlines' Filter: adding The Verge here searches
@@ -86,9 +92,9 @@ class _ScopeSheetState extends ConsumerState<_ScopeSheet> {
             '${followed.where((e) => _draft.contains(e.feedUrl)).length}'
             ' of ${followed.length}',
           ),
-          const SizedBox(height: HsSpace.x3),
+          const SizedBox(height: _chipLead),
           _Chips(entries: followed, chosen: _draft, onTap: _toggle),
-          const SizedBox(height: 26),
+          const SizedBox(height: _section),
         ],
         const SectionLabel('From the catalog · not followed'),
         const SizedBox(height: HsSpace.x3),
@@ -109,7 +115,7 @@ class _ScopeSheetState extends ConsumerState<_ScopeSheet> {
               child: _Chips(entries: rest, chosen: _draft, onTap: _toggle),
             ),
           ),
-        const SizedBox(height: 26),
+        const SizedBox(height: _section),
         Row(
           children: [
             Expanded(
@@ -156,10 +162,11 @@ class _Chips extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Wrap(
     spacing: HsSpace.x2,
-    runSpacing: HsSpace.x2,
+    runSpacing: HsChip.runSpacing(HsSpace.x2),
     children: [
       for (final entry in entries)
         AccentScope(
+          key: ValueKey(entry.feedUrl),
           accent: entry.accent,
           child: HsChip(
             entry.isSubscribed && !entry.isOn

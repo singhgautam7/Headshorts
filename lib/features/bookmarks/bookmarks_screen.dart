@@ -8,6 +8,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/settings_controller.dart';
+import 'package:headshorts/core/motion/cross_fade.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
@@ -41,63 +42,73 @@ class BookmarksScreen extends ConsumerWidget {
     return PushedScreen(
       title: '',
       divider: false,
-      child: saved == null
-          ? const _Skeleton()
-          : saved.isEmpty
-          ? const _Empty()
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(
-                    HsSpace.x5,
-                    0,
-                    HsSpace.x5,
-                    6,
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Bookmarks',
-                        style: HsType.screenTitle.copyWith(
-                          color: palette.textPrimary,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        '${saved.length} saved · most recently saved first',
-                        style: HsType.timestamp.copyWith(
-                          color: palette.textMuted,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
+      child: SkeletonCrossFade(
+        loading: saved == null,
+        placeholder: const _Skeleton(),
+        child: saved == null
+            ? const SizedBox.shrink()
+            : saved.isEmpty
+            ? const _Empty()
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Padding(
                     padding: const EdgeInsets.fromLTRB(
                       HsSpace.x5,
-                      HsSpace.x2,
+                      0,
                       HsSpace.x5,
-                      HsSpace.x5,
+                      6,
                     ),
-                    itemCount: saved.length,
-                    itemBuilder: (context, index) => _BookmarkRow(
-                      row: saved[index],
-                      size: size,
-                      isLast: index == saved.length - 1,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Bookmarks',
+                          style: HsType.screenTitle.copyWith(
+                            color: palette.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          '${saved.length} saved · most recently saved first',
+                          style: HsType.timestamp.copyWith(
+                            color: palette.textMuted,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
+                  Expanded(
+                    child: ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(
+                        HsSpace.x5,
+                        HsSpace.x2,
+                        HsSpace.x5,
+                        HsSpace.x5,
+                      ),
+                      itemCount: saved.length,
+                      itemBuilder: (context, index) => _BookmarkRow(
+                        key: ValueKey(saved[index].id),
+                        row: saved[index],
+                        size: size,
+                        isLast: index == saved.length - 1,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+      ),
     );
   }
 }
 
 class _BookmarkRow extends ConsumerWidget {
-  const new({required this.row, required this.size, required this.isLast});
+  const new({
+    required this.row,
+    required this.size,
+    required this.isLast,
+    super.key,
+  });
 
   final BookmarkRow row;
   final ListSize size;
@@ -423,7 +434,7 @@ class _ActionNoticeState extends State<_ActionNotice> {
                 onTap: widget.onAction,
                 semanticLabel: widget.actionLabel,
                 child: Container(
-                  height: 36,
+                  height: HsSize.tapTarget,
                   padding: const EdgeInsets.symmetric(horizontal: 14),
                   alignment: Alignment.center,
                   child: Text(

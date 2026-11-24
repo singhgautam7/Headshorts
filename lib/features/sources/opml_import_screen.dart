@@ -6,6 +6,7 @@ import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
+import 'package:headshorts/core/tokens/palette.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/notice.dart';
@@ -109,98 +110,88 @@ class _OpmlImportScreenState extends ConsumerState<OpmlImportScreen> {
     return PushedScreen(
       title: 'Import OPML',
       onBack: () => context.pop(),
-      footer: _folders.isEmpty
-          ? null
-          : Padding(
-              padding: const EdgeInsets.fromLTRB(
-                HsSpace.x5,
-                HsSpace.x4,
-                HsSpace.x5,
-                26,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  HsButton(
-                    _importing
-                        ? 'Importing…'
-                        : 'Import $_feedCount '
-                              '${_feedCount == 1 ? 'feed' : 'feeds'}',
-                    onPressed: _importing || _feedCount == 0 ? null : _import,
-                  ),
-                  const SizedBox(height: 10),
-                  Text(
-                    'Dead feeds are left unchecked rather than silently '
-                    'dropped.',
-                    textAlign: TextAlign.center,
-                    style: HsType.note.copyWith(color: palette.textMuted),
-                  ),
-                ],
-              ),
+      child: _folders.isEmpty
+          ? _form(palette, problem)
+          : StickySubmit(
+              label: _importing
+                  ? 'Importing…'
+                  : 'Import $_feedCount '
+                        '${_feedCount == 1 ? 'feed' : 'feeds'}',
+              onPressed: _importing || _feedCount == 0 ? null : _import,
+              child: _form(palette, problem),
             ),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(HsSpace.x5, 22, HsSpace.x5, 0),
-        children: [
-          if (_fileName != null)
-            Container(
-              padding: const EdgeInsets.all(HsSpace.x4),
-              decoration: BoxDecoration(
-                color: palette.surface,
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _fileName!,
-                    style: HsType.statTitle.copyWith(
-                      color: palette.textPrimary,
-                    ),
-                  ),
-                  const SizedBox(height: HsSpace.x1),
-                  Text(
-                    problem ??
-                        '$_totalFeeds feeds · ${_folders.length} '
-                            '${_folders.length == 1 ? 'folder' : 'folders'}',
-                    style: HsType.rowSub.copyWith(color: palette.textMuted),
-                  ),
-                ],
-              ),
-            )
-          else
-            HsButton(
-              'Choose an OPML file',
-              onPressed: _pick,
-              kind: HsButtonKind.secondary,
+    );
+  }
+
+  Widget _form(HsPalette palette, String? problem) {
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(
+        HsSpace.x5,
+        22,
+        HsSpace.x5,
+        HsSpace.x5,
+      ),
+      children: [
+        if (_fileName != null)
+          Container(
+            padding: const EdgeInsets.all(HsSpace.x4),
+            decoration: BoxDecoration(
+              color: palette.surface,
+              borderRadius: BorderRadius.circular(14),
             ),
-          if (_folders.isNotEmpty) ...[
-            const SizedBox(height: HsSpace.x5),
-            Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Expanded(
-                  child: SectionLabel('Folders become categories'),
-                ),
                 Text(
-                  '$_feedCount selected',
-                  style: HsType.timestamp.copyWith(
-                    color: palette.textSecondary,
-                  ),
+                  _fileName!,
+                  style: HsType.statTitle.copyWith(color: palette.textPrimary),
+                ),
+                const SizedBox(height: HsSpace.x1),
+                Text(
+                  problem ??
+                      '$_totalFeeds feeds · ${_folders.length} '
+                          '${_folders.length == 1 ? 'folder' : 'folders'}',
+                  style: HsType.rowSub.copyWith(color: palette.textMuted),
                 ),
               ],
             ),
-            const SizedBox(height: HsSpace.x5),
-            for (final entry in _folders.entries)
-              _FolderRow(
-                name: entry.key,
-                count: entry.value.length,
-                selected: _selected.contains(entry.key),
-                onToggle: () => setState(() {
-                  if (!_selected.remove(entry.key)) _selected.add(entry.key);
-                }),
+          )
+        else
+          HsButton(
+            'Choose an OPML file',
+            onPressed: _pick,
+            kind: HsButtonKind.secondary,
+          ),
+        if (_folders.isNotEmpty) ...[
+          const SizedBox(height: HsSpace.x5),
+          Row(
+            children: [
+              const Expanded(child: SectionLabel('Folders become categories')),
+              Text(
+                '$_feedCount selected',
+                style: HsType.timestamp.copyWith(color: palette.textSecondary),
               ),
-          ],
+            ],
+          ),
+          const SizedBox(height: HsSpace.x5),
+          for (final entry in _folders.entries)
+            _FolderRow(
+              name: entry.key,
+              count: entry.value.length,
+              selected: _selected.contains(entry.key),
+              onToggle: () => setState(() {
+                if (!_selected.remove(entry.key)) _selected.add(entry.key);
+              }),
+            ),
+          // The promise the footer used to carry, kept as the list's last
+          // line now the footer is only a button.
+          Text(
+            'Dead feeds are left unchecked rather than silently dropped.',
+            textAlign: TextAlign.center,
+            style: HsType.note.copyWith(color: palette.textMuted),
+          ),
         ],
-      ),
+      ],
     );
   }
 
@@ -224,29 +215,35 @@ class _FolderRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 14),
-      child: DecoratedBox(
-        decoration: BoxDecoration(
-          border: Border(bottom: BorderSide(color: palette.divider)),
-        ),
-        child: Padding(
-          padding: const EdgeInsets.only(bottom: 14),
-          child: Row(
-            children: [
-              HsCheckbox(value: selected, onChanged: (_) => onToggle()),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  name,
-                  style: HsType.row.copyWith(color: palette.textPrimary),
+    return Pressable(
+      kind: PressKind.row,
+      onTap: onToggle,
+      selected: selected,
+      semanticLabel: '$name, $count feeds',
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 14),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: palette.divider)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 14),
+            child: Row(
+              children: [
+                HsCheckbox(value: selected, onChanged: (_) => onToggle()),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    name,
+                    style: HsType.row.copyWith(color: palette.textPrimary),
+                  ),
                 ),
-              ),
-              Text(
-                '$count',
-                style: HsType.rowValue.copyWith(color: palette.textMuted),
-              ),
-            ],
+                Text(
+                  '$count',
+                  style: HsType.rowValue.copyWith(color: palette.textMuted),
+                ),
+              ],
+            ),
           ),
         ),
       ),
