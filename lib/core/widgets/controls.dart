@@ -74,7 +74,9 @@ class HsButton extends StatelessWidget {
         BorderSide(color: palette.divider),
       ),
       HsButtonKind.primary => (palette.primary, palette.onPrimary, null),
-      HsButtonKind.accent => (accent, palette.onPrimary, null),
+      // Accents sit in one lightness band per brightness, so the page
+      // ground is the ink that reads on them whatever the family.
+      HsButtonKind.accent => (accent, palette.lingerBackground, null),
       HsButtonKind.secondary => (
         null,
         palette.textPrimary,
@@ -318,7 +320,7 @@ class HsCheckbox extends StatelessWidget {
 }
 
 /// A category chip. Unselected is an outlined stadium; selected is a 12 dp
-/// squircle in the primary fill. A source chip carries the
+/// squircle in the selected container fill, as Kuber's filter chips are. A source chip carries the
 /// source accent as a wash with a dot, never as a saturated fill.
 ///
 /// The visual is 32 dp tall inside a 48 dp hit region, so a `Wrap` of chips
@@ -351,9 +353,9 @@ class HsChip extends StatelessWidget {
     final active = selected || accentDot;
     final fillTarget = accentDot
         ? accentWash(accent, palette)
-        : palette.primary.withValues(alpha: selected ? 1 : 0);
+        : palette.primaryContainer.withValues(alpha: selected ? 1 : 0);
     final labelStyle = HsType.chipSelected.copyWith(
-      color: accentDot ? accent : palette.onPrimary,
+      color: accentDot ? accent : palette.onPrimaryContainer,
     );
 
     return Pressable(

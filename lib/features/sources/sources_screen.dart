@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -131,31 +132,10 @@ class SourcesScreen extends ConsumerWidget {
     return HsScreen(
       title: 'Sources',
       underHeader: true,
-      trailing: Pressable(
-        kind: PressKind.button,
-        onTap: () => context.push('/sources/add-url'),
+      trailing: HsIconButton(
+        icon: Icons.add_rounded,
+        onPressed: () => context.push('/sources/add-url'),
         semanticLabel: 'Add a source by address',
-        restRadius: _addHeight / 2,
-        builder: (context, radius, _) => ConstrainedBox(
-          constraints: const BoxConstraints(minHeight: HsSize.tapTarget),
-          child: Center(
-            child: Container(
-              constraints: const BoxConstraints(minHeight: _addHeight),
-              padding: const EdgeInsets.symmetric(horizontal: 14),
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                border: Border.all(color: palette.stroke),
-                borderRadius: BorderRadius.circular(radius),
-              ),
-              child: Text(
-                'Add',
-                style: HsType.buttonSmall.copyWith(
-                  color: palette.textSecondary,
-                ),
-              ),
-            ),
-          ),
-        ),
       ),
       child: SkeletonCrossFade(
         loading: loading,
@@ -222,9 +202,6 @@ class SourcesScreen extends ConsumerWidget {
     );
   }
 }
-
-/// The height of the Add pill's visual; its target is 48.
-const _addHeight = 36.0;
 
 /// The catalog, narrowed by language and query, grouped by category in the
 /// order the entries arrive. The same rule as [manageableSourcesProvider],

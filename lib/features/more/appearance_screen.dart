@@ -66,6 +66,7 @@ class _AppearanceScreenState extends ConsumerState<AppearanceScreen> {
         : amoled
         ? Tone.amoled
         : Tone.dark;
+    final swatchTone = darkInEffect ? Tone.dark : Tone.light;
     final dynamicOn = wallpaperOn && seed != null;
     final active = ThemeFamily.byId(familyId);
     final lens = dynamicOn ? ThemeFamily.fromSeed(seed) : active;
@@ -88,8 +89,10 @@ class _AppearanceScreenState extends ConsumerState<AppearanceScreen> {
           const SizedBox(height: HsSpace.x3),
           _OptionCard(
             leading: _SplitSwatch(
-              left: lens.colors(tone).surfaceVariant,
-              right: lens.colors(tone, expressive: false).surfaceVariant,
+              // Never the pure-black ramp: both halves are near black there
+              // and the swatch would say nothing.
+              left: lens.colors(swatchTone).surfaceVariant,
+              right: lens.colors(swatchTone, expressive: false).surfaceVariant,
             ),
             title: 'Expressive colours',
             subtitle: 'Backgrounds take a light tint of the theme',
@@ -172,11 +175,13 @@ class _AppearanceScreenState extends ConsumerState<AppearanceScreen> {
                     spacing: HsSpace.x1,
                     children: [
                       ThemeDot(
-                        lens.colors(tone, expressive: expressive).primary,
+                        ThemeFamily.fromSeed(seed)
+                            .colors(tone, expressive: expressive)
+                            .primary,
                         size: _OptionCard.dot,
                       ),
                       ThemeDot(
-                        lens
+                        ThemeFamily.fromSeed(seed)
                             .colors(tone, expressive: expressive)
                             .primaryContainer,
                         size: _OptionCard.dot,

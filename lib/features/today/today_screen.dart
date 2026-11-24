@@ -473,6 +473,11 @@ class _ListSizeButton extends ConsumerWidget {
                     value: option,
                     label: option.label,
                     sub: option.description,
+                    icon: switch (option) {
+                      ListSize.large => Icons.view_agenda_outlined,
+                      ListSize.medium => Icons.view_list_outlined,
+                      ListSize.small => Icons.reorder_rounded,
+                    },
                     selected: option == size,
                   ),
               ],

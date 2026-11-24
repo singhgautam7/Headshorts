@@ -20,7 +20,9 @@ class ExpandCollapse extends StatefulWidget {
     required this.expanded,
     required this.child,
     super.key,
-    this.alignment = Alignment.topCenter,
+    // The start edge: content that appears keeps the left edge of what is
+    // already there.
+    this.alignment = Alignment.topLeft,
   });
 
   final bool expanded;

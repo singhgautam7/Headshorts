@@ -99,6 +99,7 @@ class NavPill extends StatelessWidget {
       child: SizedBox(
         height: HsSize.navPillHeight,
         child: Stack(
+          alignment: Alignment.centerLeft,
           children: [
             // One painter driven by two spring values: the items above never
             // repaint it, and it moves by paint, not layout.

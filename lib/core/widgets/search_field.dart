@@ -8,6 +8,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/widgets/glyphs.dart';
 
 /// A search field in the app's own dress — the same container as the
 /// add-by-URL field, so nothing new was invented for it.
@@ -74,14 +75,16 @@ class _HsSearchFieldState extends State<HsSearchField> {
       onTap: _focus.requestFocus,
       child: Container(
         constraints: const BoxConstraints(minHeight: HsSize.buttonLarge),
-        padding: const EdgeInsets.only(left: HsSpace.x4, right: HsSpace.x2),
+        padding: const EdgeInsets.only(left: 18, right: HsSpace.x2),
         decoration: BoxDecoration(
           color: palette.background,
           border: Border.all(color: palette.stroke),
-          borderRadius: HsRadius.buttonBorder,
+          borderRadius: HsRadius.pillBorder,
         ),
         child: Row(
           children: [
+            HsGlyph.search(palette.textMuted),
+            const SizedBox(width: 10),
             Expanded(
               child: Padding(
                 padding: const EdgeInsets.symmetric(vertical: HsSpace.x2),
