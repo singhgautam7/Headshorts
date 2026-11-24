@@ -1,8 +1,13 @@
+import 'dart:async';
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
+import 'package:headshorts/core/motion/animated_weight.dart';
 import 'package:headshorts/core/motion/haptics.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/motion/pressable.dart';
+import 'package:headshorts/core/motion/spring_curve.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
@@ -49,6 +54,13 @@ class NavPill extends StatelessWidget {
     NavDestination(label: 'More', icon: HsGlyph.more, iconWidth: 16),
   ];
 
+  /// Space between items.
+  static const _gap = 2.0;
+
+  /// Padding either side of the selected item's icon and label.
+  static const _padStart = 13.0;
+  static const _padEnd = 16.0;
+
   final List<NavDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
@@ -57,56 +69,167 @@ class NavPill extends StatelessWidget {
   /// battery and buys nothing on a true-black ground.
   final bool blur;
 
+  /// Width of a destination while selected: icon, label, and the padding.
+  static double _selectedWidth(BuildContext context, NavDestination d) {
+    final tp = TextPainter(
+      text: TextSpan(
+        text: d.label,
+        style: HsMotion.weightStyle(HsType.buttonSmall, _activeWeight),
+      ),
+      maxLines: 1,
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final w = tp.width;
+    tp.dispose();
+    return _padStart + d.iconWidth + HsSpace.x2 + w + _padEnd;
+  }
+
+  /// The label's heavier weight, which [AnimatedWeight] also defaults to.
+  static const _activeWeight = 700.0;
+
   @override
   Widget build(BuildContext context) {
+    // The indicator's rest position: items before the selected one are 44
+    // wide, so its left edge is a multiple of one step.
+    final left = selectedIndex * (HsSize.navItem + _gap);
+    final right = left + _selectedWidth(context, destinations[selectedIndex]);
     final content = Padding(
       padding: const EdgeInsets.symmetric(horizontal: HsSize.navPillPadding),
       child: SizedBox(
         height: HsSize.navPillHeight,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
+        child: Stack(
           children: [
-            for (var i = 0; i < destinations.length; i++) ...[
-              if (i > 0) const SizedBox(width: 2),
-              // Only the selected item takes free space: flex 1 for it,
-              // flex 0 — laid out rigid, exactly like a bare child — for the
-              // other four, which are 44 square and must stay that way.
-              // Making all five flexible splits the free space five ways and
-              // clips the one label to a third of itself.
-              //
-              // The wrapper is always there, never swapped in and out: a
-              // child that changes shape between builds loses its element,
-              // and the label's morph would snap rather than animate.
-              //
-              // Loose, so on any real phone the label takes the room it
-              // needs, and at a large font scale it gives way rather than
-              // pushing the pill off the screen — the board's note, with
-              // TalkBack keeping the full name either way.
-              Flexible(
-                flex: i == selectedIndex ? 1 : 0,
-                child: _NavItem(
-                  destination: destinations[i],
-                  selected: i == selectedIndex,
-                  onTap: () {
-                    // A tick for a change only; tapping the tab you are on
-                    // scrolls it to the top and stays silent.
-                    if (i != selectedIndex) HsHaptics.tick();
-                    onSelected(i);
-                  },
-                ),
+            // One painter driven by two spring values: the items above never
+            // repaint it, and it moves by paint, not layout.
+            Positioned.fill(
+              child: _NavIndicator(
+                left: left,
+                right: right,
+                color: context.hs.primaryContainer,
               ),
-            ],
+            ),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                for (var i = 0; i < destinations.length; i++) ...[
+                  if (i > 0) const SizedBox(width: _gap),
+                  // Only the selected item takes free space: flex 1 for it,
+                  // flex 0 for the other four, which are 44 square and must
+                  // stay that way. Making all five flexible splits the free
+                  // space five ways and clips the one label to a third of
+                  // itself. The wrapper is always there, never swapped in
+                  // and out, so the label's morph animates rather than snaps.
+                  Flexible(
+                    flex: i == selectedIndex ? 1 : 0,
+                    child: _NavItem(
+                      destination: destinations[i],
+                      selected: i == selectedIndex,
+                      onTap: () {
+                        // A tick for a change only; tapping the tab you are
+                        // on scrolls it to the top and stays silent.
+                        if (i != selectedIndex) HsHaptics.tick();
+                        onSelected(i);
+                      },
+                    ),
+                  ),
+                ],
+              ],
+            ),
           ],
         ),
       ),
     );
 
-    // One layer: the label morph repaints inside it, nothing outside does.
+    // One layer: the morph repaints inside it, nothing outside does.
     return NavPillSurface(
       blur: blur,
       child: RepaintBoundary(child: content),
     );
   }
+}
+
+/// The selected item's fill: one shape that slides under the items, its
+/// leading edge on a quick spring and its trailing edge on a slower one, so it
+/// stretches on the way. Subtle: both on the critically damped spring. Off:
+/// it is simply there.
+class _NavIndicator extends StatefulWidget {
+  const new({required this.left, required this.right, required this.color});
+
+  final double left;
+  final double right;
+  final Color color;
+
+  @override
+  State<_NavIndicator> createState() => _NavIndicatorState();
+}
+
+class _NavIndicatorState extends State<_NavIndicator>
+    with TickerProviderStateMixin {
+  late final AnimationController _l = AnimationController.unbounded(
+    vsync: this,
+    value: widget.left,
+  );
+  late final AnimationController _r = AnimationController.unbounded(
+    vsync: this,
+    value: widget.right,
+  );
+
+  @override
+  void didUpdateWidget(_NavIndicator old) {
+    super.didUpdateWidget(old);
+    if (old.left == widget.left && old.right == widget.right) return;
+    final level = HsMotion.levelOf(context);
+    if (level == MotionLevel.off) {
+      _l.value = widget.left;
+      _r.value = widget.right;
+      return;
+    }
+    final movingRight = widget.left > old.left;
+    final fast = HsMotion.spatial(level, HsMotion.springFast);
+    final slow = HsMotion.spatial(level, HsMotion.springDefault);
+    unawaited(_l.springTo(widget.left, movingRight ? slow : fast));
+    unawaited(_r.springTo(widget.right, movingRight ? fast : slow));
+  }
+
+  @override
+  void dispose() {
+    _l.dispose();
+    _r.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => RepaintBoundary(
+    child: CustomPaint(painter: _IndicatorPainter(_l, _r, widget.color)),
+  );
+}
+
+class _IndicatorPainter extends CustomPainter {
+  new(this.l, this.r, this.color) : super(repaint: Listenable.merge([l, r]));
+
+  final ValueListenable<double> l;
+  final ValueListenable<double> r;
+  final Color color;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final left = l.value;
+    final right = r.value;
+    if (right <= left) return;
+    final top = (size.height - HsSize.navItem) / 2;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+        Rect.fromLTRB(left, top, right, top + HsSize.navItem),
+        const Radius.circular(HsSize.navItem / 2),
+      ),
+      Paint()..color = color,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_IndicatorPainter o) =>
+      o.color != color || o.l != l || o.r != r;
 }
 
 /// The pill's dress, on its own so the Reader's floating actions can wear it:
@@ -175,6 +298,8 @@ class _NavItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
+    final level = HsMotion.levelOf(context);
+    final spring = HsMotion.spatialCurve(level, HsMotion.defaultCurve).clamped;
 
     return Semantics(
       button: true,
@@ -186,57 +311,46 @@ class _NavItem extends StatelessWidget {
         onTap: onTap,
         child: TweenAnimationBuilder<double>(
           tween: Tween(end: selected ? 1 : 0),
-          duration: HsMotion.of(context, HsMotion.navMorph),
-          curve: HsMotion.curveOf(context, HsMotion.navMorphCurve),
+          duration: level == MotionLevel.off ? Duration.zero : spring.settle,
+          curve: spring,
           builder: (context, t, _) {
-            // The container width and the label opacity animate together; the
-            // icon itself never scales or bounces. The spring overshoots, so
-            // the width may briefly pass 1; colour and opacity never do.
-            final open = t.clamp(0.0, 1.0);
-            final width = t.clamp(0.0, 1.2);
-            // Closed, the item is exactly 44 square. Open, it carries the
-            // specified 13/16 padding around icon and label.
+            // Padding, label width, label opacity and icon colour all follow
+            // one value, so icon and label change together. Clamped: a width
+            // never goes negative or past its target.
             final closedPad = (HsSize.navItem - destination.iconWidth) / 2;
             return Container(
               height: HsSize.navItem,
               padding: EdgeInsets.only(
-                left: closedPad + (13 - closedPad) * width,
-                right: closedPad + (16 - closedPad) * width,
-              ),
-              decoration: BoxDecoration(
-                color: Oklab.mix(palette.primaryContainer, palette.nav, open),
-                borderRadius: HsRadius.pillBorder,
+                left: closedPad + (NavPill._padStart - closedPad) * t,
+                right: closedPad + (NavPill._padEnd - closedPad) * t,
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   destination.icon(
-                    Oklab.mix(
-                      palette.onPrimaryContainer,
-                      palette.textMuted,
-                      open,
-                    ),
+                    Oklab.mix(palette.onPrimaryContainer, palette.textMuted, t),
                   ),
                   // The label exists only while it is at least partly
                   // visible: an inactive destination is a glyph, full stop.
-                  if (open > 0)
+                  if (t > 0.001)
                     Flexible(
                       child: ClipRect(
                         child: Align(
                           alignment: Alignment.centerLeft,
-                          widthFactor: width,
-                          // Colour alpha, not an Opacity layer, inside a
-                          // builder that runs every frame of the morph.
-                          child: Padding(
-                            padding: const EdgeInsets.only(left: HsSpace.x2),
-                            child: Text(
-                              destination.label,
-                              maxLines: 1,
-                              softWrap: false,
-                              overflow: TextOverflow.clip,
-                              style: HsType.buttonSmall.copyWith(
-                                color: palette.onPrimaryContainer.withValues(
-                                  alpha: open,
+                          widthFactor: t,
+                          child: Opacity(
+                            opacity: t,
+                            child: Padding(
+                              padding: const EdgeInsets.only(left: HsSpace.x2),
+                              // The Semantics above already says it.
+                              child: ExcludeSemantics(
+                                child: AnimatedWeight(
+                                  destination.label,
+                                  isActive: selected,
+                                  style: HsType.buttonSmall.copyWith(
+                                    color: palette.onPrimaryContainer,
+                                  ),
+                                  overflow: TextOverflow.clip,
                                 ),
                               ),
                             ),

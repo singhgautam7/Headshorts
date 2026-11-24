@@ -27,7 +27,8 @@ void main() {
     router = GoRouter(
       initialLocation: '/today',
       routes: [
-        StatefulShellRoute.indexedStack(
+        StatefulShellRoute(
+          navigatorContainerBuilder: appBranchContainer,
           builder: (context, state, shell) => AppShell(shell),
           branches: [
             // The v2 order, as the board's pill draws it.

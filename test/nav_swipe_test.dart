@@ -20,7 +20,8 @@ void main() {
     router = GoRouter(
       initialLocation: '/today',
       routes: [
-        StatefulShellRoute.indexedStack(
+        StatefulShellRoute(
+          navigatorContainerBuilder: appBranchContainer,
           builder: (context, state, shell) => AppShell(shell),
           branches: [
             // The v2 order, as the board's pill draws it.
@@ -140,7 +141,8 @@ void main() {
     router = GoRouter(
       initialLocation: '/sources',
       routes: [
-        StatefulShellRoute.indexedStack(
+        StatefulShellRoute(
+          navigatorContainerBuilder: appBranchContainer,
           builder: (context, state, shell) => AppShell(shell),
           branches: [
             for (final tab in const [
@@ -200,7 +202,7 @@ void main() {
         textDirection: TextDirection.ltr,
         child: TickerMode(
           enabled: false,
-          child: WarmTab(slot: 0, child: Text('built')),
+          child: WarmTab(branch: 2, slot: 0, child: Text('built')),
         ),
       ),
     );
