@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_name">Headlines</string>
+    <string name="widget_description">The latest headlines from the sources you choose. Updates when you refresh.</string>
+    <string name="widget_title">HeadShorts</string>
+    <string name="widget_config_label">Headlines sources</string>
+    <string name="widget_refresh_cd">Refresh headlines</string>
+    <string name="widget_refreshing_cd">Refreshing</string>
+    <string name="widget_refreshing">Refreshing…</string>
+    <string name="widget_no_sources">Choose some sources in HeadShorts</string>
+    <string name="widget_empty">No stories yet. Tap refresh.</string>
+    <string name="widget_error">Could not refresh. Tap to try again.</string>
+    <string name="widget_offline">No connection</string>
+    <string name="widget_updated_now">Updated just now</string>
+    <string name="widget_updated_min">Updated %1$d min ago</string>
+    <string name="widget_updated_hour">Updated %1$d h ago</string>
+    <string name="widget_updated_date">Updated %1$s</string>
+    <string name="widget_ago_now">just now</string>
+    <string name="widget_ago_min">%1$d min ago</string>
+    <string name="widget_ago_hour">%1$d h ago</string>
+    <string name="widget_row_meta">%1$s · %2$s</string>
+    <string name="widget_row_cd">%1$s, %2$s, %3$s</string>
+    <string name="widget_header_cd">HeadShorts. %1$s. Open the app.</string>
+    <string name="widget_preview_a">Parliament passes the water bill after a long debate</string>
+    <string name="widget_preview_b">Rail link between the two cities opens on Monday</string>
+    <string name="widget_preview_c">Scientists map a new species found in the deep sea</string>
+    <string name="widget_preview_d">Local league ends the season with a draw</string>
+    <string name="widget_preview_e">Markets close flat as traders wait for the data</string>
+</resources>

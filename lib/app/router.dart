@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/shell.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/features/bookmarks/bookmarks_screen.dart';
+import 'package:headshorts/features/home_widget/widget_sources_screen.dart';
 import 'package:headshorts/features/linger/linger_screen.dart';
 import 'package:headshorts/features/more/about_screen.dart';
 import 'package:headshorts/features/more/appearance_screen.dart';
@@ -46,10 +47,15 @@ CustomTransitionPage<void> _page(Widget child) => CustomTransitionPage<void>(
 NoTransitionPage<void> _tab(Widget child) =>
     NoTransitionPage<void>(child: child);
 
+/// The root navigator, so something outside the widget tree (a home screen
+/// widget tap) can reach the router.
+final rootNavigatorKey = GlobalKey<NavigatorState>(debugLabel: 'root');
+
 GoRouter buildRouter({required bool onboarded}) {
   final shellKey = GlobalKey<NavigatorState>();
 
   return GoRouter(
+    navigatorKey: rootNavigatorKey,
     initialLocation: onboarded ? '/today' : '/onboarding',
     routes: [
       GoRoute(
@@ -77,27 +83,33 @@ GoRouter buildRouter({required bool onboarded}) {
             ],
           ),
           StatefulShellBranch(
+            preload: true,
             routes: [
               GoRoute(
                 path: '/sources',
-                pageBuilder: (context, state) => _tab(const SourcesScreen()),
+                pageBuilder: (context, state) =>
+                    _tab(const WarmTab(slot: 0, child: SourcesScreen())),
               ),
             ],
           ),
           // Search sits fourth, as the v2 pill draws it.
           StatefulShellBranch(
+            preload: true,
             routes: [
               GoRoute(
                 path: '/search',
-                pageBuilder: (context, state) => _tab(const SearchScreen()),
+                pageBuilder: (context, state) =>
+                    _tab(const WarmTab(slot: 1, child: SearchScreen())),
               ),
             ],
           ),
           StatefulShellBranch(
+            preload: true,
             routes: [
               GoRoute(
                 path: '/more',
-                pageBuilder: (context, state) => _tab(const MoreScreen()),
+                pageBuilder: (context, state) =>
+                    _tab(const WarmTab(slot: 2, child: MoreScreen())),
               ),
             ],
           ),
@@ -122,6 +134,17 @@ GoRouter buildRouter({required bool onboarded}) {
       GoRoute(
         path: '/bookmarks',
         pageBuilder: (context, state) => _page(const BookmarksScreen()),
+      ),
+      // Placed home screen widgets, and one widget's source choice. The
+      // configure activity opens `/widget/:id` as its engine's initial route.
+      GoRoute(
+        path: '/widget',
+        pageBuilder: (context, state) => _page(const WidgetsScreen()),
+      ),
+      GoRoute(
+        path: '/widget/:id',
+        pageBuilder: (context, state) =>
+            _page(WidgetSourcesScreen(int.parse(state.pathParameters['id']!))),
       ),
       GoRoute(
         path: '/stats',
