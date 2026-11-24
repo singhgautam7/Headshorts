@@ -7,13 +7,15 @@ import 'package:integration_test/integration_test_driver.dart';
 /// each `rebuilds_*` trace.
 Future<void> main() => integrationDriver(
   timeout: const Duration(minutes: 25),
+  writeResponseOnFailure: true,
   responseDataCallback: (data) async {
     if (data == null) return;
     Directory('build/perf').createSync(recursive: true);
     const json = JsonEncoder.withIndent('  ');
     for (final e in data.entries) {
       if (e.key == 'results') {
-        File('build/perf/results.json').writeAsStringSync(json.convert(e.value));
+        File('build/perf/results.json')
+            .writeAsStringSync(json.convert(e.value));
       } else if (e.key.startsWith('rebuilds_')) {
         final events = (e.value as Map<String, dynamic>)['traceEvents'] as List;
         final counts = <String, int>{};

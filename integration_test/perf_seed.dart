@@ -12,21 +12,77 @@ const perfSources = 36;
 const perfItemsPerSource = 115;
 
 const _words = [
-  'river', 'council', 'budget', 'monsoon', 'railway', 'strike', 'harvest',
-  'satellite', 'court', 'festival', 'export', 'cricket', 'museum', 'bridge',
-  'election', 'hospital', 'garden', 'tiger', 'summit', 'bakery', 'copper',
-  'island', 'library', 'solar', 'orchestra', 'glacier', 'airport', 'lantern',
-  'fishery', 'vaccine', 'archive', 'furnace', 'canyon', 'parade', 'village',
-  'laser', 'forest', 'treaty', 'pension', 'comet', 'sculpture', 'harbour',
+  'river',
+  'council',
+  'budget',
+  'monsoon',
+  'railway',
+  'strike',
+  'harvest',
+  'satellite',
+  'court',
+  'festival',
+  'export',
+  'cricket',
+  'museum',
+  'bridge',
+  'election',
+  'hospital',
+  'garden',
+  'tiger',
+  'summit',
+  'bakery',
+  'copper',
+  'island',
+  'library',
+  'solar',
+  'orchestra',
+  'glacier',
+  'airport',
+  'lantern',
+  'fishery',
+  'vaccine',
+  'archive',
+  'furnace',
+  'canyon',
+  'parade',
+  'village',
+  'laser',
+  'forest',
+  'treaty',
+  'pension',
+  'comet',
+  'sculpture',
+  'harbour',
 ];
 
 const _hindi = [
-  'नदी', 'परिषद', 'बजट', 'मानसून', 'रेल', 'हड़ताल', 'फसल', 'उपग्रह', 'अदालत',
-  'त्योहार', 'निर्यात', 'क्रिकेट', 'संग्रहालय', 'पुल', 'चुनाव', 'अस्पताल',
+  'नदी',
+  'परिषद',
+  'बजट',
+  'मानसून',
+  'रेल',
+  'हड़ताल',
+  'फसल',
+  'उपग्रह',
+  'अदालत',
+  'त्योहार',
+  'निर्यात',
+  'क्रिकेट',
+  'संग्रहालय',
+  'पुल',
+  'चुनाव',
+  'अस्पताल',
 ];
 
 const _categories = [
-  'General', 'India', 'World', 'Technology', 'Business', 'Science', 'Sport',
+  'General',
+  'India',
+  'World',
+  'Technology',
+  'Business',
+  'Science',
+  'Sport',
 ];
 
 /// A heavy, realistic database: 36 sources (6 Hindi), about 4,100 articles of
@@ -74,7 +130,7 @@ Future<void> seedPerf(
     }
   });
 
-  final total = perfSources * perfItemsPerSource;
+  const total = perfSources * perfItemsPerSource;
   await db.batch((b) {
     for (var i = 0; i < total; i++) {
       final s = i % perfSources;
