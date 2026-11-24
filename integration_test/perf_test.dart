@@ -110,8 +110,8 @@ Finder listIn(Type screen) => find
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized()
-    ..framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive;
-  binding.reportData = {'results': results};
+    ..framePolicy = LiveTestWidgetsFlutterBindingFramePolicy.fullyLive
+    ..reportData = {'results': results};
 
   testWidgets(
     'perf',
