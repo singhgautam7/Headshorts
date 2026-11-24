@@ -312,6 +312,7 @@ void main() {
       findsNothing,
       reason: 'a failure ends the wait rather than spinning on',
     );
-    expect(find.textContaining('Nothing for'), findsOneWidget);
+    expect(find.text('The search did not finish'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
   });
 }

@@ -43,8 +43,16 @@ ParsedArticle _article(int n) => ParsedArticle(
       '${_words[(n * 13 + 5) % _words.length]} ${_words[(n * 3 + 11) % _words.length]} '
       'report$n',
   link: 'https://example.com/story/$n',
-  publishedAt: DateTime(2026, 9, 8, 12).subtract(Duration(minutes: n)),
+  publishedAt: _noon.subtract(Duration(minutes: n)),
   contentSnippet: 'Snippet for report$n',
+);
+
+/// Yesterday at noon: a fixed date drifts out of the 90-day window.
+final _noon = DateTime(
+  DateTime.now().year,
+  DateTime.now().month,
+  DateTime.now().day - 1,
+  12,
 );
 
 void main() {
@@ -146,7 +154,9 @@ void main() {
                   'fresh ${_words[i]} ${_words[i + 2]} ${_words[i + 4]} '
                   'dispatch$i',
               link: 'https://example.com/fresh/$i',
-              publishedAt: DateTime(2026, 9, 8, 13).add(Duration(minutes: i)),
+              publishedAt: _noon
+                  .add(const Duration(hours: 1))
+                  .add(Duration(minutes: i)),
             ),
         ]);
 
@@ -162,7 +172,7 @@ void main() {
     );
 
     test('ties on publishedAt are still a total order', () async {
-      final sameMinute = DateTime(2026, 9, 8, 12);
+      final sameMinute = _noon;
       await articles.upsert(sourceId, [
         for (var i = 0; i < 6; i++)
           ParsedArticle(
@@ -252,14 +262,14 @@ void main() {
           guid: 'has-content',
           title: 'Has content',
           link: 'https://example.com/has',
-          publishedAt: DateTime(2026, 9, 8, 12),
+          publishedAt: _noon,
           contentSnippet: 'Valid snippet',
         ),
         ParsedArticle(
           guid: 'no-content',
           title: 'No content',
           link: 'https://example.com/none',
-          publishedAt: DateTime(2026, 9, 8, 11),
+          publishedAt: _noon.subtract(const Duration(hours: 1)),
         ),
       ]);
 

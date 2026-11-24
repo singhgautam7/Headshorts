@@ -15,10 +15,58 @@ class BookmarkRepository {
 
   final HsDatabase _db;
 
+  /// The body of the bookmark most recently removed, so Undo can put it back.
+  /// The list below does not carry bodies, so the row Undo is handed has none.
+  static (String link, String? html)? _lastRemoved;
+
   /// Most recently saved first — the order the list is in.
-  Stream<List<BookmarkRow>> watchAll() => (_db.select(
-    _db.bookmarks,
-  )..orderBy([(b) => OrderingTerm.desc(b.savedAt)])).watch();
+  ///
+  /// Without [BookmarkRow.contentHtml]: the list never draws it, and every
+  /// saved body would otherwise cross the isolate on each change. Open one
+  /// with [byId] to get the body.
+  Stream<List<BookmarkRow>> watchAll() {
+    final b = _db.bookmarks;
+    return (_db.selectOnly(b)
+          ..addColumns([
+            b.id,
+            b.articleId,
+            b.link,
+            b.canonicalUrl,
+            b.title,
+            b.summary,
+            b.author,
+            b.imageUrl,
+            b.sourceTitle,
+            b.language,
+            b.accentDark,
+            b.accentLight,
+            b.publishedAt,
+            b.savedAt,
+          ])
+          ..orderBy([OrderingTerm.desc(b.savedAt)]))
+        .watch()
+        .map(
+          (rows) => [
+            for (final r in rows)
+              BookmarkRow(
+                id: r.read(b.id)!,
+                articleId: r.read(b.articleId),
+                link: r.read(b.link)!,
+                canonicalUrl: r.read(b.canonicalUrl)!,
+                title: r.read(b.title)!,
+                summary: r.read(b.summary),
+                author: r.read(b.author),
+                imageUrl: r.read(b.imageUrl),
+                sourceTitle: r.read(b.sourceTitle)!,
+                language: r.read(b.language)!,
+                accentDark: r.read(b.accentDark)!,
+                accentLight: r.read(b.accentLight)!,
+                publishedAt: r.read(b.publishedAt)!,
+                savedAt: r.read(b.savedAt)!,
+              ),
+          ],
+        );
+  }
 
   Stream<int> watchCount() {
     final count = _db.bookmarks.id.count();
@@ -50,13 +98,24 @@ class BookmarkRepository {
   Future<void> save(Headline headline, {String? contentHtml}) async {
     final article = headline.article;
     final source = headline.source;
+    // A list row carries no body; the article's own is still in the cache.
+    var body = contentHtml ?? article.fullContentHtml;
+    if (body == null) {
+      final a = _db.articles;
+      final cached =
+          await (_db.selectOnly(a)
+                ..addColumns([a.fullContentHtml])
+                ..where(a.id.equals(article.id)))
+              .getSingleOrNull();
+      body = cached?.read(a.fullContentHtml);
+    }
     final entry = BookmarksCompanion.insert(
       articleId: Value(article.id),
       link: article.link,
       canonicalUrl: Value(article.canonicalUrl),
       title: article.title,
       summary: Value(article.summary),
-      contentHtml: Value(contentHtml ?? article.fullContentHtml),
+      contentHtml: Value(body),
       author: Value(article.author),
       imageUrl: Value(article.imageUrl),
       sourceTitle: source.title,
@@ -74,15 +133,34 @@ class BookmarkRepository {
         );
   }
 
-  Future<void> removeByLink(String link) =>
-      (_db.delete(_db.bookmarks)..where((b) => b.link.equals(link))).go();
+  Future<void> removeByLink(String link) async {
+    await _remember(
+      _db.select(_db.bookmarks)..where((b) => b.link.equals(link)),
+    );
+    await (_db.delete(_db.bookmarks)..where((b) => b.link.equals(link))).go();
+  }
 
-  Future<void> removeById(int id) =>
-      (_db.delete(_db.bookmarks)..where((b) => b.id.equals(id))).go();
+  Future<void> removeById(int id) async {
+    await _remember(_db.select(_db.bookmarks)..where((b) => b.id.equals(id)));
+    await (_db.delete(_db.bookmarks)..where((b) => b.id.equals(id))).go();
+  }
+
+  Future<void> _remember(
+    SimpleSelectStatement<$BookmarksTable, BookmarkRow> q,
+  ) async {
+    final row = await q.getSingleOrNull();
+    _lastRemoved = row == null ? null : (row.link, row.contentHtml);
+  }
 
   /// Puts a removed row back exactly as it was — what Undo calls.
-  Future<void> restore(BookmarkRow row) =>
-      _db.into(_db.bookmarks).insertOnConflictUpdate(row);
+  Future<void> restore(BookmarkRow row) {
+    final kept = _lastRemoved;
+    final restored =
+        row.contentHtml == null && kept != null && kept.$1 == row.link
+        ? row.copyWith(contentHtml: Value(kept.$2))
+        : row;
+    return _db.into(_db.bookmarks).insertOnConflictUpdate(restored);
+  }
 
   /// Fills a body in after the fact, when extraction finishes while the
   /// article is open and already saved.

@@ -245,11 +245,23 @@ final searchScopeEntriesProvider = Provider<List<SourceEntry>>((ref) {
   ];
 });
 
+/// Which sources a search covers, as a value that only changes when the set
+/// does. The entries list is rebuilt on every write to `sources` — forty-five
+/// per refresh — and a search that re-ran for each would hit the cache and
+/// Google News forty-five times for the same question.
+final _searchScopeKeyProvider = Provider<String>(
+  (ref) => [
+    for (final entry in ref.watch(searchScopeEntriesProvider))
+      '${entry.feedUrl}|${entry.subscription?.id}',
+  ].join('\n'),
+);
+
 /// The results: the cache first, then whatever had to be fetched.
 final searchResultsProvider = FutureProvider<SearchOutcome>((ref) async {
   final query = ref.watch(searchQueryProvider).trim();
   final range = ref.watch(searchDateProvider);
-  final scope = ref.watch(searchScopeEntriesProvider);
+  ref.watch(_searchScopeKeyProvider);
+  final scope = ref.read(searchScopeEntriesProvider);
   // Read before the first await. `ref.watch` past an await registers a
   // dependency on a provider that may already have moved on, and Riverpod is
   // entitled to throw for it.

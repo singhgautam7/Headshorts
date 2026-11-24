@@ -80,15 +80,19 @@ void main() {
         ),
       );
 
-      final opacity = tester.widget<Opacity>(
-        find
-            .descendant(
-              of: find.byType(HeadlineCard),
-              matching: find.byType(Opacity),
-            )
-            .first,
+      // Faded by the alpha of the text's own colour, not an Opacity layer.
+      final ink = tester
+          .widget<Text>(find.textContaining('tap-in fare cap'))
+          .style!
+          .color!;
+      expect(ink.a, closeTo(0.5, 0.01));
+      expect(
+        find.descendant(
+          of: find.byType(HeadlineCard),
+          matching: find.byType(Opacity),
+        ),
+        findsNothing,
       );
-      expect(opacity.opacity, 0.5);
       expect(find.text('5 hours ago · read'), findsOneWidget);
       expect(find.textContaining('unread'), findsNothing);
     });

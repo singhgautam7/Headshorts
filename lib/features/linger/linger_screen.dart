@@ -1,11 +1,12 @@
 import 'dart:async';
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:headshorts/app/nav_visibility.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/refresh_controller.dart';
+import 'package:headshorts/core/motion/haptics.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
@@ -47,37 +48,45 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
 
   Timer? _dwell;
 
-  double _pullOffset = 0;
-  bool _refreshing = false;
+  // Notifiers, not setState: an overscroll reports every frame, and only the
+  // ring beside the cards has anything to redraw for it.
+  final _pull = ValueNotifier<double>(0);
+  final _refreshing = ValueNotifier<bool>(false);
 
   @override
   void dispose() {
     _dwell?.cancel();
     _controller.dispose();
+    _pull.dispose();
+    _refreshing.dispose();
     super.dispose();
   }
 
-  void _backToToday() => context.go('/today');
+  void _backToToday() {
+    // The pill may have been hidden by Today's scroll; arrive with it in view.
+    ref.read(navVisibilityProvider.notifier).show();
+    context.go('/today');
+  }
 
   Future<void> _refresh() async {
-    if (_refreshing) return;
-    setState(() => _refreshing = true);
-    unawaited(HapticFeedback.mediumImpact());
+    if (_refreshing.value) return;
+    _refreshing.value = true;
+    HsHaptics.threshold();
     try {
       await ref.read(refreshProvider.notifier).refresh();
     } finally {
-      if (mounted) setState(() => _refreshing = false);
+      _refreshing.value = false;
     }
   }
 
   void _onPage(int index, List<Headline> queue) {
-    unawaited(HapticFeedback.selectionClick());
+    HsHaptics.tick();
     ref.read(lingerQueueProvider.notifier).moveTo(index);
     _dwell?.cancel();
 
     if (index >= queue.length) {
       // The one haptic that is not a direct echo of a tap.
-      unawaited(HapticFeedback.mediumImpact());
+      HsHaptics.threshold();
       return;
     }
 
@@ -134,21 +143,15 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
                               _controller.page! <= 0.05)) {
                         final pixels = notification.metrics.pixels;
                         if (pixels < 0) {
-                          setState(() {
-                            _pullOffset = -pixels;
-                          });
-                          if (-pixels > 72 && !_refreshing) {
+                          _pull.value = -pixels;
+                          if (-pixels > 72 && !_refreshing.value) {
                             unawaited(_refresh());
                           }
-                        } else if (_pullOffset != 0 && !_refreshing) {
-                          setState(() {
-                            _pullOffset = 0;
-                          });
+                        } else if (!_refreshing.value) {
+                          _pull.value = 0;
                         }
-                      } else if (_pullOffset != 0 && !_refreshing) {
-                        setState(() {
-                          _pullOffset = 0;
-                        });
+                      } else if (!_refreshing.value) {
+                        _pull.value = 0;
                       }
                       return false;
                     },
@@ -204,19 +207,26 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
                                   ),
                           ),
                         ),
-                        if (_pullOffset > 0 || _refreshing)
-                          Positioned(
-                            top: HsSpace.x2,
-                            left: 0,
-                            right: 0,
-                            child: Center(
-                              child: HsPullRing(
-                                color: palette.textPrimary,
-                                progress: (_pullOffset / 72).clamp(0.0, 1.0),
-                                spinning: _refreshing,
+                        ListenableBuilder(
+                          listenable: Listenable.merge([_pull, _refreshing]),
+                          builder: (context, _) {
+                            if (_pull.value <= 0 && !_refreshing.value) {
+                              return const SizedBox.shrink();
+                            }
+                            return Positioned(
+                              top: HsSpace.x2,
+                              left: 0,
+                              right: 0,
+                              child: Center(
+                                child: HsPullRing(
+                                  color: palette.textPrimary,
+                                  progress: (_pull.value / 72).clamp(0.0, 1.0),
+                                  spinning: _refreshing.value,
+                                ),
                               ),
-                            ),
-                          ),
+                            );
+                          },
+                        ),
                       ],
                     ),
                   ),

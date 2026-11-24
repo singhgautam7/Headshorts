@@ -73,8 +73,10 @@ class ArticleView {
 /// two lines, the source run in at the start in its accent, the time right
 /// aligned, hairlines doing the separating instead of rules and images.
 ///
-/// Read items drop to half opacity and add a lowercase "read" after the
-/// timestamp. There is no count, no dot and no badge.
+/// Read items fade to half strength, by the alpha of their own colours rather
+/// than an `Opacity` layer (a layer per read row is a `saveLayer` per row),
+/// and add a lowercase "read" after the timestamp. There is no count, no dot
+/// and no badge.
 class HeadlineCard extends StatelessWidget {
   const new(
     this.view, {
@@ -146,7 +148,8 @@ class _Card extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.hs;
     final tone = view.accent;
-    final accent = tone.resolve(isDark: palette.isDark);
+    final accent = _faded(tone.resolve(isDark: palette.isDark), view.isRead);
+    Color ink(Color c) => _faded(c, view.isRead);
     final medium = size == ListSize.medium;
     final summary = view.summary;
     final imageUrl = view.imageUrl;
@@ -176,7 +179,7 @@ class _Card extends StatelessWidget {
             author,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: HsType.timestamp.copyWith(color: palette.textSecondary),
+            style: HsType.timestamp.copyWith(color: ink(palette.textSecondary)),
           ),
         ],
         SizedBox(height: medium ? 6 : 7),
@@ -186,7 +189,7 @@ class _Card extends StatelessWidget {
           // into a four-item one.
           maxLines: medium ? 3 : null,
           overflow: medium ? TextOverflow.ellipsis : null,
-          style: headline.copyWith(color: palette.textPrimary),
+          style: headline.copyWith(color: ink(palette.textPrimary)),
         ),
         if (!medium &&
             summary != null &&
@@ -199,14 +202,14 @@ class _Card extends StatelessWidget {
             style: HsType.forText(
               HsType.cardSummary,
               summary,
-            ).copyWith(color: palette.textSecondary),
+            ).copyWith(color: ink(palette.textSecondary)),
           ),
         ],
         SizedBox(height: medium ? 6 : 7),
         Text(
           stamp,
           style: (medium ? HsType.timestampSmall : HsType.timestamp).copyWith(
-            color: palette.textMuted,
+            color: ink(palette.textMuted),
           ),
         ),
       ],
@@ -220,39 +223,53 @@ class _Card extends StatelessWidget {
         semanticLabel:
             '${view.sourceTitle}${hasAuthor ? ', by $author' : ''}. '
             '${view.title}',
-        child: Opacity(
-          opacity: view.isRead ? 0.5 : 1,
-          child: Container(
-            padding: washed ? const EdgeInsets.all(HsSpace.x4) : null,
-            decoration: washed
-                ? BoxDecoration(
-                    color: accentWash(accent, palette),
-                    borderRadius: HsRadius.cardBorder,
-                  )
-                : null,
-            child: IntrinsicHeight(
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Container(
-                    width: HsSize.accentBar,
-                    decoration: BoxDecoration(
-                      color: accent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
+        child: Container(
+          padding: washed ? const EdgeInsets.all(HsSpace.x4) : null,
+          decoration: washed
+              ? BoxDecoration(
+                  color: accentWash(accent, palette),
+                  borderRadius: HsRadius.cardBorder,
+                )
+              : null,
+          // The rule is laid under the content rather than stretched beside
+          // it, which is what `IntrinsicHeight` was for: two layout passes
+          // per row, on every rebuild of the list.
+          child: Stack(
+            children: [
+              PositionedDirectional(
+                start: 0,
+                top: 0,
+                bottom: 0,
+                width: HsSize.accentBar,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: accent,
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  SizedBox(width: medium ? 12 : 14),
-                  Expanded(child: text),
-                  if (imageUrl != null) ...[
-                    SizedBox(width: medium ? 12 : 14),
-                    _Thumbnail(
-                      imageUrl,
-                      size: medium ? HsSize.thumbnailMedium : HsSize.thumbnail,
-                    ),
-                  ],
-                ],
+                ),
               ),
-            ),
+              Padding(
+                padding: EdgeInsetsDirectional.only(
+                  start: HsSize.accentBar + (medium ? 12 : 14),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: text),
+                    if (imageUrl != null) ...[
+                      SizedBox(width: medium ? 12 : 14),
+                      _Thumbnail(
+                        imageUrl,
+                        size: medium
+                            ? HsSize.thumbnailMedium
+                            : HsSize.thumbnail,
+                        faded: view.isRead,
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -280,7 +297,10 @@ class _SmallRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final accent = view.accent.resolve(isDark: palette.isDark);
+    final accent = _faded(
+      view.accent.resolve(isDark: palette.isDark),
+      view.isRead,
+    );
     final indic = isIndicText(view.title);
 
     return AccentScope(
@@ -289,50 +309,49 @@ class _SmallRow extends StatelessWidget {
         onTap: onTap,
         onLongPress: onLongPress,
         semanticLabel: '${view.sourceTitle}. ${view.title}',
-        child: Opacity(
-          opacity: view.isRead ? 0.5 : 1,
-          child: DecoratedBox(
-            decoration: BoxDecoration(
-              border: Border(bottom: BorderSide(color: palette.divider)),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 9),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Text.rich(
-                      TextSpan(
-                        children: [
-                          TextSpan(
-                            text:
-                                '${HsType.sourceLabelText(view.sourceTitle)}'
-                                ' ',
-                            style: HsType.sourceLabelFor(view.sourceTitle)
-                                .copyWith(color: accent),
-                          ),
-                          TextSpan(text: view.title),
-                        ],
-                      ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          (indic
-                                  ? HsType.indic(HsType.cardHeadlineSmall)
-                                  : HsType.cardHeadlineSmall)
-                              .copyWith(color: palette.textPrimary),
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            border: Border(bottom: BorderSide(color: palette.divider)),
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 9),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Text.rich(
+                    TextSpan(
+                      children: [
+                        TextSpan(
+                          text:
+                              '${HsType.sourceLabelText(view.sourceTitle)}'
+                              ' ',
+                          style: HsType.sourceLabelFor(view.sourceTitle)
+                              .copyWith(color: accent),
+                        ),
+                        TextSpan(text: view.title),
+                      ],
                     ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style:
+                        (indic
+                                ? HsType.indic(HsType.cardHeadlineSmall)
+                                : HsType.cardHeadlineSmall)
+                            .copyWith(
+                              color: _faded(palette.textPrimary, view.isRead),
+                            ),
                   ),
-                  const SizedBox(width: 12),
-                  Text(
-                    shortRelativeTime(view.publishedAt),
-                    style: HsType.timestampSmall.copyWith(
-                      height: 19 / 11,
-                      color: palette.textMuted,
-                    ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  shortRelativeTime(view.publishedAt),
+                  style: HsType.timestampSmall.copyWith(
+                    height: 19 / 11,
+                    color: _faded(palette.textMuted, view.isRead),
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
         ),
@@ -419,11 +438,16 @@ class _Summary extends StatelessWidget {
   }
 }
 
+/// [color] at half strength when the item has been read.
+Color _faded(Color color, bool read) =>
+    read ? color.withValues(alpha: color.a * 0.5) : color;
+
 class _Thumbnail extends StatelessWidget {
-  const new(this.url, {required this.size});
+  const new(this.url, {required this.size, this.faded = false});
 
   final String url;
   final double size;
+  final bool faded;
 
   @override
   Widget build(BuildContext context) {
@@ -432,22 +456,27 @@ class _Thumbnail extends StatelessWidget {
     // stays square and sits with the top of the text block.
     return Align(
       alignment: Alignment.topCenter,
-      child: ClipRRect(
-        borderRadius: HsRadius.buttonBorder,
-        child: SizedBox(
-          width: size,
-          height: size,
-          child: CachedNetworkImage(
-            imageUrl: url,
-            fit: BoxFit.cover,
-            // Decoded at the size it is drawn. A publisher's 2000px hero
-            // behind a 76dp thumbnail costs ~16MB of bitmap for nothing, and
-            // a screen of them is what makes Today scroll badly.
-            memCacheWidth: (size * MediaQuery.devicePixelRatioOf(context))
-                .round(),
-            // Flat fills, never a shimmer sweep.
-            placeholder: (_, _) => placeholder,
-            errorWidget: (_, _, _) => placeholder,
+      // A picture cannot take alpha the way text does; one small layer per
+      // read thumbnail, not one per row.
+      child: Opacity(
+        opacity: faded ? 0.5 : 1,
+        child: ClipRRect(
+          borderRadius: HsRadius.buttonBorder,
+          child: SizedBox(
+            width: size,
+            height: size,
+            child: CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.cover,
+              // Decoded at the size it is drawn. A publisher's 2000px hero
+              // behind a 76dp thumbnail costs ~16MB of bitmap for nothing, and
+              // a screen of them is what makes Today scroll badly.
+              memCacheWidth: (size * MediaQuery.devicePixelRatioOf(context))
+                  .round(),
+              // Flat fills, never a shimmer sweep.
+              placeholder: (_, _) => placeholder,
+              errorWidget: (_, _, _) => placeholder,
+            ),
           ),
         ),
       ),
