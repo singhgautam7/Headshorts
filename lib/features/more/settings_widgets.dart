@@ -3,6 +3,7 @@ import 'package:headshorts/core/motion/pressable.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 
 /// A titled group of rows, drawn as one rounded container with hairlines
@@ -172,15 +173,9 @@ class SettingsScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) => PushedScreen(
     title: title,
-    divider: false,
     child: ListView(
-      padding: const EdgeInsets.fromLTRB(
-        HsSpace.x4,
-        HsSpace.x3,
-        HsSpace.x4,
-        HsSpace.x7,
-      ),
-      children: children,
+      padding: pushedListPadding,
+      children: [HeaderPage.gap(), ...children],
     ),
   );
 }

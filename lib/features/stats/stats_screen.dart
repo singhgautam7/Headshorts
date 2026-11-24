@@ -7,6 +7,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/screen.dart';
@@ -45,13 +46,13 @@ class StatsScreen extends ConsumerWidget {
 
     return PushedScreen(
       title: 'Stats',
-      divider: false,
       onBack: () => context.pop(),
       child: stats == null
           // Never "nothing has come in" while the numbers are still coming.
           ? const _StatsSkeleton()
           : CustomScrollView(
               slivers: [
+                HeaderPage.sliverGap(),
                 gap(HsSpace.x3),
                 box(_Summary(stats: stats)),
                 gap(30),
@@ -88,9 +89,14 @@ class _StatsSkeleton extends StatelessWidget {
   const new();
 
   @override
-  Widget build(BuildContext context) => const Padding(
-    padding: EdgeInsets.fromLTRB(HsSpace.x5, HsSpace.x3, HsSpace.x5, 0),
-    child: Column(
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.fromLTRB(
+      HsSpace.x5,
+      HsSpace.x3 + HeaderPage.insetOf(context),
+      HsSpace.x5,
+      0,
+    ),
+    child: const Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         SkeletonBar(widthFactor: 0.9),

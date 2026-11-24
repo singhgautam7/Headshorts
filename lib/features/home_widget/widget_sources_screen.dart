@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,10 +10,12 @@ import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/features/home_widget/widget_sources.dart';
+import 'package:headshorts/features/more/settings_widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// Subscribed sources the widget can show. Paused ones are left out: a
@@ -111,17 +114,22 @@ class _WidgetSourcesScreenState extends ConsumerState<WidgetSourcesScreen> {
       child: loading
           ? const SizedBox.shrink()
           : sources.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.all(HsSpace.x5),
-              child: Text(
-                'Choose some sources in HeadShorts',
-                style: HsType.bodySans.copyWith(color: palette.textSecondary),
+          ? Builder(
+              builder: (context) => Padding(
+                padding: const EdgeInsets.all(HsSpace.x5)
+                    .copyWith(top: HsSpace.x5 + HeaderPage.insetOf(context)),
+                child: Text(
+                  'Choose some sources in HeadShorts',
+                  style: HsType.bodySans.copyWith(color: palette.textSecondary),
+                ),
               ),
             )
           : ListView.builder(
-              itemCount: sources.length + 1,
+              itemCount: sources.length + 2,
               itemBuilder: (context, i) {
-                if (i == 0) {
+                if (i == 0) return HeaderPage.gap();
+                final at = i - 1;
+                if (at == 0) {
                   return _Row(
                     label: 'All sources',
                     value: _selection == null,
@@ -129,7 +137,7 @@ class _WidgetSourcesScreenState extends ConsumerState<WidgetSourcesScreen> {
                     onChanged: (on) => _toggleAll(sources, on: on),
                   );
                 }
-                final s = sources[i - 1];
+                final s = sources[at - 1];
                 return _Row(
                   label: s.title,
                   value: _selection == null || _selection!.contains(s.id),
@@ -159,11 +167,11 @@ class _Row extends StatelessWidget {
     final palette = context.hs;
     return Semantics(
       label: label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: Pressable(
+        kind: PressKind.row,
         onTap: () => onChanged(!value),
-        child: SizedBox(
-          height: HsSize.rowHeight,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: HsSize.rowHeight),
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
             child: Row(
@@ -198,7 +206,8 @@ class WidgetsScreen extends StatefulWidget {
   State<WidgetsScreen> createState() => _WidgetsScreenState();
 }
 
-class _WidgetsScreenState extends State<WidgetsScreen> {
+class _WidgetsScreenState extends State<WidgetsScreen>
+    with WidgetsBindingObserver {
   List<int>? _placed;
   Map<int, bool> _chosen = {};
   bool _canPin = false;
@@ -206,7 +215,20 @@ class _WidgetsScreenState extends State<WidgetsScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     unawaited(_load());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back from the launcher's own pin dialog: the list may have grown.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_load());
   }
 
   Future<void> _load() async {
@@ -235,66 +257,49 @@ class _WidgetsScreenState extends State<WidgetsScreen> {
       child: placed == null
           ? const SizedBox.shrink()
           : placed.isEmpty
-          ? Padding(
-              padding: const EdgeInsets.all(HsSpace.x5),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Put the latest headlines on your home screen. Touch and '
-                    'hold an empty spot, choose Widgets, then HeadShorts.',
-                    style: HsType.bodySans.copyWith(
-                      color: palette.textSecondary,
+          ? Builder(
+              builder: (context) => Padding(
+                padding: const EdgeInsets.all(HsSpace.x5)
+                    .copyWith(top: HsSpace.x5 + HeaderPage.insetOf(context)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Put the latest headlines on your home screen. Touch and '
+                      'hold an empty spot, choose Widgets, then HeadShorts.',
+                      style: HsType.bodySans.copyWith(
+                        color: palette.textSecondary,
+                      ),
                     ),
-                  ),
-                  if (_canPin) ...[
-                    const SizedBox(height: HsSpace.x5),
-                    HsButton(
-                      'Add to home screen',
-                      onPressed: () async {
-                        await requestPinHomeWidget();
-                        await _load();
-                      },
-                    ),
+                    if (_canPin) ...[
+                      const SizedBox(height: HsSpace.x5),
+                      HsButton(
+                        'Add to home screen',
+                        onPressed: () async {
+                          await requestPinHomeWidget();
+                          await _load();
+                        },
+                      ),
+                    ],
                   ],
-                ],
+                ),
               ),
             )
           : ListView.builder(
-              itemCount: placed.length,
-              itemBuilder: (context, i) => Pressable(
-                kind: PressKind.chip,
-                onTap: () async {
-                  await context.push('/widget/${placed[i]}');
-                  await _load();
-                },
-                child: SizedBox(
-                  height: HsSize.sourceRowHeight,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Headlines widget ${i + 1}',
-                          style: HsType.row.copyWith(
-                            color: palette.textPrimary,
-                          ),
-                        ),
-                        Text(
-                          _chosen[placed[i]]!
-                              ? 'Chosen sources'
-                              : 'All sources',
-                          style: HsType.rowSub.copyWith(
-                            color: palette.textSecondary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
+              itemCount: placed.length + 1,
+              itemBuilder: (context, index) {
+                if (index == 0) return HeaderPage.gap();
+                final i = index - 1;
+                return SettingsRow(
+                  icon: Icons.widgets_outlined,
+                  label: 'Headlines widget ${i + 1}',
+                  sub: _chosen[placed[i]]! ? 'Chosen sources' : 'All sources',
+                  onTap: () async {
+                    await context.push('/widget/${placed[i]}');
+                    await _load();
+                  },
+                );
+              },
             ),
     );
   }

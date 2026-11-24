@@ -8,6 +8,7 @@ import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/palette.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/notice.dart';
 import 'package:headshorts/core/widgets/screen.dart';
@@ -109,6 +110,7 @@ class _OpmlImportScreenState extends ConsumerState<OpmlImportScreen> {
 
     return PushedScreen(
       title: 'Import OPML',
+      form: true,
       onBack: () => context.pop(),
       child: _folders.isEmpty
           ? _form(palette, problem)
@@ -127,11 +129,12 @@ class _OpmlImportScreenState extends ConsumerState<OpmlImportScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(
         HsSpace.x5,
-        22,
+        HsSpace.x3,
         HsSpace.x5,
         HsSpace.x5,
       ),
       children: [
+        HeaderPage.gap(),
         if (_fileName != null)
           Container(
             padding: const EdgeInsets.all(HsSpace.x4),

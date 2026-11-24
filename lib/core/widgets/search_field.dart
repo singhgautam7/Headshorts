@@ -19,6 +19,7 @@ class HsSearchField extends StatefulWidget {
     required this.hint,
     required this.onChanged,
     this.autofocus = false,
+    this.initialText = '',
     this.debounce = HsMotion.fxDefault,
     super.key,
   });
@@ -26,6 +27,10 @@ class HsSearchField extends StatefulWidget {
   final String hint;
   final ValueChanged<String> onChanged;
   final bool autofocus;
+
+  /// Text to start with, so a field whose row was scrolled out of a lazy list
+  /// and rebuilt shows the query that is still filtering the list.
+  final String initialText;
   final Duration debounce;
 
   @override
@@ -33,10 +38,10 @@ class HsSearchField extends StatefulWidget {
 }
 
 class _HsSearchFieldState extends State<HsSearchField> {
-  final _controller = TextEditingController();
+  late final _controller = TextEditingController(text: widget.initialText);
   final _focus = FocusNode();
   Timer? _debounce;
-  var _hasText = false;
+  late var _hasText = widget.initialText.isNotEmpty;
 
   @override
   void dispose() {

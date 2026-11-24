@@ -14,6 +14,7 @@ import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/relative_time.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
@@ -49,17 +50,12 @@ class _TodayScreenState extends ConsumerState<TodayScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final offline = ref.watch(offlineProvider);
-
-    return HsScreen(
+    // The list scrolls under the floating header; the offline note and the
+    // filter row are its first rows and scroll away with it.
+    return const HsScreen(
       title: 'Headlines',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          if (offline) const _OfflineNote(),
-          const Expanded(child: _BriefingPage()),
-        ],
-      ),
+      underHeader: true,
+      child: _BriefingPage(),
     );
   }
 }
@@ -218,7 +214,16 @@ class _BriefingState extends ConsumerState<_Briefing> {
               return at < 0 ? null : at + 1;
             },
             itemBuilder: (context, index) {
-              if (index == 0) return const _Header();
+              if (index == 0) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    HeaderPage.gap(),
+                    if (offline) const _OfflineNote(),
+                    const _Header(),
+                  ],
+                );
+              }
               if (headlines.isEmpty) {
                 return Padding(
                   padding: const EdgeInsets.only(top: 40),
@@ -258,7 +263,7 @@ class _BriefingState extends ConsumerState<_Briefing> {
         ),
         if (latestWaiting)
           PositionedDirectional(
-            top: HsSpace.x2,
+            top: HeaderPage.insetOf(context) + HsSpace.x2,
             start: 0,
             end: 0,
             child: Center(child: _LatestChip(onTap: _showLatest)),
@@ -563,7 +568,7 @@ class _OfflineNote extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.hs;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(HsSpace.x5, HsSpace.x4, HsSpace.x5, 2),
+      padding: const EdgeInsets.fromLTRB(0, HsSpace.x4, 0, 2),
       child: Container(
         padding: const EdgeInsets.symmetric(
           horizontal: 14,
@@ -601,18 +606,20 @@ class _RefreshingSkeleton extends StatelessWidget {
   Widget build(BuildContext context) => ListView(
     padding: const EdgeInsets.fromLTRB(
       HsSpace.x5,
-      HsSpace.x5,
+      0,
       HsSpace.x5,
       HsSpace.navClearance,
     ),
-    children: const [
-      HeadlineSkeleton(),
-      SizedBox(height: 30),
-      HeadlineSkeleton(widths: [0.64, 0.4], withThumbnail: true),
-      SizedBox(height: 30),
-      HeadlineSkeleton(widths: [0.86, 0.46]),
-      SizedBox(height: 30),
-      Opacity(opacity: 0.55, child: HeadlineSkeleton(widths: [0.7, 0.3])),
+    children: [
+      HeaderPage.gap(),
+      const SizedBox(height: HsSpace.x5),
+      const HeadlineSkeleton(),
+      const SizedBox(height: 30),
+      const HeadlineSkeleton(widths: [0.64, 0.4], withThumbnail: true),
+      const SizedBox(height: 30),
+      const HeadlineSkeleton(widths: [0.86, 0.46]),
+      const SizedBox(height: 30),
+      const Opacity(opacity: 0.55, child: HeadlineSkeleton(widths: [0.7, 0.3])),
     ],
   );
 }

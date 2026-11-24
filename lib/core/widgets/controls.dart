@@ -5,6 +5,7 @@ import 'package:flutter/widgets.dart';
 import 'package:headshorts/core/motion/animated_weight.dart';
 import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/motion/pressable.dart';
+import 'package:headshorts/core/motion/shape_loader.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
@@ -46,6 +47,7 @@ class HsButton extends StatelessWidget {
     required this.onPressed,
     this.kind = HsButtonKind.primary,
     this.height = HsSize.buttonLarge,
+    this.loading = false,
     super.key,
   });
 
@@ -54,10 +56,15 @@ class HsButton extends StatelessWidget {
   final HsButtonKind kind;
   final double height;
 
+  /// Swaps the label for the shape loader and ignores taps. The label stays
+  /// in the layout, hidden, so the button keeps its width; it keeps its own
+  /// fill rather than the disabled dress, because it is busy, not unusable.
+  final bool loading;
+
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final disabled = onPressed == null;
+    final disabled = onPressed == null && !loading;
     final accent = AccentScope.of(context).resolve(isDark: palette.isDark);
 
     final (Color? fill, Color text, BorderSide? side) = switch (kind) {
@@ -86,9 +93,9 @@ class HsButton extends StatelessWidget {
 
     return Pressable(
       kind: PressKind.button,
-      enabled: !disabled,
-      onTap: onPressed,
-      semanticLabel: label,
+      enabled: !disabled && !loading,
+      onTap: loading ? null : onPressed,
+      semanticLabel: loading ? 'Loading' : label,
       restRadius: height / 2,
       pressedRadius: height >= HsSize.buttonMedium
           ? HsRadius.squircle
@@ -123,14 +130,29 @@ class HsButton extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Text(
-                label,
-                textAlign: TextAlign.center,
-                style:
-                    (height <= HsSize.buttonCompact
-                            ? HsType.buttonSmall
-                            : style)
-                        .copyWith(color: text),
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  Opacity(
+                    opacity: loading ? 0 : 1,
+                    child: Text(
+                      label,
+                      textAlign: TextAlign.center,
+                      style:
+                          (height <= HsSize.buttonCompact
+                                  ? HsType.buttonSmall
+                                  : style)
+                              .copyWith(color: text),
+                    ),
+                  ),
+                  if (loading)
+                    ExcludeSemantics(
+                      child: ShapeLoader(
+                        size: HsSize.buttonLoader,
+                        color: text,
+                      ),
+                    ),
+                ],
               ),
             ],
           ),

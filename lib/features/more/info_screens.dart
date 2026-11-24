@@ -4,6 +4,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/open_in_web.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/features/more/settings_widgets.dart';
@@ -24,6 +25,7 @@ class ProseScreen extends StatelessWidget {
       child: ListView(
         padding: const EdgeInsets.all(HsSpace.x5),
         children: [
+          HeaderPage.gap(),
           for (final paragraph in paragraphs) ...[
             Text(
               paragraph,

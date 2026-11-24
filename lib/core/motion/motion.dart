@@ -14,5 +14,6 @@ export 'haptics.dart';
 export 'motion_level.dart';
 export 'pressable.dart';
 export 'route_styles.dart';
+export 'shape_loader.dart';
 export 'spring_curve.dart';
 export 'theme_ripple.dart';

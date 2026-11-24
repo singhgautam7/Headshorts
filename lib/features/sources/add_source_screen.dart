@@ -9,6 +9,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/info_button.dart';
@@ -92,6 +93,7 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
 
     return PushedScreen(
       title: 'Add by URL',
+      form: true,
       onBack: () => context.pop(),
       child: StickySubmit(
         label: _chosen.length > 1 ? 'Add ${_chosen.length} feeds' : 'Add feed',
@@ -99,11 +101,12 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
         child: ListView(
           padding: const EdgeInsets.fromLTRB(
             HsSpace.x5,
-            22,
+            HsSpace.x3,
             HsSpace.x5,
             HsSpace.x5,
           ),
           children: [
+            HeaderPage.gap(),
             Text(
               'Paste the site address. We will find the feed.',
               style: HsType.note.copyWith(color: palette.textSecondary),
@@ -112,8 +115,9 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
             _UrlField(controller: _input, onSubmitted: (_) => _search()),
             const SizedBox(height: HsSpace.x3),
             HsButton(
-              _searching ? 'Looking…' : 'Find the feed',
-              onPressed: _searching ? null : _search,
+              'Find the feed',
+              onPressed: _search,
+              loading: _searching,
               kind: HsButtonKind.secondary,
             ),
             const SizedBox(height: HsSpace.x5),

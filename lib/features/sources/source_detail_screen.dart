@@ -8,6 +8,7 @@ import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/relative_time.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/core/widgets/sheet.dart';
@@ -46,6 +47,7 @@ class SourceDetailScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(HsSpace.x5),
           children: [
+            HeaderPage.gap(),
             Row(
               children: [
                 Container(

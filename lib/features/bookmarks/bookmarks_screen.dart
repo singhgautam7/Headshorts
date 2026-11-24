@@ -13,6 +13,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/open_in_web.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
@@ -40,8 +41,7 @@ class BookmarksScreen extends ConsumerWidget {
     final size = ref.watch(settingsProvider.select((s) => s.listSize));
 
     return PushedScreen(
-      title: '',
-      divider: false,
+      title: 'Bookmarks',
       child: SkeletonCrossFade(
         loading: saved == null,
         placeholder: const _Skeleton(),
@@ -49,53 +49,40 @@ class BookmarksScreen extends ConsumerWidget {
             ? const SizedBox.shrink()
             : saved.isEmpty
             ? const _Empty()
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(
-                      HsSpace.x5,
-                      0,
-                      HsSpace.x5,
-                      6,
-                    ),
-                    child: Column(
+            : ListView.builder(
+                padding: const EdgeInsets.fromLTRB(
+                  HsSpace.x5,
+                  0,
+                  HsSpace.x5,
+                  HsSpace.x5,
+                ),
+                itemCount: saved.length + 1,
+                itemBuilder: (context, index) {
+                  if (index == 0) {
+                    return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          'Bookmarks',
-                          style: HsType.screenTitle.copyWith(
-                            color: palette.textPrimary,
-                          ),
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          '${saved.length} saved · most recently saved first',
-                          style: HsType.timestamp.copyWith(
-                            color: palette.textMuted,
+                        HeaderPage.gap(),
+                        Padding(
+                          padding: const EdgeInsets.only(bottom: HsSpace.x3),
+                          child: Text(
+                            '${saved.length} saved · most recently saved first',
+                            style: HsType.timestamp.copyWith(
+                              color: palette.textMuted,
+                            ),
                           ),
                         ),
                       ],
-                    ),
-                  ),
-                  Expanded(
-                    child: ListView.builder(
-                      padding: const EdgeInsets.fromLTRB(
-                        HsSpace.x5,
-                        HsSpace.x2,
-                        HsSpace.x5,
-                        HsSpace.x5,
-                      ),
-                      itemCount: saved.length,
-                      itemBuilder: (context, index) => _BookmarkRow(
-                        key: ValueKey(saved[index].id),
-                        row: saved[index],
-                        size: size,
-                        isLast: index == saved.length - 1,
-                      ),
-                    ),
-                  ),
-                ],
+                    );
+                  }
+                  final i = index - 1;
+                  return _BookmarkRow(
+                    key: ValueKey(saved[i].id),
+                    row: saved[i],
+                    size: size,
+                    isLast: i == saved.length - 1,
+                  );
+                },
               ),
       ),
     );
@@ -265,43 +252,37 @@ class _Empty extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    return Padding(
-      // A little clear of the true centre, so the block sits where the eye
-      // looks rather than where the arithmetic lands.
-      padding: const EdgeInsets.fromLTRB(HsSpace.x5, 0, HsSpace.x5, 90),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Bookmarks',
-            style: HsType.screenTitle.copyWith(color: palette.textPrimary),
-          ),
-          Expanded(
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                HsGlyph.bookmark(palette.textMuted),
-                const SizedBox(height: 14),
-                Text(
-                  'Nothing saved yet',
-                  style: HsType.stepTitle.copyWith(
-                    fontSize: 20,
-                    color: palette.textPrimary,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  'In the Reader, tap the bookmark beside Share to keep an '
-                  'article here. Saved articles stay on this phone.',
-                  style: HsType.caughtUpBody.copyWith(
-                    color: palette.textSecondary,
-                  ),
-                ),
-              ],
+    return Builder(
+      builder: (context) => Padding(
+        // A little clear of the true centre, so the block sits where the eye
+        // looks rather than where the arithmetic lands.
+        padding: EdgeInsets.fromLTRB(
+          HsSpace.x5,
+          HeaderPage.insetOf(context),
+          HsSpace.x5,
+          90,
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            HsGlyph.bookmark(palette.textMuted),
+            const SizedBox(height: 14),
+            Text(
+              'Nothing saved yet',
+              style: HsType.stepTitle.copyWith(
+                fontSize: 20,
+                color: palette.textPrimary,
+              ),
             ),
-          ),
-        ],
+            const SizedBox(height: 14),
+            Text(
+              'In the Reader, tap the bookmark beside Share to keep an '
+              'article here. Saved articles stay on this phone.',
+              style: HsType.caughtUpBody.copyWith(color: palette.textSecondary),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -312,18 +293,15 @@ class _Skeleton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => ListView(
-    padding: const EdgeInsets.fromLTRB(
-      HsSpace.x5,
-      HsSpace.x5,
-      HsSpace.x5,
-      HsSpace.x5,
-    ),
-    children: const [
-      HeadlineSkeleton(widths: [0.8, 0.5], withThumbnail: true),
-      SizedBox(height: 30),
-      HeadlineSkeleton(widths: [0.7, 0.44], withThumbnail: true),
-      SizedBox(height: 30),
-      HeadlineSkeleton(widths: [0.86, 0.4]),
+    padding: const EdgeInsets.fromLTRB(HsSpace.x5, 0, HsSpace.x5, HsSpace.x5),
+    children: [
+      HeaderPage.gap(),
+      const SizedBox(height: HsSpace.x3),
+      const HeadlineSkeleton(widths: [0.8, 0.5], withThumbnail: true),
+      const SizedBox(height: 30),
+      const HeadlineSkeleton(widths: [0.7, 0.44], withThumbnail: true),
+      const SizedBox(height: 30),
+      const HeadlineSkeleton(widths: [0.86, 0.4]),
     ],
   );
 }

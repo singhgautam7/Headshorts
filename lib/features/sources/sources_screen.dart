@@ -10,6 +10,7 @@ import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/language.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
@@ -74,14 +75,62 @@ class SourcesScreen extends ConsumerWidget {
     final indexOfKey = <Key, int>{
       for (var i = 0; i < rows.length; i++)
         if (rows[i] case _CategoryHeader(:final key?))
-          key: i
+          key: i + 1
         else if (rows[i] case final SourceEntry e)
-          ValueKey(e.feedUrl): i,
+          ValueKey(e.feedUrl): i + 1,
     };
+
+    // The search field, language filter and state line are the list's first
+    // row, under the header's gap: they scroll away with the rows, and only
+    // the title header becomes the pill.
+    Widget top() => Column(
+      key: const ValueKey('sources-top'),
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        HeaderPage.gap(),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(
+            HsSpace.x5,
+            HsSpace.x2,
+            HsSpace.x5,
+            0,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              HsSearchField(
+                hint: 'Search publishers and categories',
+                initialText: ref.read(sourcesQueryProvider),
+                onChanged: ref.read(sourcesQueryProvider.notifier).set,
+              ),
+              // Only when there is more than one to choose between, and
+              // each language names itself in its own script.
+              if (languages.length > 1) ...[
+                const SizedBox(height: HsSpace.x3),
+                LanguageChips(
+                  languages: languages,
+                  value: language,
+                  onChanged: ref.read(sourcesLanguageProvider.notifier).select,
+                ),
+              ],
+              const SizedBox(height: HsSpace.x3),
+              Text(
+                subscribed == 0
+                    ? 'Nothing on yet. Turn a few on and the briefing starts '
+                          'filling.'
+                    : '$subscribed on · turning one off keeps it, and its '
+                          'items, for later',
+                style: HsType.note.copyWith(color: palette.textMuted),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
 
     return HsScreen(
       title: 'Sources',
-      titlePadding: const EdgeInsets.fromLTRB(HsSpace.x5, 6, HsSpace.x5, 18),
+      underHeader: true,
       trailing: Pressable(
         kind: PressKind.button,
         onTap: () => context.push('/sources/add-url'),
@@ -108,93 +157,67 @@ class SourcesScreen extends ConsumerWidget {
           ),
         ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                HsSearchField(
-                  hint: 'Search publishers and categories',
-                  onChanged: ref.read(sourcesQueryProvider.notifier).set,
+      child: SkeletonCrossFade(
+        loading: loading,
+        // The skeleton standing in for the rows while the catalog asset is
+        // being read. Flat, like every skeleton here.
+        placeholder: ListView.builder(
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: _skeletonRows + 1,
+          itemBuilder: (context, i) => i == 0
+              ? top()
+              : const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: HsSpace.x5),
+                  child: _RowSkeleton(),
                 ),
-                // Only when there is more than one to choose between, and
-                // each language names itself in its own script.
-                if (languages.length > 1) ...[
-                  const SizedBox(height: HsSpace.x3),
-                  LanguageChips(
-                    languages: languages,
-                    value: language,
-                    onChanged: ref
-                        .read(sourcesLanguageProvider.notifier)
-                        .select,
-                  ),
-                ],
-                const SizedBox(height: HsSpace.x3),
-                Text(
-                  subscribed == 0
-                      ? 'Nothing on yet. Turn a few on and the briefing starts '
-                            'filling.'
-                      : '$subscribed on · turning one off keeps it, and its '
-                            'items, for later',
-                  style: HsType.note.copyWith(color: palette.textMuted),
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: SkeletonCrossFade(
-              loading: loading,
-              // The skeleton standing in for the rows while the catalog asset
-              // is being read. Flat, like every skeleton here.
-              placeholder: ListView.builder(
-                physics: const NeverScrollableScrollPhysics(),
+        ),
+        child: ListView.builder(
+          padding: const EdgeInsets.only(bottom: HsSpace.navClearance),
+          itemCount: rows.length + 2,
+          findChildIndexCallback: (key) =>
+              key == const ValueKey('sources-top') ? 0 : indexOfKey[key],
+          itemBuilder: (context, index) {
+            if (index == 0) return top();
+            if (index == rows.length + 1) {
+              return rows.isEmpty
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: HsSpace.x5,
+                      ),
+                      child: _NoMatches(
+                        onAddByUrl: () => context.push('/sources/add-url'),
+                      ),
+                    )
+                  : const SizedBox.shrink();
+            }
+
+            final row = rows[index - 1];
+            if (row is _CategoryHeader) {
+              return Padding(
+                key: row.key,
                 padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
-                itemCount: _skeletonRows,
-                itemBuilder: (context, _) => const _RowSkeleton(),
-              ),
-              child: ListView.builder(
-                padding: const EdgeInsets.only(
-                  left: HsSpace.x5,
-                  right: HsSpace.x5,
-                  bottom: HsSpace.navClearance,
-                ),
-                itemCount: rows.length + 1,
-                findChildIndexCallback: (key) => indexOfKey[key],
-                itemBuilder: (context, index) {
-                  if (index == rows.length) {
-                    return rows.isEmpty
-                        ? _NoMatches(
-                            onAddByUrl: () => context.push('/sources/add-url'),
-                          )
-                        : const SizedBox.shrink();
-                  }
+                child: row,
+              );
+            }
 
-                  final row = rows[index];
-                  if (row is _CategoryHeader) return row;
-
-                  final entry = row as SourceEntry;
-                  final group =
-                      grouped[entry.category] ?? const <SourceEntry>[];
-                  return _LiveRow(
-                    key: ValueKey(entry.feedUrl),
-                    entry: entry,
-                    showLanguage: languages.length > 1,
-                    showDivider: entry.feedUrl != group.last.feedUrl,
-                    onTap: () {
-                      final id = entry.subscription?.id;
-                      if (id != null) unawaited(context.push('/sources/$id'));
-                    },
-                    onToggle: (on) =>
-                        unawaited(setSourceOn(ref, entry, on: on)),
-                  );
+            final entry = row as SourceEntry;
+            final group = grouped[entry.category] ?? const <SourceEntry>[];
+            return Padding(
+              key: ValueKey(entry.feedUrl),
+              padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
+              child: _LiveRow(
+                entry: entry,
+                showLanguage: languages.length > 1,
+                showDivider: entry.feedUrl != group.last.feedUrl,
+                onTap: () {
+                  final id = entry.subscription?.id;
+                  if (id != null) unawaited(context.push('/sources/$id'));
                 },
+                onToggle: (on) => unawaited(setSourceOn(ref, entry, on: on)),
               ),
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }
@@ -235,7 +258,6 @@ class _LiveRow extends ConsumerWidget {
     required this.showDivider,
     required this.onTap,
     required this.onToggle,
-    super.key,
   });
 
   final SourceEntry entry;

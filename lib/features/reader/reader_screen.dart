@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show compute;
@@ -19,6 +20,7 @@ import 'package:headshorts/core/util/language.dart';
 import 'package:headshorts/core/util/open_in_web.dart';
 import 'package:headshorts/core/util/relative_time.dart';
 import 'package:headshorts/core/util/text_direction.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
@@ -360,25 +362,35 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     // The body mounts once the push has landed and its parse is in hand.
     final bodyLoading = !_pushDone || !_derived || extraction.isLoading;
 
+    final header = AppHeader(
+      title: doc.sourceTitle.toUpperCase(),
+      titleStyle: HsType.lingerLabel.copyWith(color: accent),
+      onBack: () => _leave(context),
+      actions: [
+        HsIconButton(
+          semanticLabel: 'Text size',
+          onPressed: () => setState(() => _sizePanelOpen = !_sizePanelOpen),
+          active: _sizePanelOpen,
+          child: (color) =>
+              Text('Aa', style: HsType.buttonSmall.copyWith(color: color)),
+        ),
+      ],
+    );
+
     return AccentScope(
       accent: accentTone,
       child: ColoredBox(
         color: palette.background,
-        child: SafeArea(
-          bottom: false,
-          child: Stack(
+        // The top bar is the app's floating header: it turns into the pill on
+        // scroll and the prose runs under it. The bottom actions are separate.
+        child: HeaderPage(
+          header: header,
+          body: Stack(
             children: [
               Positioned.fill(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    _Bar(
-                      source: doc.sourceTitle,
-                      accent: accent,
-                      sizePanelOpen: _sizePanelOpen,
-                      onToggleSizePanel: () =>
-                          setState(() => _sizePanelOpen = !_sizePanelOpen),
-                    ),
                     Expanded(
                       child: NotificationListener<ScrollNotification>(
                         onNotification: (notification) {
@@ -389,11 +401,13 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
                           controller: _scroll,
                           padding: const EdgeInsets.fromLTRB(
                             HsSpace.x5,
-                            26,
+                            0,
                             HsSpace.x5,
                             HsSpace.navClearance + 20,
                           ),
                           children: [
+                            HeaderPage.gap(),
+                            const SizedBox(height: HsSpace.x2),
                             Text(
                               doc.title,
                               textDirection: textDirectionOf(doc.title),
@@ -512,7 +526,7 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
               // The card slides down from under the bar and back up into
               // it, on the same clock the inline panel used to grow on.
               Positioned(
-                top: HsSize.appBarHeight,
+                top: _panelTop(context, header),
                 left: 0,
                 right: 0,
                 child: AnimatedSwitcher(
@@ -675,6 +689,21 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
         ),
       ),
     );
+  }
+
+  /// Where the text-size card hangs: under whichever form the header is in
+  /// right now (the pill once scrolled, the rest header at the top), or under
+  /// what is left of it when Floating header is off and it has scrolled away.
+  double _panelTop(BuildContext context, AppHeader header) {
+    final sb = MediaQuery.paddingOf(context).top;
+    final restBottom = sb + header.restHeight(context);
+    final offset = _scroll.hasClients ? _scroll.offset : 0.0;
+    if (!ref.read(settingsProvider).floatingHeader) {
+      return math.max(sb, restBottom - offset);
+    }
+    return offset >= HsMotion.pillAt
+        ? sb + HeaderSpec.top + HeaderSpec.pillHeight
+        : restBottom;
   }
 
   List<Widget> _body(
@@ -867,64 +896,6 @@ class _MissingStory extends StatelessWidget {
   }
 }
 
-class _Bar extends StatelessWidget {
-  const new({
-    required this.source,
-    required this.accent,
-    required this.sizePanelOpen,
-    required this.onToggleSizePanel,
-  });
-
-  final String source;
-  final Color accent;
-  final bool sizePanelOpen;
-  final VoidCallback onToggleSizePanel;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        border: Border(bottom: BorderSide(color: palette.divider)),
-      ),
-      child: SizedBox(
-        height: HsSize.appBarHeight,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              HsIconButton(
-                icon: Icons.arrow_back_rounded,
-                onPressed: () => _leave(context),
-                semanticLabel: 'Back',
-              ),
-              Expanded(
-                child: Center(
-                  child: Text(
-                    source.toUpperCase(),
-                    style: HsType.lingerLabel.copyWith(color: accent),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ),
-              HsIconButton(
-                semanticLabel: 'Text size',
-                onPressed: onToggleSizePanel,
-                active: sizePanelOpen,
-                child: (color) => Text(
-                  'Aa',
-                  style: HsType.buttonSmall.copyWith(color: color),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 class _TextSizePanel extends ConsumerWidget {
   const new({required this.step});
 
@@ -934,7 +905,7 @@ class _TextSizePanel extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
     return Container(
-      margin: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      margin: const EdgeInsets.fromLTRB(20, 6, 20, 0),
       padding: const EdgeInsets.symmetric(horizontal: 18, vertical: HsSpace.x4),
       decoration: BoxDecoration(
         color: palette.surface,
