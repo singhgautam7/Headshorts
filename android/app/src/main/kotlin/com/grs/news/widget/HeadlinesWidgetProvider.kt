@@ -112,8 +112,7 @@ class HeadlinesWidgetProvider : AppWidgetProvider() {
             val snap = WidgetData.load(ctx, WidgetPrefs.sourceIds(ctx, widgetId))
             val options = mgr.getAppWidgetOptions(widgetId)
             val fontScale = ctx.resources.configuration.fontScale
-            val fallbackH = options.getInt(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT, 0)
-                .let { if (it > 0) it.toFloat() else 320f }
+            fun height(key: String) = options.getInt(key, 0).let { if (it > 0) it.toFloat() else 320f }
 
             @Suppress("DEPRECATION")
             val sizes = if (Build.VERSION.SDK_INT >= 31)
@@ -121,7 +120,11 @@ class HeadlinesWidgetProvider : AppWidgetProvider() {
             val views = if (!sizes.isNullOrEmpty()) {
                 RemoteViews(sizes.take(16).associateWith { build(ctx, snap, it.height, fontScale, widgetId) })
             } else {
-                build(ctx, snap, fallbackH, fontScale, widgetId)
+                // The launcher reports two heights: the short one in landscape, the tall one upright.
+                RemoteViews(
+                    build(ctx, snap, height(AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT), fontScale, widgetId),
+                    build(ctx, snap, height(AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT), fontScale, widgetId),
+                )
             }
             mgr.updateAppWidget(widgetId, views)
         }
@@ -156,7 +159,8 @@ class HeadlinesWidgetProvider : AppWidgetProvider() {
             }
             // Never disabled: taps during a refresh are ignored in onReceive, and if the refresh
             // process is killed the button must still work once the flag is stale.
-            v.setFloat(R.id.widget_refresh, "setAlpha", if (refreshing) 0.4f else 1f)
+            // View.setAlpha is not remotable before API 31; ImageView.setImageAlpha always is.
+            v.setInt(R.id.widget_refresh, "setImageAlpha", if (refreshing) 102 else 255)
             v.setContentDescription(
                 R.id.widget_refresh,
                 ctx.getString(if (refreshing) R.string.widget_refreshing_cd else R.string.widget_refresh_cd),
