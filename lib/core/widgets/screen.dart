@@ -93,8 +93,12 @@ class PushedScreen extends StatelessWidget {
                     ? Border(bottom: BorderSide(color: palette.divider))
                     : null,
               ),
-              child: SizedBox(
-                height: HsSize.appBarHeight,
+              child: ConstrainedBox(
+                // A minimum, not a fixed height: the title wraps at the
+                // largest font and the bar grows with it.
+                constraints: const BoxConstraints(
+                  minHeight: HsSize.appBarHeight,
+                ),
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 20),
                   child: Row(

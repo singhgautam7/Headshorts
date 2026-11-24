@@ -27,6 +27,15 @@ abstract final class HsRadius {
   static const menu = Radius.circular(20);
   static const pill = Radius.circular(999);
 
+  /// A held button (48 dp or taller), a selected chip or segment.
+  static const double squircle = 12;
+
+  /// A held button under 48 dp.
+  static const double heldCompact = 8;
+
+  /// An icon button while pressed.
+  static const double heldIcon = 12;
+
   static const chipBorder = BorderRadius.all(chip);
   static const buttonBorder = BorderRadius.all(button);
   static const cardBorder = BorderRadius.all(card);
@@ -64,6 +73,12 @@ abstract final class HsSize {
   static const rowHeight = 56.0;
   static const sourceRowHeight = 60.0;
   static const settingsRowHeight = 58.0;
+
+  /// The least a control's tap region is, and the height a chip's hit
+  /// region takes around its 32 dp visual.
+  static const tapTarget = 48.0;
+  static const chipVisual = 32.0;
+  static const toggleKnobOff = 14.0;
 
   static const toggleWidth = 44.0;
   static const toggleHeight = 26.0;

@@ -201,7 +201,7 @@ class _PressableState extends State<Pressable>
         final inner =
             widget.builder?.call(
               context,
-              morph ? math.max(0.0, rest + (pressed - rest) * v) : rest,
+              morph ? math.max(0, rest + (pressed - rest) * v) : rest,
               v,
             ) ??
             child!;

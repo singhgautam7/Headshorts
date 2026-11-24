@@ -1,6 +1,8 @@
 import 'package:flutter/cupertino.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
+import 'package:headshorts/core/tokens/motion.dart';
 
 /// Pull to refresh, drawn the way the component sheet specifies.
 ///
@@ -12,6 +14,7 @@ class PullToRefresh extends StatelessWidget {
     required this.onRefresh,
     required List<Widget> children,
     this.padding = EdgeInsets.zero,
+    this.controller,
     super.key,
   }) : delegate = SliverChildListDelegate(children);
 
@@ -19,21 +22,30 @@ class PullToRefresh extends StatelessWidget {
     required this.onRefresh,
     required NullableIndexedWidgetBuilder itemBuilder,
     int? itemCount,
+    ChildIndexGetter? findChildIndexCallback,
     this.padding = EdgeInsets.zero,
+    this.controller,
     super.key,
   }) : delegate = SliverChildBuilderDelegate(
          itemBuilder,
          childCount: itemCount,
+         // With keys on the rows, a refresh that prepends items moves the
+         // existing elements instead of re-binding each to the wrong row.
+         findChildIndexCallback: findChildIndexCallback,
        );
 
   final Future<void> Function() onRefresh;
   final SliverChildDelegate delegate;
   final EdgeInsets padding;
 
+  /// For a caller that scrolls the list itself ("back to the top").
+  final ScrollController? controller;
+
   static const _extent = 96.0;
 
   @override
   Widget build(BuildContext context) => CustomScrollView(
+    controller: controller,
     physics: const BouncingScrollPhysics(
       parent: AlwaysScrollableScrollPhysics(),
     ),
@@ -122,20 +134,34 @@ class _HsPullRingState extends State<HsPullRing>
     with SingleTickerProviderStateMixin {
   late final AnimationController _turn = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 900),
+    duration: HsMotion.refreshTurn,
   );
 
-  @override
-  void didUpdateWidget(HsPullRing old) {
-    super.didUpdateWidget(old);
-    // One turn per fetch, then stop. Not a loop.
-    if (widget.spinning && !_turn.isAnimating) {
+  /// Turns only while a fetch is running, and only if the reader has not
+  /// switched motion off. The ticker is muted by [TickerMode] whenever the
+  /// list is off screen, so a hidden tab never spins it.
+  void _sync() {
+    final turn =
+        widget.spinning && HsMotion.levelOf(context) != MotionLevel.off;
+    if (turn && !_turn.isAnimating) {
       _turn.repeat();
-    } else if (!widget.spinning) {
+    } else if (!turn && (_turn.isAnimating || _turn.value != 0)) {
       _turn
         ..stop()
         ..value = 0;
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(HsPullRing old) {
+    super.didUpdateWidget(old);
+    _sync();
   }
 
   @override

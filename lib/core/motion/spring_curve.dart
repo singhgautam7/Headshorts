@@ -42,21 +42,21 @@ class ClampedSpringCurve extends Curve {
 /// Retarget a running spring from its current value AND velocity (never
 /// restarts). Use on an [AnimationController.unbounded]: a bounded one would
 /// clamp the overshoot. The ticker stops by itself when the spring settles,
-/// and the value then snaps to exactly [target] (no 0.9999 left at rest).
+/// and the value then snaps to exactly `target` (no 0.9999 left at rest).
 extension SpringTo on AnimationController {
   TickerFuture springTo(double target, SpringDescription spring) {
-    final f = animateWith(SpringSimulation(spring, value, target, velocity));
-    f.then((_) {
-      // The callback runs a microtask after the spring settles; the owner may
-      // have been disposed in between (a row removed by the tap that pressed
-      // it), and a disposed controller cannot take a value.
-      if (isAnimating) return;
-      try {
-        value = target;
-      } on Object catch (_) {
-        // Disposed: nothing left to snap.
-      }
-    });
+    final f = animateWith(SpringSimulation(spring, value, target, velocity))
+      ..then((_) {
+        // The callback runs a microtask after the spring settles; the owner may
+        // have been disposed in between (a row removed by the tap that pressed
+        // it), and a disposed controller cannot take a value.
+        if (isAnimating) return;
+        try {
+          value = target;
+        } on Object catch (_) {
+          // Disposed: nothing left to snap.
+        }
+      });
     return f;
   }
 }

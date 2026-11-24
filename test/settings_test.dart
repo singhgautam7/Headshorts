@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/source_repository.dart';
@@ -60,6 +61,32 @@ void main() {
       expect(read.linkOpenMode, LinkOpenMode.browser);
       expect(read.refreshCadence, RefreshCadence.daily);
       expect(read.maxConsecutivePerSource, 5);
+    });
+
+    test('searchTheWeb Off is remembered across a restart', () async {
+      final written = await store();
+      await written.write(const Settings(searchTheWeb: false));
+      expect((await store()).read().searchTheWeb, isFalse);
+    });
+
+    test('motion and haptics round-trip, with calm defaults', () async {
+      final fresh = (await store()).read();
+      expect(fresh.motionPreference, MotionPreference.auto);
+      expect(fresh.deviceClass, DeviceClass.unknown);
+      expect(fresh.haptics, isTrue);
+
+      await (await store()).write(
+        const Settings(
+          motionPreference: MotionPreference.subtle,
+          deviceClass: DeviceClass.low,
+          haptics: false,
+        ),
+      );
+      final read = (await store()).read();
+      expect(read.motionPreference, MotionPreference.subtle);
+      expect(read.deviceClass, DeviceClass.low);
+      expect(read.haptics, isFalse);
+      expect(read.motionLevel, MotionLevel.subtle);
     });
 
     test('survives a value it does not recognise', () async {

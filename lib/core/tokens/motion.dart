@@ -71,7 +71,7 @@ abstract final class HsMotion {
 
   /// Every spatial motion at the Subtle level (critically damped).
   static final SpringDescription springSubtle =
-      SpringDescription.withDampingRatio(mass: 1, stiffness: 600, ratio: 1.0);
+      SpringDescription.withDampingRatio(mass: 1, stiffness: 600);
 
   /// Cached spring curves for implicit animations (use `.settle` as the
   /// duration, `.clamped` for sizes).
@@ -144,6 +144,12 @@ abstract final class HsMotion {
     ),
     fontVariations: <FontVariation>[FontVariation('wght', wght)],
   );
+
+  /// One turn of the pull-to-refresh ring while a fetch runs.
+  static const refreshTurn = Duration(milliseconds: 900);
+
+  /// A notice leaving. Kuber's snackbar exit.
+  static const snackExit = Duration(milliseconds: 140);
 
   /// Anything below Expressive: transforms become short fades.
   static bool reduced(BuildContext context) =>

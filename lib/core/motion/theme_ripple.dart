@@ -28,7 +28,7 @@ class ThemeRipple extends StatefulWidget {
 
   /// Null when there is no [ThemeRipple] above (tests): callers then just apply.
   static ThemeRippleHandle? maybeOf(BuildContext context) =>
-      context.getInheritedWidgetOfExactType<_RippleScope>()?.handle;
+      context.getInheritedWidgetOfExactType<ThemeRippleScope>()?.handle;
 
   static ThemeRippleHandle of(BuildContext context) =>
       maybeOf(context) ?? const _NoRipple();
@@ -45,17 +45,17 @@ abstract interface class ThemeRippleHandle {
 class _NoRipple implements ThemeRippleHandle {
   const new();
   @override
-  Future<void> run(
-    Offset globalPosition,
-    FutureOr<void> Function() apply,
-  ) async => apply();
+  Future<void> run(Offset globalPosition, FutureOr<void> Function() apply) =>
+      Future.sync(apply);
 }
 
-class _RippleScope extends InheritedWidget {
-  const new({required this.handle, required super.child});
+/// Hands the handle down. Public so a test can stand a spy in for the real
+/// snapshotting [ThemeRipple].
+class ThemeRippleScope extends InheritedWidget {
+  const new({required this.handle, required super.child, super.key});
   final ThemeRippleHandle handle;
   @override
-  bool updateShouldNotify(_RippleScope old) => false;
+  bool updateShouldNotify(ThemeRippleScope old) => false;
 }
 
 class _Ripple {
@@ -159,7 +159,7 @@ class _ThemeRippleState extends State<ThemeRipple>
     final curve = _level == MotionLevel.subtle
         ? HsMotion.themeRevealSubtleCurve
         : HsMotion.themeRevealCurve;
-    return _RippleScope(
+    return ThemeRippleScope(
       handle: this,
       child: RepaintBoundary(
         key: _boundary,
@@ -222,10 +222,11 @@ class _RipplePainter extends CustomPainter {
       ..fillType = PathFillType.evenOdd
       ..addRect(dst)
       ..addOval(Rect.fromCircle(center: c, radius: radius));
-    canvas.save();
-    canvas.clipPath(hole);
-    canvas.drawImageRect(r.image, src, dst, Paint());
-    canvas.restore();
+    canvas
+      ..save()
+      ..clipPath(hole)
+      ..drawImageRect(r.image, src, dst, Paint())
+      ..restore();
   }
 
   @override

@@ -1,8 +1,8 @@
-import 'dart:async';
 import 'dart:ui' as ui;
 
-import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
+import 'package:headshorts/core/motion/haptics.dart';
+import 'package:headshorts/core/motion/pressable.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
@@ -88,7 +88,9 @@ class NavPill extends StatelessWidget {
                   destination: destinations[i],
                   selected: i == selectedIndex,
                   onTap: () {
-                    unawaited(HapticFeedback.selectionClick());
+                    // A tick for a change only; tapping the tab you are on
+                    // scrolls it to the top and stays silent.
+                    if (i != selectedIndex) HsHaptics.tick();
                     onSelected(i);
                   },
                 ),
@@ -99,7 +101,11 @@ class NavPill extends StatelessWidget {
       ),
     );
 
-    return NavPillSurface(blur: blur, child: content);
+    // One layer: the label morph repaints inside it, nothing outside does.
+    return NavPillSurface(
+      blur: blur,
+      child: RepaintBoundary(child: content),
+    );
   }
 }
 
@@ -174,8 +180,9 @@ class _NavItem extends StatelessWidget {
       button: true,
       selected: selected,
       label: destination.label,
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
+      child: Pressable(
+        kind: PressKind.chip,
+        morphCorners: false,
         onTap: onTap,
         child: TweenAnimationBuilder<double>(
           tween: Tween(end: selected ? 1 : 0),
@@ -218,17 +225,18 @@ class _NavItem extends StatelessWidget {
                         child: Align(
                           alignment: Alignment.centerLeft,
                           widthFactor: width,
-                          child: Opacity(
-                            opacity: open,
-                            child: Padding(
-                              padding: const EdgeInsets.only(left: HsSpace.x2),
-                              child: Text(
-                                destination.label,
-                                maxLines: 1,
-                                softWrap: false,
-                                overflow: TextOverflow.clip,
-                                style: HsType.buttonSmall.copyWith(
-                                  color: palette.onPrimaryContainer,
+                          // Colour alpha, not an Opacity layer, inside a
+                          // builder that runs every frame of the morph.
+                          child: Padding(
+                            padding: const EdgeInsets.only(left: HsSpace.x2),
+                            child: Text(
+                              destination.label,
+                              maxLines: 1,
+                              softWrap: false,
+                              overflow: TextOverflow.clip,
+                              style: HsType.buttonSmall.copyWith(
+                                color: palette.onPrimaryContainer.withValues(
+                                  alpha: open,
                                 ),
                               ),
                             ),
