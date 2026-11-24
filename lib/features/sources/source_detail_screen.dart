@@ -185,7 +185,7 @@ class SourceDetailScreen extends ConsumerWidget {
     (context) => HsSheet(
       title: 'Accent colour',
       subtitle:
-          'A label, a hairline and — in Linger — a quiet wash. '
+          'A label, a hairline and, in Linger, a quiet wash. '
           'Never a full card.',
       children: [
         // Each swatch is a 48dp target around its 34dp dot, so the targets

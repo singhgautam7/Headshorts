@@ -164,7 +164,10 @@ class _PillOption extends ConsumerWidget {
                     ),
                   ),
                   const SizedBox(height: HsSpace.x2),
-                  HeaderPreview(floating: on, pill: mode),
+                  SizedBox(
+                    width: double.infinity,
+                    child: HeaderPreview(floating: on, pill: mode),
+                  ),
                 ],
               ),
             ),

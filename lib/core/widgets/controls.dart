@@ -439,8 +439,10 @@ ShapeBorder _chipShape(double t, Color stroke, {required bool hasOutline}) {
 /// Mixed in oklab, as the design board writes it. In sRGB the same 15% comes
 /// out about three times brighter on black, which is the difference between a
 /// whisper of hue and a coloured card.
-Color accentWash(Color accent, HsPalette palette) =>
-    Oklab.mix(accent, palette.background, palette.isDark ? 0.15 : 0.07);
+///
+/// [on] is the surface under it when that is not the page.
+Color accentWash(Color accent, HsPalette palette, {Color? on}) =>
+    Oklab.mix(accent, on ?? palette.background, palette.isDark ? 0.15 : 0.07);
 
 /// The softer wash, used where two accented surfaces sit next to each other.
 Color accentWashSoft(Color accent, HsPalette palette) =>

@@ -22,18 +22,18 @@ Future<void> showOpmlExplainer(
 );
 
 const _whatItIs =
-    'An OPML file is just a list of RSS feeds saved in one file — think of it '
+    'An OPML file is just a list of RSS feeds saved in one file. Think of it '
     'like a contacts export, but for news sources. Instead of adding feeds one '
     'at a time, you can bring in a whole set at once.';
 
 const _stepGet =
-    'Get an OPML file — export one from another reader (Feedly, Inoreader, '
+    'Get an OPML file: export one from another reader (Feedly, Inoreader, '
     'NetNewsWire…), or use a shared starter list.';
 
 const _stepChoose = 'Tap "Import OPML" and choose the file from your device.';
 
 const _stepDone =
-    'Done — the feeds appear under Sources, already grouped into categories.';
+    'Done. The feeds appear under Sources, already grouped into categories.';
 
 const _privacyNote =
     'Your feeds stay on your device. Nothing is uploaded.\n\n'

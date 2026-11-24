@@ -479,7 +479,7 @@ class _Pick extends StatelessWidget {
 
 /// The overflow beside Continue: paste an address, or import a file.
 ///
-/// Wears **Skip's** dress — a hairline outline, no fill — square. These are
+/// Wears **Skip's** dress — a hairline outline, no fill, round. These are
 /// asides from the step, like Skip, and only Continue should carry the ink:
 /// two filled buttons side by side would read as two things to choose
 /// between.
@@ -495,6 +495,8 @@ class _MoreWaysIn extends StatelessWidget {
 
     return Builder(
       builder: (anchorContext) => Pressable(
+        kind: PressKind.iconButton,
+        restRadius: HsSize.buttonLarge / 2,
         onTap: () async {
           final picked = await showHsMenu<String>(
             context: context,
@@ -531,13 +533,13 @@ class _MoreWaysIn extends StatelessWidget {
           }
         },
         semanticLabel: 'Other ways to add sources',
-        child: Container(
+        builder: (context, radius, _) => Container(
           width: HsSize.buttonLarge,
           height: HsSize.buttonLarge,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             border: Border.all(color: palette.stroke),
-            borderRadius: HsRadius.buttonBorder,
+            borderRadius: BorderRadius.circular(radius),
           ),
           child: Icon(
             Icons.more_horiz_rounded,
@@ -596,7 +598,7 @@ class InitialFetch extends ConsumerWidget {
                 const SizedBox(height: HsSpace.x2),
                 Text(
                   '${progress.done} of ${progress.total == 0 ? enabled.length : progress.total} '
-                  'feeds in. This is the only time the app will make you wait — '
+                  'feeds in. This is the only time the app will make you wait; '
                   'after this it opens straight from cache.',
                   style: HsType.bodySans.copyWith(color: palette.textSecondary),
                 ),

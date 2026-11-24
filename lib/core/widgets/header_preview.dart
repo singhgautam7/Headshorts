@@ -105,8 +105,7 @@ class _HeaderPreviewState extends State<HeaderPreview>
     const top = EdgeInsets.only(top: HsSpace.x4);
     final mq = MediaQuery.of(context);
     return FittedBox(
-      fit: BoxFit.scaleDown,
-      alignment: Alignment.centerLeft,
+      fit: BoxFit.fitWidth,
       child: ExcludeSemantics(
         child: IgnorePointer(
           child: Container(

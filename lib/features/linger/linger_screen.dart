@@ -645,7 +645,7 @@ class _Header extends StatelessWidget {
                     vertical: 6,
                   ),
                   decoration: BoxDecoration(
-                    color: accentWash(accent, palette),
+                    color: accentWash(accent, palette, on: palette.surface),
                     borderRadius: HsRadius.chipBorder,
                   ),
                   child: Text(

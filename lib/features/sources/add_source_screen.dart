@@ -161,7 +161,7 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
             if (_searched && !_searching && _found.isEmpty)
               Text(
                 'No feed found behind that address. Some publishers only list '
-                'theirs on the page itself — try pasting the feed address '
+                'theirs on the page itself. Try pasting the feed address '
                 'directly.',
                 style: HsType.note.copyWith(color: palette.textSecondary),
               ),
