@@ -9,5 +9,5 @@ flutter build apk --profile --target-platform android-arm64 --target=integration
 adb -s "$1" uninstall com.grs.news >/dev/null 2>&1 || true
 flutter drive --no-dds --profile --use-application-binary=build/app/outputs/flutter-apk/app-profile.apk \
   --driver=test_driver/perf_driver.dart --target=integration_test/perf_test.dart -d "$1"
-mkdir -p specs/kuber-parity/perf
-for f in build/perf/*.json; do cp "$f" "specs/kuber-parity/perf/$2_$(basename "$f")"; done
+O=${PERF_OUT:-specs/kuber-parity/perf}; mkdir -p "$O"
+for f in build/perf/*.json; do cp "$f" "$O/$2_$(basename "$f")"; done
