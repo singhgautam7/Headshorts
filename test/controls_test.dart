@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:headshorts/core/motion/motion_level.dart';
+import 'package:headshorts/core/motion/shape_loader.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 
 import 'support/harness.dart';
@@ -93,6 +94,65 @@ void main() {
         ),
       );
       expect(tester.getSize(find.byType(HsButton)).height, greaterThan(52));
+    });
+
+    group('loading', () {
+      testWidgets('keeps its width, ignores taps and says Loading', (
+        tester,
+      ) async {
+        var taps = 0;
+        Widget button({required bool loading}) => Center(
+          child: HsButton(
+            'Find feeds',
+            loading: loading,
+            onPressed: () => taps++,
+          ),
+        );
+        await pumpThemed(tester, button(loading: false));
+        final rest = tester.getSize(find.byType(HsButton));
+
+        await pumpThemed(tester, button(loading: true));
+        await tester.pump(const Duration(milliseconds: 600));
+        expect(tester.getSize(find.byType(HsButton)), rest);
+        expect(find.byType(ShapeLoader), findsOneWidget);
+
+        await tester.tap(find.byType(HsButton));
+        await tester.pump();
+        expect(taps, 0);
+
+        final semantics = tester.ensureSemantics();
+        expect(find.bySemanticsLabel('Loading'), findsOneWidget);
+        semantics.dispose();
+
+        // Back to a label once the work is done, and tappable again.
+        await pumpThemed(tester, button(loading: false));
+        expect(find.byType(ShapeLoader), findsNothing);
+        await tester.tap(find.byType(HsButton));
+        await tester.pump();
+        expect(taps, 1);
+        await tester.pumpWidget(const SizedBox());
+      });
+
+      testWidgets('wears its own fill, not the disabled dress', (tester) async {
+        await pumpThemed(
+          tester,
+          Center(child: HsButton('Go', loading: true, onPressed: () {})),
+        );
+        final deco =
+            tester
+                    .widget<Container>(
+                      find
+                          .descendant(
+                            of: find.byType(HsButton),
+                            matching: find.byType(Container),
+                          )
+                          .first,
+                    )
+                    .decoration!
+                as ShapeDecoration;
+        expect(deco.color, isNotNull);
+        await tester.pumpWidget(const SizedBox());
+      });
     });
   });
 

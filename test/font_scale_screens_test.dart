@@ -192,10 +192,19 @@ void main() {
   screen('OPML import', (t) => pump(t, const OpmlImportScreen()));
   screen('Bookmarks', (t) => pump(t, const BookmarksScreen()));
 
-  screen('Onboarding: welcome and picker', (t) async {
+  screen('Onboarding: pages, setup and picker', (t) async {
     await pump(t, const OnboardingScreen());
-    await t.ensureVisible(find.text('Choose your sources'));
-    await t.pump();
+    // Three feature pages, then the setup page: each at the largest font.
+    for (var i = 0; i < 3; i++) {
+      noOverflow(t);
+      expect(find.text('Next'), findsOneWidget);
+      await t.tap(find.text('Next'));
+      for (var j = 0; j < 10; j++) {
+        await t.pump(const Duration(milliseconds: 100));
+      }
+    }
+    noOverflow(t);
+    expect(find.text('Make it yours'), findsOneWidget);
     await t.tap(find.text('Choose your sources'));
     for (var i = 0; i < 10; i++) {
       await t.pump(const Duration(milliseconds: 100));

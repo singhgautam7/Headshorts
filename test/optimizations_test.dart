@@ -1,10 +1,14 @@
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/core/widgets/nav_pill.dart';
 import 'package:headshorts/core/widgets/pull_to_refresh.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/data/db/database.dart';
+import 'package:headshorts/data/prefs/settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/harness.dart';
 
@@ -67,9 +71,16 @@ void main() {
 
   group('HsScreen', () {
     testWidgets('renders title and child', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
       await pumpThemed(
         tester,
-        const HsScreen(title: 'Headlines', child: Text('Content')),
+        ProviderScope(
+          overrides: [
+            settingsStoreProvider.overrideWithValue(SettingsStore(prefs)),
+          ],
+          child: const HsScreen(title: 'Headlines', child: Text('Content')),
+        ),
       );
       await tester.pumpAndSettle();
 

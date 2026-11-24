@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/refresh_controller.dart';
 import 'package:headshorts/app/settings_controller.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
@@ -16,12 +17,14 @@ import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/search_field.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/sources/source_catalog.dart';
+import 'package:headshorts/features/onboarding/onboarding_intro.dart';
 import 'package:headshorts/features/sources/opml_explainer.dart';
 import 'package:headshorts/features/sources/source_picker.dart';
 import 'package:headshorts/features/today/today_controller.dart';
 
-/// First run, and the only place a loading screen earns its keep.
-enum _Step { welcome, pick, fetch }
+/// First run, and the only place a loading screen earns its keep: the intro
+/// pager (three pages and the setup page), the source picker, the first fetch.
+enum _Step { intro, pick, fetch }
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const new({super.key});
@@ -31,7 +34,13 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  _Step _step = _Step.welcome;
+  _Step _step = _Step.intro;
+
+  /// The pager's controller and page. Kept here so Android back can step
+  /// through the pages, and recreated on the way back from the picker so the
+  /// pager reopens on the setup page rather than the first.
+  PageController _pages = PageController();
+  var _page = 0;
   final _chosen = <String>{};
   var _query = '';
 
@@ -39,6 +48,41 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   /// all of them. A filter on the list, nothing more: it never unpicks a
   /// source that has scrolled out of view.
   String? _language;
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    super.dispose();
+  }
+
+  void _goTo(int page) {
+    if (HsMotion.levelOf(context) == MotionLevel.off) {
+      _pages.jumpToPage(page);
+    } else {
+      _pages.animateToPage(
+        page,
+        duration: HsMotion.of(context, HsMotion.page),
+        curve: HsMotion.curveOf(context, HsMotion.pageCurve),
+      );
+    }
+  }
+
+  /// Android back: a page back in the pager, the pager back from the picker,
+  /// and nothing while the first fetch is running.
+  void _back() {
+    switch (_step) {
+      case _Step.intro:
+        _goTo(_page - 1);
+      case _Step.pick:
+        _pages.dispose();
+        setState(() {
+          _pages = PageController(initialPage: OnboardingIntro.setupIndex);
+          _step = _Step.intro;
+        });
+      case _Step.fetch:
+        break;
+    }
+  }
 
   SourceCatalog get _catalog =>
       ref.read(sourceCatalogProvider).value ?? SourceCatalog.empty;
@@ -126,34 +170,44 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     return _build(context);
   }
 
-  Widget _build(BuildContext context) => ColoredBox(
-    color: context.hs.background,
-    child: SafeArea(
-      // Each step arrives the way a pushed page does: the router's slide and
-      // fade on motion-page, the one push transition in the app.
-      child: AnimatedSwitcher(
-        duration: HsMotion.of(context, HsMotion.page),
-        switchInCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
-        switchOutCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
-        transitionBuilder: (child, animation) {
-          final fade = FadeTransition(opacity: animation, child: child);
-          if (HsMotion.reduced(context)) return fade;
-          return SlideTransition(
-            position: Tween(
-              begin: const Offset(0.06, 0),
-              end: Offset.zero,
-            ).animate(animation),
-            child: fade,
-          );
-        },
-        child: KeyedSubtree(key: ValueKey(_step), child: _stepView(context)),
+  Widget _build(BuildContext context) => PopScope(
+    canPop: _step == _Step.intro && _page == 0,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) _back();
+    },
+    child: ColoredBox(
+      color: context.hs.background,
+      child: SafeArea(
+        // Each step arrives the way a pushed page does: the router's slide and
+        // fade on motion-page, the one push transition in the app.
+        child: AnimatedSwitcher(
+          duration: HsMotion.of(context, HsMotion.page),
+          switchInCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
+          switchOutCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
+          transitionBuilder: (child, animation) {
+            final fade = FadeTransition(opacity: animation, child: child);
+            if (HsMotion.reduced(context)) return fade;
+            return SlideTransition(
+              position: Tween(
+                begin: const Offset(0.06, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: fade,
+            );
+          },
+          child: KeyedSubtree(key: ValueKey(_step), child: _stepView(context)),
+        ),
       ),
     ),
   );
 
   Widget _stepView(BuildContext context) => switch (_step) {
-    _Step.welcome => _Welcome(
-      onChoose: () => setState(() => _step = _Step.pick),
+    _Step.intro => OnboardingIntro(
+      pages: _pages,
+      page: _page,
+      onPageChanged: (p) => setState(() => _page = p),
+      onGoTo: _goTo,
+      onFinish: () => setState(() => _step = _Step.pick),
       onImport: () => _leaveTo('/sources/opml'),
     ),
     _Step.pick => _Pick(
@@ -174,63 +228,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     ),
     _Step.fetch => const InitialFetch(),
   };
-}
-
-class _Welcome extends StatelessWidget {
-  const new({required this.onChoose, required this.onImport});
-
-  final VoidCallback onChoose;
-  final VoidCallback onImport;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    // Scrolls only when it has to: at a large system font the copy and the
-    // two buttons are taller than a small phone.
-    return CustomScrollView(
-      slivers: [
-        SliverFillRemaining(
-          hasScrollBody: false,
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(HsSpace.x5, 26, HsSpace.x5, 40),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const FadingBriefingMark(),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Text(
-                      'A briefing that ends.',
-                      style: HsType.welcome.copyWith(
-                        color: palette.textPrimary,
-                      ),
-                    ),
-                    const SizedBox(height: HsSpace.x5),
-                    Text(
-                      'HeadShorts reads the feeds you choose, in the order they were '
-                      'published. No algorithm, no counts, no infinite scroll. When '
-                      'you reach the bottom, that is the news.',
-                      style: HsType.lead.copyWith(color: palette.textSecondary),
-                    ),
-                    const SizedBox(height: HsSpace.x6),
-                    HsButton('Choose your sources', onPressed: onChoose),
-                    const SizedBox(height: 14),
-                    HsButton(
-                      'Import OPML instead',
-                      onPressed: onImport,
-                      kind: HsButtonKind.secondary,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 /// The product's one idea, drawn: a column of headlines fading down the page,

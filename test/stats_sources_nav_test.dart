@@ -93,7 +93,8 @@ void main() {
     await settle(tester);
     expect(find.byType(StatsScreen), findsOneWidget);
     final button = find.textContaining('Review the one you never open');
-    await tester.ensureVisible(button);
+    // Mid-screen: the floating header covers the top edge of a short phone.
+    await Scrollable.ensureVisible(tester.element(button), alignment: 0.5);
     await tester.pump(const Duration(milliseconds: 300));
     await tester.tap(button);
     await settle(tester);

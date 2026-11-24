@@ -167,9 +167,12 @@ void main() {
           null,
         ),
       );
+      final prefs = await SharedPreferences.getInstance();
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
+            // The screen's floating header reads two settings.
+            settingsStoreProvider.overrideWithValue(SettingsStore(prefs)),
             widgetSourcesProvider.overrideWith((ref) => Stream.value(rows)),
           ],
           child: MaterialApp(
