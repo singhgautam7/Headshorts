@@ -65,6 +65,18 @@ class SettingsController extends Notifier<Settings> {
     return _save(state.copyWith(haptics: enabled));
   }
 
+  Future<void> setExpressiveColors({required bool enabled}) =>
+      _save(state.copyWith(expressiveColors: enabled));
+
+  Future<void> setWallpaperColor({required bool enabled}) =>
+      _save(state.copyWith(wallpaperColor: enabled));
+
+  Future<void> setFloatingHeader({required bool enabled}) =>
+      _save(state.copyWith(floatingHeader: enabled));
+
+  Future<void> setPillMode(PillMode mode) =>
+      _save(state.copyWith(pillMode: mode));
+
   /// The one-off device check behind Automatic motion: runs only while the
   /// class is unknown, and any failure counts as a normal phone.
   Future<void> checkDevice({Future<(int, bool)?> Function()? probe}) async {

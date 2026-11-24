@@ -42,6 +42,19 @@ enum RefreshCadence {
   };
 }
 
+/// When the floating header shows its pill. Kuber's three choices.
+enum PillMode {
+  always,
+  scrollUp,
+  scrollStop;
+
+  String get label => switch (this) {
+    PillMode.always => 'Always',
+    PillMode.scrollUp => 'When scrolling up',
+    PillMode.scrollStop => 'When scrolling stops',
+  };
+}
+
 /// Reader body size. The slider offsets the system setting rather than
 /// overriding it, so a reader who has already enlarged text keeps that.
 enum TextSizeStep {
@@ -134,6 +147,10 @@ class Settings {
     this.motionPreference = MotionPreference.auto,
     this.deviceClass = DeviceClass.unknown,
     this.haptics = true,
+    this.expressiveColors = true,
+    this.wallpaperColor = false,
+    this.floatingHeader = true,
+    this.pillMode = PillMode.always,
   });
 
   /// Which [ThemeFamily] is in force; unknown ids fall back to the board's.
@@ -190,6 +207,18 @@ class Settings {
   /// A light tap when something is picked. On: the app already had haptics.
   final bool haptics;
 
+  /// Surfaces take a light tint of the theme; off is one neutral grey ramp.
+  final bool expressiveColors;
+
+  /// The accent comes from the phone's wallpaper (Android 12 and later).
+  final bool wallpaperColor;
+
+  /// The header turns into a pill on scroll; off, it scrolls away.
+  final bool floatingHeader;
+
+  /// When that pill is drawn.
+  final PillMode pillMode;
+
   /// The level in force, before the phone's own Remove animations setting
   /// (the motion scope applies that).
   MotionLevel get motionLevel =>
@@ -213,6 +242,10 @@ class Settings {
     MotionPreference? motionPreference,
     DeviceClass? deviceClass,
     bool? haptics,
+    bool? expressiveColors,
+    bool? wallpaperColor,
+    bool? floatingHeader,
+    PillMode? pillMode,
   }) => Settings(
     familyId: familyId ?? this.familyId,
     themeMode: themeMode ?? this.themeMode,
@@ -232,6 +265,10 @@ class Settings {
     motionPreference: motionPreference ?? this.motionPreference,
     deviceClass: deviceClass ?? this.deviceClass,
     haptics: haptics ?? this.haptics,
+    expressiveColors: expressiveColors ?? this.expressiveColors,
+    wallpaperColor: wallpaperColor ?? this.wallpaperColor,
+    floatingHeader: floatingHeader ?? this.floatingHeader,
+    pillMode: pillMode ?? this.pillMode,
   );
 }
 
@@ -262,6 +299,10 @@ class SettingsStore {
   static const _motionPref = 'motionPreference';
   static const _deviceClass = 'motionDeviceClass';
   static const _haptics = 'haptics';
+  static const _expressive = 'expressiveColors';
+  static const _wallpaper = 'wallpaperColor';
+  static const _floatingHeader = 'floatingHeader';
+  static const _pillMode = 'pillMode';
 
   Settings read() {
     const fallback = Settings();
@@ -303,6 +344,14 @@ class SettingsStore {
           DeviceClass.values.asNameMap()[_prefs.getString(_deviceClass)] ??
           fallback.deviceClass,
       haptics: _prefs.getBool(_haptics) ?? fallback.haptics,
+      expressiveColors:
+          _prefs.getBool(_expressive) ?? fallback.expressiveColors,
+      wallpaperColor: _prefs.getBool(_wallpaper) ?? fallback.wallpaperColor,
+      floatingHeader:
+          _prefs.getBool(_floatingHeader) ?? fallback.floatingHeader,
+      pillMode:
+          PillMode.values.asNameMap()[_prefs.getString(_pillMode)] ??
+          fallback.pillMode,
       // A flat "tag=voice" list rather than JSON: nothing else in the app
       // speaks JSON, and a map of a dozen entries does not start now.
       voiceByLanguage: {
@@ -332,6 +381,10 @@ class SettingsStore {
     await _prefs.setString(_motionPref, s.motionPreference.name);
     await _prefs.setString(_deviceClass, s.deviceClass.name);
     await _prefs.setBool(_haptics, s.haptics);
+    await _prefs.setBool(_expressive, s.expressiveColors);
+    await _prefs.setBool(_wallpaper, s.wallpaperColor);
+    await _prefs.setBool(_floatingHeader, s.floatingHeader);
+    await _prefs.setString(_pillMode, s.pillMode.name);
     await _prefs.setStringList(_voices, [
       for (final entry in s.voiceByLanguage.entries)
         '${entry.key}=${entry.value}',
