@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:headshorts/core/motion/pressable.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
@@ -21,7 +22,7 @@ class SettingsGroup extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: <Widget>[
           Padding(
-            padding: const EdgeInsets.only(left: 4, bottom: 8),
+            padding: const EdgeInsets.only(bottom: HsSpace.x2),
             child: Text(
               label.toUpperCase(),
               style: HsType.lingerLabel.copyWith(
@@ -53,8 +54,12 @@ class SettingsGroup extends StatelessWidget {
   }
 }
 
-/// One row: an icon, a label, optional subtitle, value on the right, and
-/// a chevron or custom trailing control.
+/// One row, Kuber's classic arrangement: a 40 dp tile, the title with its
+/// description (or the current value of a one-of-N setting) always directly
+/// beneath it, and a chevron. At least 72 dp tall, and taller as text grows.
+///
+/// [value] is the current value of a setting and takes the description's
+/// place; it never sits on the right.
 class SettingsRow extends StatelessWidget {
   const new({
     required this.label,
@@ -68,6 +73,12 @@ class SettingsRow extends StatelessWidget {
     super.key,
   });
 
+  /// The least a row is tall.
+  static const minHeight = 72.0;
+
+  /// The icon tile.
+  static const tile = 40.0;
+
   final IconData? icon;
   final String label;
   final String? sub;
@@ -80,61 +91,61 @@ class SettingsRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
+    final subtitle = value ?? sub;
 
     final Widget content = Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16),
+      padding: const EdgeInsets.symmetric(
+        horizontal: HsSpace.x4,
+        vertical: HsSpace.x2,
+      ),
       child: ConstrainedBox(
-        constraints: const BoxConstraints(minHeight: 56),
+        constraints: const BoxConstraints(minHeight: minHeight - 16),
         child: Row(
           children: <Widget>[
             if (icon != null) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                child: Icon(icon, size: 20, color: palette.textSecondary),
+              Container(
+                width: tile,
+                height: tile,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  color: palette.primaryContainer,
+                  borderRadius: BorderRadius.circular(HsRadius.squircle),
+                ),
+                child: Icon(icon, size: 22, color: palette.onPrimaryContainer),
               ),
-              const SizedBox(width: 14),
+              const SizedBox(width: HsSpace.x4),
             ],
             Expanded(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    label,
+                    style: HsType.row.copyWith(color: palette.textPrimary),
+                  ),
+                  if (subtitle != null) ...[
+                    const SizedBox(height: 2),
                     Text(
-                      label,
-                      style: HsType.row.copyWith(color: palette.textPrimary),
-                    ),
-                    if (sub != null) ...[
-                      const SizedBox(height: 2),
-                      Text(
-                        sub!,
-                        style: HsType.rowSub.copyWith(color: palette.textMuted),
+                      subtitle,
+                      style: HsType.rowValue.copyWith(
+                        color: palette.textSecondary,
                       ),
-                    ],
+                    ),
                   ],
-                ),
+                ],
               ),
             ),
-            if (trailing != null)
-              trailing!
-            else ...<Widget>[
-              if (value != null)
-                Text(
-                  value!,
-                  style: HsType.rowValue.copyWith(
-                    color: palette.textSecondary,
-                    fontSize: 12,
-                  ),
-                ),
-              if (onTap != null && chevron) ...[
-                const SizedBox(width: 4),
-                Icon(
-                  Icons.chevron_right_rounded,
-                  size: 20,
-                  color: palette.textMuted,
-                ),
-              ],
+            if (trailing != null) ...[
+              const SizedBox(width: HsSpace.x3),
+              trailing!,
+            ] else if (onTap != null && chevron) ...[
+              const SizedBox(width: HsSpace.x3),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 20,
+                color: palette.textMuted,
+              ),
             ],
           ],
         ),
@@ -142,15 +153,11 @@ class SettingsRow extends StatelessWidget {
     );
 
     if (onTap == null) return content;
-    return Semantics(
-      button: true,
-      label: value == null ? label : '$label, $value',
-      child: InkWell(
-        onTap: onTap,
-        splashColor: palette.textPrimary.withValues(alpha: 0.06),
-        highlightColor: palette.textPrimary.withValues(alpha: 0.04),
-        child: content,
-      ),
+    return Pressable(
+      kind: PressKind.row,
+      onTap: onTap,
+      semanticLabel: subtitle == null ? label : '$label, $subtitle',
+      child: ExcludeSemantics(child: content),
     );
   }
 }
