@@ -9,6 +9,7 @@ import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/info_button.dart';
@@ -92,108 +93,125 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
 
     return PushedScreen(
       title: 'Add by URL',
+      form: true,
       onBack: () => context.pop(),
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(
-          HsSpace.x5,
-          22,
-          HsSpace.x5,
-          HsSpace.x5,
-        ),
-        children: [
-          Text(
-            'Paste the site address. We will find the feed.',
-            style: HsType.note.copyWith(color: palette.textSecondary),
+      child: StickySubmit(
+        label: _chosen.length > 1 ? 'Add ${_chosen.length} feeds' : 'Add feed',
+        onPressed: _chosen.isEmpty ? null : _add,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(
+            HsSpace.x5,
+            HsSpace.x3,
+            HsSpace.x5,
+            HsSpace.x5,
           ),
-          const SizedBox(height: HsSpace.x4),
-          _UrlField(controller: _input, onSubmitted: (_) => _search()),
-          const SizedBox(height: HsSpace.x3),
-          HsButton(
-            _searching ? 'Looking…' : 'Find the feed',
-            onPressed: _searching ? null : _search,
-            kind: HsButtonKind.secondary,
-          ),
-          const SizedBox(height: HsSpace.x5),
-          // Always reachable: a reader who came here to bulk-import should
-          // not have to search for a site first.
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Pressable(
-                onTap: () => context.pushReplacement('/sources/opml'),
-                child: Text(
-                  'Or import an OPML file',
-                  style: HsType.timestamp.copyWith(color: palette.textMuted),
-                ),
-              ),
-              InfoButton(
-                semanticLabel: 'About OPML',
-                onTap: () => showOpmlExplainer(
-                  context,
-                  onImport: () => context.pushReplacement('/sources/opml'),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: HsSpace.x5),
-          if (_searched && !_searching && _found.isEmpty)
+          children: [
+            HeaderPage.gap(),
             Text(
-              'No feed found behind that address. Some publishers only list '
-              'theirs on the page itself — try pasting the feed address '
-              'directly.',
+              'Paste the site address. We will find the feed.',
               style: HsType.note.copyWith(color: palette.textSecondary),
             ),
-          if (_found.isNotEmpty) ...[
-            SectionLabel(
-              _found.length == 1
-                  ? 'One feed found'
-                  : '${_found.length} feeds found',
+            const SizedBox(height: HsSpace.x4),
+            _UrlField(controller: _input, onSubmitted: (_) => _search()),
+            const SizedBox(height: HsSpace.x3),
+            HsButton(
+              'Find the feed',
+              onPressed: _search,
+              loading: _searching,
+              kind: HsButtonKind.secondary,
             ),
-            const SizedBox(height: 10),
-            for (final feed in _found) ...[
-              _FeedOption(
-                feed: feed,
-                selected: _chosen.contains(feed.url),
-                onTap: () => setState(() {
-                  if (!_chosen.remove(feed.url)) _chosen.add(feed.url);
-                }),
-              ),
-              const SizedBox(height: 10),
-            ],
-            const SizedBox(height: HsSpace.x2),
+            const SizedBox(height: HsSpace.x5),
+            // Always reachable: a reader who came here to bulk-import should
+            // not have to search for a site first.
             Row(
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Expanded(
-                  child: Text(
-                    'Category',
-                    style: HsType.statLabel.copyWith(
-                      color: palette.textSecondary,
+                Flexible(
+                  child: Pressable(
+                    kind: PressKind.chip,
+                    morphCorners: false,
+                    onTap: () => context.pushReplacement('/sources/opml'),
+                    semanticLabel: 'Import an OPML file',
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(
+                        minHeight: HsSize.tapTarget,
+                      ),
+                      child: Center(
+                        widthFactor: 1,
+                        child: Text(
+                          'Or import an OPML file',
+                          textAlign: TextAlign.center,
+                          style: HsType.timestamp.copyWith(
+                            color: palette.textMuted,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),
-                Wrap(
-                  spacing: HsSpace.x2,
-                  children: [
-                    for (final option in options)
-                      HsChip(
-                        option,
-                        selected: option == _category,
-                        onTap: () => setState(() => _category = option),
-                      ),
-                  ],
+                InfoButton(
+                  semanticLabel: 'About OPML',
+                  onTap: () => showOpmlExplainer(
+                    context,
+                    onImport: () => context.pushReplacement('/sources/opml'),
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: HsSpace.x5),
-            HsButton(
-              _chosen.length == 1
-                  ? 'Add 1 feed'
-                  : 'Add ${_chosen.length} feeds',
-              onPressed: _chosen.isEmpty ? null : _add,
-            ),
-            const SizedBox(height: HsSpace.x3),
+            if (_searched && !_searching && _found.isEmpty)
+              Text(
+                'No feed found behind that address. Some publishers only list '
+                'theirs on the page itself. Try pasting the feed address '
+                'directly.',
+                style: HsType.note.copyWith(color: palette.textSecondary),
+              ),
+            if (_found.isNotEmpty) ...[
+              SectionLabel(
+                _found.length == 1
+                    ? 'One feed found'
+                    : '${_found.length} feeds found',
+              ),
+              const SizedBox(height: 10),
+              for (final feed in _found) ...[
+                _FeedOption(
+                  feed: feed,
+                  selected: _chosen.contains(feed.url),
+                  onTap: () => setState(() {
+                    if (!_chosen.remove(feed.url)) _chosen.add(feed.url);
+                  }),
+                ),
+                const SizedBox(height: 10),
+              ],
+              const SizedBox(height: HsSpace.x2),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Category',
+                      style: HsType.statLabel.copyWith(
+                        color: palette.textSecondary,
+                      ),
+                    ),
+                  ),
+                  Wrap(
+                    spacing: HsSpace.x2,
+                    runSpacing: HsChip.runSpacing(HsSpace.x2),
+                    children: [
+                      for (final option in options)
+                        HsChip(
+                          option,
+                          selected: option == _category,
+                          onTap: () => setState(() => _category = option),
+                        ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: HsSpace.x5),
+            ],
           ],
-        ],
+        ),
       ),
     );
   }
@@ -254,7 +272,11 @@ class _FeedOption extends StatelessWidget {
         .resolve(isDark: palette.isDark);
 
     return Pressable(
+      kind: PressKind.row,
+      haptic: true,
       onTap: onTap,
+      selected: selected,
+      semanticLabel: feed.title,
       child: Container(
         padding: const EdgeInsets.all(14),
         decoration: BoxDecoration(
@@ -314,6 +336,78 @@ class _FeedOption extends StatelessWidget {
           ],
         ),
       ),
+    );
+  }
+}
+
+/// A form's submit, pinned below the scroll area (Part L12): one full-width
+/// primary button inside the page margins and nothing else. No bar, divider
+/// or shadow; only a short fade over the last of the list so content does not
+/// stop at a hard edge. It rides above the keyboard: the system inset (kept by
+/// the screen's own safe area) plus 16 when closed, 16 above the keyboard
+/// when it is open.
+class StickySubmit extends StatelessWidget {
+  const new({
+    required this.label,
+    required this.onPressed,
+    required this.child,
+    super.key,
+  });
+
+  final String label;
+  final VoidCallback? onPressed;
+
+  /// The scrolling form. Give it enough bottom padding to clear the fade.
+  final Widget child;
+
+  /// The fade over the end of the list.
+  static const fade = 24.0;
+
+  @override
+  Widget build(BuildContext context) {
+    final ground = context.hs.background;
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    // 16 above the keyboard, or 16 above the system bar when it is closed.
+    final below = keyboard > 0
+        ? keyboard
+        : MediaQuery.viewPaddingOf(context).bottom;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Stack(
+            children: [
+              Positioned.fill(child: child),
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 0,
+                height: fade,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [ground.withValues(alpha: 0), ground],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Padding(
+          padding: EdgeInsets.fromLTRB(
+            HsSpace.x5,
+            0,
+            HsSpace.x5,
+            HsSpace.x4 + below,
+          ),
+          child: HsButton(label, onPressed: onPressed),
+        ),
+      ],
     );
   }
 }

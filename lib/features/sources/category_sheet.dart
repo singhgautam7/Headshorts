@@ -65,8 +65,13 @@ class _RenameSheetState extends ConsumerState<_RenameCategorySheet> {
       subtitle: 'Every source in this category moves with it.',
       children: [
         Container(
-          height: HsSize.buttonLarge,
-          padding: const EdgeInsets.symmetric(horizontal: HsSpace.x4),
+          constraints: const BoxConstraints(minHeight: HsSize.buttonLarge),
+          // The container is taller than its line of text: centre it.
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(
+            horizontal: HsSpace.x4,
+            vertical: HsSpace.x2,
+          ),
           decoration: BoxDecoration(
             color: palette.background,
             border: Border.all(color: palette.stroke),
@@ -91,10 +96,12 @@ class _RenameSheetState extends ConsumerState<_RenameCategorySheet> {
           style: HsType.note.copyWith(color: palette.textMuted),
         ),
         if (existing.isNotEmpty) ...[
-          const SizedBox(height: HsSpace.x4),
+          const SizedBox(
+            height: HsSpace.x4 - (HsSize.tapTarget - HsSize.chipVisual) / 2,
+          ),
           Wrap(
             spacing: HsSpace.x2,
-            runSpacing: HsSpace.x2,
+            runSpacing: HsChip.runSpacing(HsSpace.x2),
             children: [
               for (final category in existing)
                 HsChip(

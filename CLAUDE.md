@@ -37,11 +37,11 @@ and five screenshots, exported under `project/exports/`). Recreate the
 | Scroll.in at `scroll.in/feed` | `feeds.feedburner.com/ScrollinArticles.rss` | The site path returns an empty document. |
 | A phone status bar in each mock | The real system status bar (`SafeArea`) | The mock frames draw "9:41"; on a device that is the OS's. |
 | The nav pill 22 above the frame edge | 8 above the safe area | The mock measures from the frame; a phone puts the system gesture inset there first, and the pill ends up floating in the bottom margin. |
-| More is the settings screen | More is one grouped list: settings rows and hub rows side by side, Appearance as its own page | Stats, AI summaries, About and Privacy are not settings, but a second "Settings" page under More was one tap of indirection for four rows. Grouped headings do the sorting instead. |
+| More is the settings screen | More is one grouped list (Saved, Look, Behaviour, Your data, About) under a stats card, Theme and Header as their own pages | Stats, AI summaries, About and Privacy are not settings, but a second "Settings" page under More was one tap of indirection for four rows. Grouped headings do the sorting instead. |
 | A "Top" sub-tab & category tab strip | Single "Latest" list + "Filter" sheet; no category tabs | Headlines is a single, chronological Latest list. Category selection moves into the Filter sheet (bifurcated by category + enabled sources). Navigation is tap-only (no horizontal tab/category swipe). Stories are deferred to a later phase (design spec stays on file). |
 | Fixed India / World / Tech tabs | Categories derive reactively from sources and power the Filter | The mock shows one reader's set. Dynamic category logic is preserved under the hood to populate the Filter sheet options live. |
-| Two themes: AMOLED and White | Five families × Light / Dark / System, with AMOLED as a true-black toggle under dark | Perch's appearance model, by request. The board's own palette is the `paper` family and the default; the other four are Perch's, derived in OKLCh. |
-| Its own motion tokens (300ms page, 420ms spring nav morph, …) | Perch's M3 Expressive set: 150–260ms, `easeOutBack` for anything the finger caused, `easeOutCubic` for anything the system did | One motion vocabulary across the two apps. The board's curves were replaced wholesale rather than mixed, so nothing runs on two clocks. |
+| Two themes: AMOLED and White | Kuber's theme system: HeadShorts Signature (the app icon's red, the default), the board's `paper`, and Kuber's other families × Light / Dark / System, Expressive colours, Pure black and a wallpaper colour | By request (Nov 2026). `paper` is the board's palette byte for byte; every other family is derived in OKLCh with Kuber's numbers. |
+| Its own motion tokens, static titles, rectangular buttons, 6 dp chips | Kuber's motion kit and shapes: press morphs, floating pill header, two-page tab slide, sliding nav indicator, squircle selection | By request (Nov 2026): HeadShorts matches Kuber in look, motion and press feel. `Mull/specs/app-polish/app-polish-prompt-v2.md` is the task list and Kuber's code is the source of the values. The pill hide and Linger settle keep their own timing. |
 | Linger on the page ground | Linger on pure black / pure white (`HsPalette.lingerBackground`) | Maximum contrast under the one card being read. The card keeps its designed colour; only the ground behind it changes. |
 | The Reader's text-size card sits inline under the bar, with a plain slider and "Follows the system setting" | A popover over the prose, with a tick at each of the five steps and the step in effect named where the note was | Inline it never went away and the prose reflowed under it; a slider with no marks read as continuous when it only ever had five values. Tap outside or start a scroll and it is gone. |
 | An AI summaries row under More | No row | Nothing to open until the summariser exists; a "Coming soon" screen was one more tap to nowhere. The row returns with the feature. |
@@ -222,24 +222,19 @@ sources should watch it.
 **A feed fetched for a search is remembered for five minutes**
 (`_fetchedFeedsProvider`). A source in scope with nothing cached is fetched
 on every search, and refining a query runs several — so an unfollowed source
-added to the scope was re-downloaded on each one, for identical items. In
+was re-downloaded on each one, for identical items. In
 memory only: a search must never quietly subscribe anybody to anything.
 
 **Settings are read before the first `await`.** `ref.watch` past an await
 registers a dependency on a provider that may already have moved on, and
 Riverpod is entitled to throw for it.
 
-**Scope is a lens, exactly like Filter.** `searchScopeProvider` holds feed
-addresses, and **null means "whatever I follow and have switched on"** rather
-than a snapshot of it — a source enabled tomorrow is in scope tomorrow
-without the reader coming back to add it. Adding an unfollowed source
-searches it once: it does not subscribe, does not fetch on a schedule and
-does not appear in the briefing. An **empty** scope finds nothing, because
-saying so beats quietly falling back to everything.
-
-A **paused source is still searchable.** The scope decides what is in, not
-the subscription — the cache still holds what that source published, and
-refusing to look in it would be a second, invisible filter.
+**Scope is whatever is followed and switched on**, and there is no picker for
+it in Search. `searchScopeEntriesProvider` derives it, so a source enabled
+tomorrow is in scope tomorrow, and Search's empty state shows the scope and
+links to Sources to change it. One place decides what the app reads; a second
+list of sources inside Search (which shipped first) was a filter nobody could
+find again.
 
 **A source with nothing cached is fetched on the spot** (`_searchLive`): one
 request, filtered in memory, **nothing written to the database**. That is the
@@ -317,12 +312,12 @@ doing nothing. So these hand off to the browser, and the group says so.
 **The query leaves the device, and that is the only thing that does.** It is
 the single exception to "nothing is ever sent anywhere", so it is stated in
 three places: on Search's own empty state **before** anything is typed, on the
-Privacy screen, and as a setting (More → Search the web) that turns it off.
-The empty-state line is shown only while the setting is on, and says the same
-three things the heading used to: the feeds are shallow, so Google News is
-searched as well; the search term is sent and nothing else is; those results
-open in the browser. `search_loader_test` pins all three and pins that the
-heading no longer repeats them. On by default, because a search
+Privacy screen, and as a setting (Settings → Search the web) that turns it off.
+The empty-state line is shown only while the setting is on, and is one
+point: Google News and all its sources are searched too, only the search term
+is sent, and Settings turns it off (the link opens Settings with that row lit,
+`SettingsAnchor`). `search_loader_test` pins both halves and that the
+heading over the results does not repeat them. On by default, because a search
 that cannot see past the last few days of six feeds is the thing readers
 report as broken.
 
@@ -389,15 +384,16 @@ Linger reflect it without anything being told to reload:
 
 | Screen | Does |
 |---|---|
-| **Search** | The fourth tab. A query over the cache, scoped to the sources the reader picks, in a date range. Two sheets: scope and date |
-| **More** | Grouped rows in Perch's settings dress — Saved (Bookmarks) · General (Appearance, Open links, Text size, List size, Read aloud, Reading fairness, Check for new) · Your data (Stats, Data, Permissions) · About HeadShorts (Privacy, About) — the real version line and "Made with ❤️ in India" at the foot. Every one-of-N row opens `showOptionSheet`; nothing cycles in place |
+| **Search** | The fourth tab. A query over the cache of the sources that are on, in a date range. One sheet: date |
+| **More** | A stats card (minutes read this week, seven bars against a fixed 60 minute ceiling, opens Stats), then Kuber's classic rows: 40 dp icon tile, title, description or current value **under** the title, chevron or toggle. Saved (Bookmarks) · Manage (Data, Permissions) · About HeadShorts (Settings, Contact, Privacy, About). Settings is its own page, so More stays a hub: Look (Theme, Header, Text size, List size) · Reading (Open links, Read aloud, Reading fairness, Search the web) · Phone (Haptics, Home screen widget). Text size opens the Reader's own slider in a sheet. Every setting lives on exactly one page; every one-of-N row opens `showOptionSheet`; each row is its own ConsumerWidget with a `select` |
 | Bookmarks | One pushed page under More: saved articles newest-saved first, swipe or long-press to remove with Undo, and an empty state that names where the control is |
 | About | Kuber's arrangement in HeadShorts' dress (`about_screen.dart`): a note from the maker on the settings card, four tiles for what the app stands for, what it is in a paragraph, the version, and a developer group linking the portfolio (singhgautam.com), the other apps on Play, and the listing. Plain hyphens only; no em dashes in the copy |
 | Data | One page inside More: Export OPML (through the system share sheet — Android's save dialog is not available to `file_selector`), Import OPML, Clear cached articles |
 | **Sources** | The **whole catalog** plus the reader's own additions, searchable, grouped by category, one toggle per source. Also renames a category, and opens a source |
 | Sources → Add | Feed discovery from a pasted site address, for anything the catalog does not have |
 | Source detail | Category, accent, Mute in Latest, Unsubscribe |
-| Appearance | One page *inside* More, in Perch's arrangement: Light / Dark / System, a true-black toggle while dark is in effect, five families drawn as miniatures, and the blur-behind-nav toggle. No dynamic colour — that needs a native wallpaper-seed channel the app does not have |
+| Theme | `AppearanceScreen`, in Kuber's order: Light / Dark / System, Expressive colours, Pure black, the family grid, From your wallpaper (a platform channel, no package), Preview. Every control goes through `ThemeRipple` with the pointer-down kept in State |
+| Header | Floating header on or off, and when its pill shows (always, scrolling up, scrolling stops), each with a live preview |
 
 **Sources shows the same list the onboarding picker showed.** The place a
 reader chose their sources is the place they change them, so there is no
@@ -417,13 +413,16 @@ The toggle means **"in my briefing or not"**:
 Unsubscribing is destructive — it takes the source's articles with it — so it
 stays a deliberate act on the source's own screen, not a toggle.
 
-Two settings do real work rather than being stored and ignored:
+One setting here does real work rather than being stored and ignored:
 
 - **Open links** picks the `LaunchMode` — a Custom Tab, or the reader's own
   browser. Threaded through to `ArticleBody` so in-article links honour it too.
-- **Check for new** gates `refreshIfDue`, which is what launch and tab-return
-  call. An explicit pull or tap on the refresh mark calls `refresh` and always
-  fetches: an ask is never quietly ignored.
+
+**There is no "check for new" setting, no motion setting and no nav blur.**
+Opening the app, or coming back to it, fetches when the oldest source is over an
+hour old (`refreshEvery`); a pull always fetches. Nothing is fetched while the
+app is closed, so a cadence to choose would be a promise it does not keep: the
+setting returns with notifications. Motion follows the phone.
 
 **Clear cached articles** deletes articles *and* read events, and keeps
 subscriptions. Read state goes with the rows that carried it — leaving "read"
@@ -440,7 +439,7 @@ changes what is fetched, and there is no such thing as a paused language.
 - **A filter offers only languages that have a source behind it**, and hides
   itself entirely when there is one — a control with a single option is
   furniture. Headlines' Filter puts language above Category; the onboarding
-  picker, Sources and Search's scope sheet each carry `LanguageChips`. Each
+  picker and Sources each carry `LanguageChips`. Each
   language names itself **in its own script**.
 - **The language filter is a scrolling chip row, not a segmented control.**
   The board draws three segments because that reader follows two languages;
@@ -654,6 +653,16 @@ The rules that follow from that, and that the tests pin:
 normally in Today. Opening its full article marks it read, which removes it
 from Linger and de-emphasises it in Today.
 
+### A Linger card never scrolls
+
+A scroll inside a card that is itself paged fights the page: reaching the end
+of one flung several of the other. `LingerCaption` measures the room and cuts
+the headline and description to it; what does not fit is behind **Show more**,
+which lights the whole text in a centred card over a darkened screen, until
+Show less, the close button, a tap outside or back. A headline that would fill
+the card gives up 40% of it, so a description always starts. Below `lingerShortHeight` (a phone in landscape) the card puts
+its text beside its button.
+
 ### Linger has one Filter button
 
 `LingerFilter` is a category plus, optionally, the set of sources to keep —
@@ -751,7 +760,8 @@ Rules:
 - **Finite.** Every query is bounded. There is no cursor and no "load more".
   Lists end in "You're caught up"; swiping past it settles back.
 - **Retention.** `pruneToRetention()` keeps the newest 200 items per source
-  after each refresh, and drops anything past the 90-day window. **A
+  after each refresh and when the database opens (a run the OS killed never
+  reached its own prune), and drops anything past the 90-day window. **A
   bookmarked link is exempt from both**, and from `clearCache()`.
 - Updating an article never erases a `fullContentHtml` the feed has stopped
   sending.
@@ -801,7 +811,8 @@ upsert → record success or failure.
 - A 304 costs a header exchange and nothing else.
 - A dead feed is state recorded against the source (`failingSince`,
   `lastError`), stated in words on that source's own screen. It never becomes
-  an error dialog or a red dot. Retries stop after 14 days.
+  an error dialog or a red dot. After 14 days it is tried once a day, and at
+  once when the reader refreshes it or switches it back on.
 
 **Requests carry a browser user agent**, feeds included — the same string the
 Reader sends for article pages. Publishers refuse an unknown client outright:
@@ -830,8 +841,8 @@ than returning immediately, so onboarding's await actually waits.
 
 Launch behaviour: open to cache, refresh behind the content, show a quiet
 "updating…" and offer pull-to-refresh. **The only blocking loader in the app
-is the first-run fetch in onboarding**, and it reports one bar per feed,
-filling as each returns.
+is the first-run fetch in onboarding**: every source by name, ticked as it
+arrives.
 
 ### Text fields are decoded; bodies are not
 
@@ -852,12 +863,13 @@ outside `lib/core/tokens/`. Widgets read colour roles through `context.hs`
 and per-source accent through `AccentScope.of(context)`.
 
 **One theme system.** `HsPalette` is the only colour source, and
-`ThemeFamily.colors(tone)` is the only thing that makes one. The `paper`
-family returns the board's three hand-set constants (`light`, `dark`,
-`amoled` — the board draws the two extremes; `dark` is the step between);
-the four Perch families derive theirs in OKLCh exactly as Perch does and map
-the result onto the board's roles, so nothing downstream knows which it got.
-`hsThemeOf(family, tone)` caches one `ThemeData` per pair and `buildHsTheme`
+`ThemeFamily.colors(tone, expressive:)` is the only thing that makes one. The `paper`
+family returns the board's three hand-set constants in every case; the rest
+derive theirs in OKLCh with Kuber's numbers (`signature` follows Kuber's
+Signature recipe with the icon's hue, 27). Expressive off swaps surfaces for
+one neutral grey ramp; Pure black (`amoled`) is Kuber's near-black ramp.
+`themeFor` is the one place settings become a theme, shared by the app and
+the widget. `hsThemeOf(family, tone)` caches one `ThemeData` per pair and `buildHsTheme`
 maps every Material role onto the palette — a full `ColorScheme` plus card,
 app bar, sheet, popup-menu, switch and selection themes — so a stray Material
 widget cannot introduce an off-spec colour. `HsPalette.lerp` (in oklab) is
@@ -867,15 +879,17 @@ lossy converters, which is what made colours drift. One struct, one engine.
 
 **Primary is a role, not ink.** `primary`/`onPrimary` and
 `primaryContainer`/`onPrimaryContainer` are what the primary button, a toggle
-that is on, a selected chip, the sub-tab underline, the active nav item and a
-picker's selected row use. In the board's family they *are* ink and the nav's
-active well, so the design is unchanged; in a Perch family they carry the
-accent. Nothing else in the app takes the family accent — the per-source
-accent rule below is untouched by the theme.
+that is on, a selected chip, the active nav item and a picker's selected row
+use. The container pair is the *soft* selected fill (Kuber's
+`secondaryContainer`): chips, the nav indicator, icon tiles. `primary` is the
+strong one: buttons, toggles, the selected segment. In the board's family they
+*are* ink and the nav's active well; elsewhere they carry the accent. Nothing
+else takes the family accent: the per-source accent rule below is untouched.
 
-**Themes:** five families × Light / Dark / System, and a true-black toggle
-that applies only while dark is in effect. Default: Paper, dark, true black —
-which is the board's AMOLED.
+**Themes:** Signature, Paper and Kuber's families × Light / Dark / System,
+with Expressive colours, Pure black and a wallpaper colour. Default:
+Signature, dark, Pure black. An install that had `paper` written down as the
+old default moves to Signature once; picking Paper after that sticks.
 The accent rule: a source accent is a **label, a hairline bar, and — in Linger
 only — a wash panel**. Never a saturated card fill. 15% over black, 7% over
 paper.
@@ -923,9 +937,26 @@ bound the fetch pool, `ListView.builder` for anything list-shaped (the Sources
 screen flattens its headers and rows into one lazy list), `memCacheWidth` on
 every `CachedNetworkImage` so a publisher's 2000px hero is not decoded behind
 a 76dp thumbnail, a debounced search field, and `select` on any provider that
-emits more often than the widget needs — `refreshProvider` fires once per
-feed, and Today has no business rebuilding forty-five times for a word that
-changes twice.
+emits more often than the widget needs. What this app learned by measuring
+(`integration_test/perf_test.dart`, `tool/perf.sh`, profile builds only):
+
+- **A list query never loads a body.** Today, Search and Bookmarks read light
+  rows; only the Reader reads `full_content_html`.
+- **A refresh must not re-query per feed.** `briefingThrottle` (400ms, trailing)
+  plus `distinct` on what is drawn; source streams compare drawn fields only.
+- **An unchanged item is not written.** `upsert` compares first (bodies by byte
+  length), and the FTS trigger fires only `OF title, summary, content_snippet`.
+- **New items never move the list under a finger.** While Today is scrolled it
+  holds its head (`todayHeldProvider`) behind a "Latest stories" chip, and
+  paging counts from that head.
+- **Rows are keyed by article id**, with `findChildIndexCallback`; read rows
+  fade by colour alpha, never an `Opacity` layer.
+- **The Reader's body mounts after the push ends**; a body over 8000 characters
+  is parsed in `compute`.
+- **One scroll listener per page**, in the header, changing state only at a
+  threshold. Nothing rebuilds per frame.
+- **Offstage tabs do not tick or rebuild**; Sources, Search and More are warmed
+  while the app idles, Linger never.
 
 **Nothing is parsed in a `build`.** Measured at 8.9ms for one 26,000-character
 article, which is half a frame budget every time the widget rebuilds — and
@@ -938,17 +969,36 @@ it on every frame. The same rule is why the Reader watches
 `settingsProvider.select((s) => s.textSize)` rather than the whole object: a
 rebuild for an unrelated setting would have paid that cost too.
 
-**Motion** fires only from a gesture or a tap. Nothing loops, nothing is
-ambient. Skeletons are flat fills with no shimmer sweep. The single exception
-is the pull-to-refresh ring, which traces with the finger.
+**Motion** fires only from a gesture or a tap. Skeletons are flat fills with no
+shimmer sweep, and swap to content with `SkeletonCrossFade`. What may run on
+its own: the pull-to-refresh ring while a fetch runs, `ShapeLoader` in a button
+that is waiting (after 250ms), and the Header page's live previews. All stop
+with `TickerMode`.
 
-`HsMotion` is Perch's M3 Expressive set and the only one: two curves —
-`spring` (`easeOutBack`) for what the finger caused, `decelerate`
-(`easeOutCubic`) for what the system did — and durations from 150 to 260ms.
-Tab cross-fade, route push *and* pop, and the shell's ground colour all run on
-`page`; the pill's hide on `navHide`; the active label on `navMorph`. Every
-shared transition goes through `HsMotion.of`/`curveOf`, which collapse to a
-90ms linear fade under the OS's reduced-motion setting.
+**One motion kit: `lib/core/motion/`**, a port of Kuber's through Mull's.
+`Pressable` (kinds card, row, button, iconButton, fab, chip) is the only press
+primitive: every tappable goes through it or a control built on it. Springs
+move position, scale, size and shape; colour and opacity never overshoot.
+Three levels (`HsMotion.levelOf`): Expressive, Subtle (no overshoot, no morph)
+and Off (90ms at most). There is no setting: Subtle under 4 GB of RAM, Off under
+the OS's Remove animations, Expressive otherwise. `HsHaptics` is
+the only haptic call, behind one switch; one tap, one tick.
+
+**Shared controls**, one of each: `HsButton` (pill; 12 or 8 dp held; `loading`),
+`HsIconButton` (circle to a 12 dp squircle held), `HsChip` (32 dp visual in a
+48 dp target: wrap with `HsChip.runSpacing`), `HsToggle`, `HsCheckbox`,
+`SegmentedControl`, `HsSearchField`, `showHsMenu` (one panel, an icon on every
+row), `showHsSheet` / `showOptionSheet` (the slide waits for the first frame),
+`showNotice`, `SettingsRow` / `SettingsGroup` / `SettingsScaffold`, `HsScreen`
+and `PushedScreen`. A raw `InkWell` or `GestureDetector` in a feature needs a
+reason in a comment. Never tween a fill from transparent black: use the target
+colour at alpha 0.
+
+**The floating header** (`core/widgets/app_header.dart`) is on every tab root
+and pushed page except Linger: at 32 of scroll it becomes a 56 dp pill, at 8 it
+returns, and it holds exactly what the header holds. A list starts with
+`HeaderPage.gap()`. On Search the search field becomes the pill. Forms close
+(x) rather than go back.
 
 **Loading is one primitive.** `SkeletonBar` (`core/widgets/caught_up.dart`)
 is every placeholder in the app; Today, Linger, the Reader body and a source
@@ -960,13 +1010,11 @@ overflow menu is. The list-size button on Headlines is the first of them.
 
 **A one-of-N setting is `showOptionSheet`** — the shared sheet with the
 option, what it means, and a tick on the one in effect. Open links, text size,
-reading fairness and refresh cadence all go through it; nothing cycles a value
+and reading fairness go through it; nothing cycles a value
 in place on tap.
 
-**Top-bar actions are `HsIconButton`** — Perch's circular filled button on
-the surface-variant tone, 40 visual inside a 48 target — for back, share,
-overflow and "Aa" alike. **Overflow menus are `showHsMenu`**: the menu's dress
-comes from `popupMenuTheme`, so it is the same object on every screen; pass
+**Top-bar actions are `HsIconButton`**, 40 visual inside a 48 target, for back,
+share, overflow and "Aa" alike. **Overflow menus are `showHsMenu`**; pass
 `above: true` for a control at the foot of the screen.
 
 **No engagement mechanics, anywhere.** No like, save-count, reaction or
@@ -1152,13 +1200,13 @@ the tab rather than snapping. A branch that paints an opaque ground of its
 own would cover that fade.
 
 **`NavPillSurface` is the pill's dress** — nav tone, hairline, the one soft
-shadow, optional blur — on its own so the Reader's three floating actions
+shadow — on its own so the Reader's three floating actions
 (Open in web · Share · More) are separate objects wearing exactly it, with air
 between them, rather than a second style of floating control.
 
 **The nav pill** is a floating, detached, content-hugging object: five tabs —
-Headlines · Linger · Sources · Search · More — no FAB, opaque by default
-(blur is an off-by-default setting), only the selected destination carries
+Headlines · Linger · Sources · Search · More — no FAB, always opaque,
+only the selected destination carries
 text, and inactive labels are not in the tree.
 
 **Only the selected item takes free space** — `Flexible(flex: 1)` for it,
@@ -1213,22 +1261,19 @@ and clip the actions at the foot, which are the part that must always be
 reachable. Any long explainer hit it, and so would every sheet in the app at
 a large system font size.
 
-**Tab switches slide directionally in `AppShell`, ported from Perch.**
-`StatefulShellRoute.indexedStack` hosts the branches while `AppShell` animates
-the incoming tab using `FractionalTranslation` on `HsMotion.page` (240ms,
-`Curves.easeOutCubic`). The translation stays in the tree at rest (offset
-zero) rather than being wrapped on for the animation: swapping the wrapper
-re-parents every branch's subtree at the start and end of each switch, which
-is what made the slide to Sources stutter. The `RepaintBoundary` sits
-*inside* the translation, so the page is rasterised once and only moved from
-frame to frame.
+**Tab switches are two pages side by side** (`BranchStack` in `lib/app/shell.dart`,
+ported from Mull). 300ms ease in and out, the direction follows the tab order, a
+far tab slides in from next door, a sideways drag follows the finger (a fling of
+240 or past half switches), and a tap mid-slide carries on from where the pages
+are. The clock starts after the frame that builds the page. Each branch paints
+its own ground inside its moving layer, so Linger's pure black or white slides
+with it; the `RepaintBoundary` is inside the translation. At rest only the active
+page is on stage. Linger is never built ahead: a peek must not mark a card seen.
 
-**Bottom-nav tabs support horizontal swipe gestures.** Decisive horizontal flings
-(`velocity.abs() >= 240` via `GestureDetector(behavior: HitTestBehavior.translucent, onHorizontalDragEnd: ...)`)
-move across destinations (Headlines ↔ Linger ↔ Sources ↔ Search ↔ More) without interfering
-with vertical drags (Linger's vertical card swipe, pull-to-refresh, list scrolls). The count
-comes from the shell's own branches, not a constant. Category switching is
-handled via the Filter sheet rather than tab gestures.
+**Never `push` a tab's path.** `context.push('/sources')` from a root page mounts
+a second shell over the first: a blank page, and tabs that open the wrong screen.
+That was the Stats bug. `context.go`, after showing the pill;
+`stats_sources_nav_test` scans `lib/` for it.
 
 **Filter sheets close on success.** Behind a scrim, an action that leaves the
 sheet open looks like it did nothing — which is exactly how "Show all" read
@@ -1247,6 +1292,35 @@ celebration.
 
 ---
 
+### Coming back after a long time
+
+`refreshIfDue` goes by the **oldest** success among working sources, so one
+fresh feed cannot make the rest look fresh; when every source is failing (which
+is what offline looks like) it still tries. On resume `onResume` wakes the
+streams first, because the widget's engine may have written the file. Cached
+stories show at once; when the newest is over three days old the line reads
+"Getting the latest stories…", and after the run one session-only line says
+feeds only carry recent items. The "updated" label carries a day once it is not
+today's. Nothing syncs in the background.
+
+### Other sources on this story
+
+At the end of the full-text view, matched on the device against other enabled
+sources in the same language within 48 hours (`features/reader/related/`). Off
+the main isolate, after the first frame, hidden when empty, at most four and one
+per source. `tool/related_eval.dart` re-measures precision on real feeds; do
+not loosen the rule without it.
+
+### Home screen widget
+
+Own Kotlin `AppWidgetProvider` with RemoteViews, no package (Glance adds Compose;
+`home_widget` applies the Kotlin Gradle Plugin). It reads the app's SQLite file,
+never writes it, and never fetches on its own: the refresh button schedules a
+JobScheduler job that starts a headless engine on `widgetRefreshMain` (named with
+its library, or it resolves only from one build target) and runs the app's own
+adapters. Sources are chosen per widget. Only remotable view methods: `setAlpha`
+is not one before API 31, and the whole widget fails to load.
+
 ## 7. Dev commands
 
 A note on test data: the de-duplicator collapses near-identical headlines, so
@@ -1263,6 +1337,8 @@ dart format lib test
 flutter test
 flutter run -d <device>
 flutter build apk --profile --target-platform android-arm64   # small enough to install on a full emulator
+flutter build appbundle --obfuscate --split-debug-info=build/symbols   # release; R8 is on by default
+python3 tool/feed_server.py & tool/perf.sh <device> <name> main|away|away_offline   # one emulator, quiet machine
 dart run flutter_native_splash:create
 ```
 
@@ -1280,7 +1356,7 @@ ground is the icon's pale tint in light mode and `#291412` in dark.
 | Concern | Package |
 |---|---|
 | State | `flutter_riverpod` (Riverpod 3) |
-| Routing | `go_router` (`StatefulShellRoute` for the four tabs) |
+| Routing | `go_router` (`StatefulShellRoute` with `BranchStack`, five tabs) |
 | Database | `drift` + `drift_flutter` |
 | HTTP | `dio` + `dio_http2_adapter` (h2 where offered; see §5) + `brotli` (pure-Dart decoder for what h2 returns) |
 | Feed parsing | `dart_rss` |

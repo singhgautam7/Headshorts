@@ -53,3 +53,19 @@ String dayHeading(DateTime when, {DateTime? now}) {
   if (difference < 7) return DateFormat('EEEE, d MMMM').format(when);
   return DateFormat('d MMMM y').format(when);
 }
+
+/// "updated 9:38", "updated yesterday 9:38", "updated 25 Oct".
+///
+/// A bare clock time reads as today. For a reader who has been away a month
+/// that is a lie, so anything older than today carries its day.
+String updatedLabel(DateTime when, {DateTime? now}) {
+  final today = now ?? DateTime.now();
+  final days = DateTime(
+    today.year,
+    today.month,
+    today.day,
+  ).difference(DateTime(when.year, when.month, when.day)).inDays;
+  if (days <= 0) return 'updated ${clockTime(when)}';
+  if (days == 1) return 'updated yesterday ${clockTime(when)}';
+  return 'updated ${DateFormat('d MMM').format(when)}';
+}

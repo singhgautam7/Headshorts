@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/palette.dart';
+import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/tables.dart';
@@ -31,13 +32,17 @@ ArticleRow _article({
   bool read = false,
   String? summary = 'The pilot covers about forty stations.',
   String? imageUrl,
+  String? snippet,
+  String? title,
 }) => ArticleRow(
   id: 7,
   sourceId: 1,
   guid: 'g',
   canonicalUrl: 'example.com/rail',
   titleKey: 'cap fare operators rail regions single',
-  title: 'Rail operators trial a single tap-in fare cap across three regions',
+  title:
+      title ??
+      'Rail operators trial a single tap-in fare cap across three regions',
   link: 'https://example.com/rail',
   publishedAt: DateTime.now().subtract(const Duration(hours: 5)),
   fetchedAt: DateTime.now(),
@@ -45,13 +50,21 @@ ArticleRow _article({
   readFull: read,
   summary: summary,
   contentSnippet:
+      snippet ??
       'The pilot covers about forty stations and runs '
-      'until March.',
+          'until March.',
   imageUrl: imageUrl,
 );
 
-Headline _headline({bool read = false, String? imageUrl}) =>
-    Headline(_article(read: read, imageUrl: imageUrl), _source());
+Headline _headline({
+  bool read = false,
+  String? imageUrl,
+  String? snippet,
+  String? title,
+}) => Headline(
+  _article(read: read, imageUrl: imageUrl, snippet: snippet, title: title),
+  _source(),
+);
 
 void main() {
   group('HeadlineCard', () {
@@ -80,15 +93,19 @@ void main() {
         ),
       );
 
-      final opacity = tester.widget<Opacity>(
-        find
-            .descendant(
-              of: find.byType(HeadlineCard),
-              matching: find.byType(Opacity),
-            )
-            .first,
+      // Faded by the alpha of the text's own colour, not an Opacity layer.
+      final ink = tester
+          .widget<Text>(find.textContaining('tap-in fare cap'))
+          .style!
+          .color!;
+      expect(ink.a, closeTo(0.5, 0.01));
+      expect(
+        find.descendant(
+          of: find.byType(HeadlineCard),
+          matching: find.byType(Opacity),
+        ),
+        findsNothing,
       );
-      expect(opacity.opacity, 0.5);
       expect(find.text('5 hours ago · read'), findsOneWidget);
       expect(find.textContaining('unread'), findsNothing);
     });
@@ -205,6 +222,148 @@ void main() {
         (container.decoration! as BoxDecoration).color,
         HsPalette.light.surface,
       );
+    });
+
+    group('a long description', () {
+      var opened = 0;
+      setUp(() => opened = 0);
+
+      final long = List.filled(
+        40,
+        'The council agreed to study the crossing again next spring.',
+      ).join(' ');
+
+      Future<void> at(
+        WidgetTester tester,
+        Size size, {
+        double scale = 1,
+      }) async {
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await pumpThemed(
+          tester,
+          MediaQuery(
+            data: MediaQueryData(
+              size: size,
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: LingerCard(
+                headline: _headline(snippet: long),
+                position: 0,
+                total: 3,
+                onReadFull: () => opened++,
+              ),
+            ),
+          ),
+        );
+      }
+
+      testWidgets('never scrolls inside the card', (tester) async {
+        await at(tester, const Size(390, 700));
+        expect(
+          find.descendant(
+            of: find.byType(LingerCard),
+            matching: find.byType(Scrollable),
+          ),
+          findsNothing,
+        );
+      });
+
+      testWidgets('opens lit from Show more, and Show less closes it', (
+        tester,
+      ) async {
+        await at(tester, const Size(390, 700));
+        await tester.tap(find.text('Show more'));
+        await tester.pumpAndSettle();
+        expect(find.text(long), findsNWidgets(2));
+        expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('Show less'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Show less'));
+        await tester.pumpAndSettle();
+        expect(find.text('Show less'), findsNothing);
+
+        // Centred, with a close button above its top right corner.
+        await tester.tap(find.text('Show more'));
+        await tester.pumpAndSettle();
+        final less = tester.getRect(find.text('Show less'));
+        final close = tester.getRect(find.byType(HsIconButton));
+        expect(close.bottom, lessThan(less.top));
+        expect(close.center.dx, greaterThan(390 / 2));
+        await tester.tap(find.byType(HsIconButton));
+        await tester.pumpAndSettle();
+        expect(find.text('Show less'), findsNothing);
+
+        // The article, from the end of the lit text.
+        await tester.tap(find.text('Show more'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Read full article'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Read full article'));
+        await tester.pumpAndSettle();
+        expect(opened, 1);
+        expect(find.text('Show less'), findsNothing);
+
+        // A tap outside closes it too.
+        await tester.tap(find.text('Show more'));
+        await tester.pumpAndSettle();
+        await tester.tapAt(const Offset(4, 696));
+        await tester.pumpAndSettle();
+        expect(find.text('Show less'), findsNothing);
+      });
+
+      testWidgets('a headline that fills the card still leaves it a start', (
+        tester,
+      ) async {
+        await tester.binding.setSurfaceSize(const Size(360, 560));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await pumpThemed(
+          tester,
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: LingerCard(
+              headline: _headline(
+                title: List.filled(16, 'Thirupparankundram').join(' '),
+                snippet: long,
+              ),
+              position: 0,
+              total: 3,
+              onReadFull: () {},
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        final body = tester.getSize(find.text(long)).height;
+        final title = tester
+            .getSize(find.textContaining('Thirupparankundram'))
+            .height;
+        expect(body, greaterThan(0));
+        expect(title, greaterThan(body));
+      });
+
+      for (final size in const [
+        Size(800, 200),
+        Size(740, 150),
+        Size(360, 420),
+      ]) {
+        testWidgets('fits a ${size.width}x${size.height} window', (
+          tester,
+        ) async {
+          for (final scale in [1.0, 2.0]) {
+            await at(tester, size, scale: scale);
+            expect(tester.takeException(), isNull, reason: 'scale $scale');
+          }
+        });
+      }
+    });
+
+    testWidgets('a short description has nothing to show more of', (
+      tester,
+    ) async {
+      await pumpThemed(tester, card());
+      expect(find.text('Show more'), findsNothing);
     });
 
     testWidgets('opens the Reader from "Read full"', (tester) async {

@@ -195,30 +195,6 @@ abstract final class HsGlyph {
     child: CustomPaint(painter: _SharePainter(color)),
   );
 
-  /// The more options mark: three horizontal dots.
-  static Widget moreOptions(Color color) => Row(
-    mainAxisSize: MainAxisSize.min,
-    children: [
-      Container(
-        width: 3.5,
-        height: 3.5,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
-      const SizedBox(width: 3),
-      Container(
-        width: 3.5,
-        height: 3.5,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
-      const SizedBox(width: 3),
-      Container(
-        width: 3.5,
-        height: 3.5,
-        decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-      ),
-    ],
-  );
-
   /// The two-rule mark above "Swipe up for the next".
   static Widget swipeUp(Color color) => Column(
     mainAxisSize: MainAxisSize.min,

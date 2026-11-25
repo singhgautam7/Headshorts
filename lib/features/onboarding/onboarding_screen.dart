@@ -7,8 +7,8 @@ import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/refresh_controller.dart';
 import 'package:headshorts/app/settings_controller.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
-import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
@@ -16,12 +16,14 @@ import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/search_field.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/sources/source_catalog.dart';
+import 'package:headshorts/features/onboarding/onboarding_intro.dart';
 import 'package:headshorts/features/sources/opml_explainer.dart';
 import 'package:headshorts/features/sources/source_picker.dart';
 import 'package:headshorts/features/today/today_controller.dart';
 
-/// First run, and the only place a loading screen earns its keep.
-enum _Step { welcome, pick, fetch }
+/// First run, and the only place a loading screen earns its keep: the intro
+/// pager (three pages and the setup page), the source picker, the first fetch.
+enum _Step { intro, pick, fetch }
 
 class OnboardingScreen extends ConsumerStatefulWidget {
   const new({super.key});
@@ -31,7 +33,14 @@ class OnboardingScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
-  _Step _step = _Step.welcome;
+  _Step _step = _Step.intro;
+
+  /// The pager's controller and page. Kept here so Android back can step
+  /// through the pages, and recreated on the way back from the picker so the
+  /// pager reopens on the setup page rather than the first.
+  final _retired = <PageController>[];
+  PageController _pages = PageController();
+  var _page = 0;
   final _chosen = <String>{};
   var _query = '';
 
@@ -39,6 +48,46 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   /// all of them. A filter on the list, nothing more: it never unpicks a
   /// source that has scrolled out of view.
   String? _language;
+
+  @override
+  void dispose() {
+    _pages.dispose();
+    for (final c in _retired) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  void _goTo(int page) {
+    if (HsMotion.levelOf(context) == MotionLevel.off) {
+      _pages.jumpToPage(page);
+    } else {
+      _pages.animateToPage(
+        page,
+        duration: HsMotion.of(context, HsMotion.page),
+        curve: HsMotion.curveOf(context, HsMotion.pageCurve),
+      );
+    }
+  }
+
+  /// Android back: a page back in the pager, the pager back from the picker,
+  /// and nothing while the first fetch is running.
+  void _back() {
+    switch (_step) {
+      case _Step.intro:
+        _goTo(_page - 1);
+      case _Step.pick:
+        // Kept until the screen goes: a quick back can arrive while the
+        // outgoing pager is still mounted on it.
+        _retired.add(_pages);
+        setState(() {
+          _pages = PageController(initialPage: OnboardingIntro.setupIndex);
+          _step = _Step.intro;
+        });
+      case _Step.fetch:
+        break;
+    }
+  }
 
   SourceCatalog get _catalog =>
       ref.read(sourceCatalogProvider).value ?? SourceCatalog.empty;
@@ -126,34 +175,44 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     return _build(context);
   }
 
-  Widget _build(BuildContext context) => ColoredBox(
-    color: context.hs.background,
-    child: SafeArea(
-      // Each step arrives the way a pushed page does: the router's slide and
-      // fade on motion-page, the one push transition in the app.
-      child: AnimatedSwitcher(
-        duration: HsMotion.of(context, HsMotion.page),
-        switchInCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
-        switchOutCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
-        transitionBuilder: (child, animation) {
-          final fade = FadeTransition(opacity: animation, child: child);
-          if (HsMotion.reduced(context)) return fade;
-          return SlideTransition(
-            position: Tween(
-              begin: const Offset(0.06, 0),
-              end: Offset.zero,
-            ).animate(animation),
-            child: fade,
-          );
-        },
-        child: KeyedSubtree(key: ValueKey(_step), child: _stepView(context)),
+  Widget _build(BuildContext context) => PopScope(
+    canPop: _step == _Step.intro && _page == 0,
+    onPopInvokedWithResult: (didPop, _) {
+      if (!didPop) _back();
+    },
+    child: ColoredBox(
+      color: context.hs.background,
+      child: SafeArea(
+        // Each step arrives the way a pushed page does: the router's slide and
+        // fade on motion-page, the one push transition in the app.
+        child: AnimatedSwitcher(
+          duration: HsMotion.of(context, HsMotion.page),
+          switchInCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
+          switchOutCurve: HsMotion.curveOf(context, HsMotion.pageCurve),
+          transitionBuilder: (child, animation) {
+            final fade = FadeTransition(opacity: animation, child: child);
+            if (HsMotion.reduced(context)) return fade;
+            return SlideTransition(
+              position: Tween(
+                begin: const Offset(0.06, 0),
+                end: Offset.zero,
+              ).animate(animation),
+              child: fade,
+            );
+          },
+          child: KeyedSubtree(key: ValueKey(_step), child: _stepView(context)),
+        ),
       ),
     ),
   );
 
   Widget _stepView(BuildContext context) => switch (_step) {
-    _Step.welcome => _Welcome(
-      onChoose: () => setState(() => _step = _Step.pick),
+    _Step.intro => OnboardingIntro(
+      pages: _pages,
+      page: _page,
+      onPageChanged: (p) => setState(() => _page = p),
+      onGoTo: _goTo,
+      onFinish: () => setState(() => _step = _Step.pick),
       onImport: () => _leaveTo('/sources/opml'),
     ),
     _Step.pick => _Pick(
@@ -174,144 +233,6 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
     ),
     _Step.fetch => const InitialFetch(),
   };
-}
-
-class _Welcome extends StatelessWidget {
-  const new({required this.onChoose, required this.onImport});
-
-  final VoidCallback onChoose;
-  final VoidCallback onImport;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(HsSpace.x5, 26, HsSpace.x5, 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          const FadingBriefingMark(),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Text(
-                'A briefing that ends.',
-                style: HsType.welcome.copyWith(color: palette.textPrimary),
-              ),
-              const SizedBox(height: HsSpace.x5),
-              Text(
-                'HeadShorts reads the feeds you choose, in the order they were '
-                'published. No algorithm, no counts, no infinite scroll. When '
-                'you reach the bottom, that is the news.',
-                style: HsType.lead.copyWith(color: palette.textSecondary),
-              ),
-              const SizedBox(height: HsSpace.x6),
-              HsButton('Choose your sources', onPressed: onChoose),
-              const SizedBox(height: 14),
-              HsButton(
-                'Import OPML instead',
-                onPressed: onImport,
-                kind: HsButtonKind.secondary,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-/// The product's one idea, drawn: a column of headlines fading down the page,
-/// closed by a short accent rule where the feed stops.
-///
-/// The same graphic as the app icon, so the icon and the first screen
-/// recognise each other.
-class FadingBriefingMark extends StatelessWidget {
-  const new({
-    this.ruleHeight = 2,
-    this.gap = 12,
-    this.showCaption = true,
-    super.key,
-  });
-
-  final double ruleHeight;
-  final double gap;
-  final bool showCaption;
-
-  static const widths = [
-    1.0,
-    0.84,
-    0.95,
-    0.71,
-    0.88,
-    0.62,
-    0.79,
-    0.5,
-    0.66,
-    0.36,
-  ];
-  static const opacities = [
-    0.92,
-    0.8,
-    0.7,
-    0.6,
-    0.5,
-    0.41,
-    0.32,
-    0.24,
-    0.17,
-    0.11,
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    final accent = AccentScope.of(context).resolve(isDark: palette.isDark);
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (var i = 0; i < widths.length; i++) ...[
-          if (i > 0) SizedBox(height: gap),
-          FractionallySizedBox(
-            widthFactor: widths[i],
-            child: Container(
-              height: ruleHeight,
-              decoration: BoxDecoration(
-                color: palette.textPrimary.withValues(alpha: opacities[i]),
-                borderRadius: BorderRadius.circular(ruleHeight / 2),
-              ),
-            ),
-          ),
-        ],
-        if (showCaption) ...[
-          const SizedBox(height: 22),
-          Row(
-            children: [
-              Container(
-                width: 28,
-                height: ruleHeight,
-                decoration: BoxDecoration(
-                  color: accent,
-                  borderRadius: BorderRadius.circular(ruleHeight / 2),
-                ),
-              ),
-              const SizedBox(width: HsSpace.x3),
-              Text(
-                'END OF BRIEFING',
-                style: HsType.sectionLabel.copyWith(
-                  fontSize: 10,
-                  color: palette.textMuted,
-                ),
-              ),
-            ],
-          ),
-        ],
-      ],
-    );
-  }
 }
 
 class _Pick extends StatelessWidget {
@@ -350,31 +271,10 @@ class _Pick extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
+    final large = MediaQuery.textScalerOf(context).scale(1) >= 1.4;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(
-            HsSpace.x5,
-            HsSpace.x2,
-            HsSpace.x5,
-            0,
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Choose your sources',
-                style: HsType.stepTitle.copyWith(color: palette.textPrimary),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                'Pick a few. You can change them any time in Sources.',
-                style: HsType.note.copyWith(color: palette.textMuted),
-              ),
-            ],
-          ),
-        ),
         Expanded(
           child: SourcePicker(
             grouped: grouped,
@@ -386,6 +286,20 @@ class _Pick extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  // With the list, not above it: it scrolls away as the
+                  // reader picks.
+                  Text(
+                    'Choose your sources',
+                    style: HsType.stepTitle.copyWith(
+                      color: palette.textPrimary,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Pick a few. You can change them any time in Sources.',
+                    style: HsType.note.copyWith(color: palette.textMuted),
+                  ),
+                  const SizedBox(height: HsSpace.x3),
                   HsSearchField(
                     hint: 'Search publishers and categories',
                     onChanged: onSearch,
@@ -411,25 +325,50 @@ class _Pick extends StatelessWidget {
               HsSpace.x5,
               26,
             ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: HsButton(
-                    'Skip',
-                    onPressed: onSkip,
-                    kind: HsButtonKind.secondary,
+            // At a large system font three controls abreast would break a
+            // label mid-word, so Continue takes its own row and Skip keeps
+            // the overflow beside it.
+            child: large
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      HsButton('Continue', onPressed: onContinue),
+                      const SizedBox(height: HsSpace.x3),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: HsButton(
+                              'Skip',
+                              onPressed: onSkip,
+                              kind: HsButtonKind.secondary,
+                            ),
+                          ),
+                          const SizedBox(width: HsSpace.x3),
+                          _MoreWaysIn(onAddOwn: onAddOwn, onImport: onImport),
+                        ],
+                      ),
+                    ],
+                  )
+                : Row(
+                    children: [
+                      Expanded(
+                        child: HsButton(
+                          'Skip',
+                          onPressed: onSkip,
+                          kind: HsButtonKind.secondary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: HsButton('Continue', onPressed: onContinue),
+                      ),
+                      const SizedBox(width: 10),
+                      // The two other ways in: pasting an address, importing
+                      // a file. Choices a handful of readers make once, so
+                      // they sit in an overflow beside the step's own action.
+                      _MoreWaysIn(onAddOwn: onAddOwn, onImport: onImport),
+                    ],
                   ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(child: HsButton('Continue', onPressed: onContinue)),
-                const SizedBox(width: 10),
-                // The two other ways in — pasting an address, importing a
-                // file — are choices a handful of readers make once. They
-                // belong in an overflow beside the step's own action, not
-                // above the catalog competing with it.
-                _MoreWaysIn(onAddOwn: onAddOwn, onImport: onImport),
-              ],
-            ),
           ),
         ),
       ],
@@ -439,7 +378,7 @@ class _Pick extends StatelessWidget {
 
 /// The overflow beside Continue: paste an address, or import a file.
 ///
-/// Wears **Skip's** dress — a hairline outline, no fill — square. These are
+/// Wears **Skip's** dress — a hairline outline, no fill, round. These are
 /// asides from the step, like Skip, and only Continue should carry the ink:
 /// two filled buttons side by side would read as two things to choose
 /// between.
@@ -455,6 +394,8 @@ class _MoreWaysIn extends StatelessWidget {
 
     return Builder(
       builder: (anchorContext) => Pressable(
+        kind: PressKind.iconButton,
+        restRadius: HsSize.buttonLarge / 2,
         onTap: () async {
           final picked = await showHsMenu<String>(
             context: context,
@@ -491,13 +432,13 @@ class _MoreWaysIn extends StatelessWidget {
           }
         },
         semanticLabel: 'Other ways to add sources',
-        child: Container(
+        builder: (context, radius, _) => Container(
           width: HsSize.buttonLarge,
           height: HsSize.buttonLarge,
           alignment: Alignment.center,
           decoration: BoxDecoration(
             border: Border.all(color: palette.stroke),
-            borderRadius: HsRadius.buttonBorder,
+            borderRadius: BorderRadius.circular(radius),
           ),
           child: Icon(
             Icons.more_horiz_rounded,
@@ -510,7 +451,7 @@ class _MoreWaysIn extends StatelessWidget {
   }
 }
 
-/// One bar per feed, filling as each returns. No spinner, no percentage.
+/// The first fetch: every source by name, ticked as it arrives.
 class InitialFetch extends ConsumerWidget {
   const new({super.key});
 
@@ -521,50 +462,76 @@ class InitialFetch extends ConsumerWidget {
     final sources = ref.watch(sourcesProvider).value ?? const [];
     final enabled = sources.where((s) => s.enabled).toList();
 
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(40, 0, 40, 40),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          for (var i = 0; i < enabled.length; i++) ...[
-            if (i > 0) const SizedBox(height: 10),
-            AnimatedContainer(
-              // Each bar takes its source's colour as that feed lands. The
-              // motion is the arrival, not a loop — nothing here animates on
-              // its own.
-              duration: HsMotion.page,
-              curve: HsMotion.pageCurve,
-              height: 2,
-              decoration: BoxDecoration(
-                color: progress.pending.contains(enabled[i].id)
-                    ? palette.skeleton
-                    : enabled[i].accent.resolve(isDark: palette.isDark),
-                borderRadius: BorderRadius.circular(1),
-              ),
-            ),
-          ],
-          const SizedBox(height: HsSpace.x6),
-          Text(
-            'Fetching your first briefing',
-            style: HsType.headline.copyWith(color: palette.textPrimary),
-          ),
-          const SizedBox(height: HsSpace.x2),
-          Text(
-            '${progress.done} of ${progress.total == 0 ? enabled.length : progress.total} '
-            'feeds in. This is the only time the app will make you wait — '
-            'after this it opens straight from cache.',
-            style: HsType.bodySans.copyWith(color: palette.textSecondary),
-          ),
-          const SizedBox(height: HsSpace.x7),
-          Text(
-            'One bar per feed, filling as each returns. No spinner, no '
-            'percentage.',
-            textAlign: TextAlign.center,
-            style: HsType.noteTight.copyWith(color: palette.textMuted),
-          ),
-        ],
+    return ListView.builder(
+      padding: const EdgeInsets.fromLTRB(
+        HsSpace.x5,
+        HsSpace.x6,
+        HsSpace.x5,
+        HsSpace.x6,
       ),
+      itemCount: enabled.length + 1,
+      itemBuilder: (context, i) {
+        if (i == 0) {
+          return Padding(
+            padding: const EdgeInsets.only(bottom: HsSpace.x5),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text(
+                  'Getting your first briefing',
+                  style: HsType.stepTitle.copyWith(color: palette.textPrimary),
+                ),
+                const SizedBox(height: HsSpace.x2),
+                Text(
+                  'This is the only wait. After this, HeadShorts opens '
+                  'straight away.',
+                  style: HsType.bodySans.copyWith(color: palette.textSecondary),
+                ),
+              ],
+            ),
+          );
+        }
+        final source = enabled[i - 1];
+        final arrived =
+            progress.total > 0 && !progress.pending.contains(source.id);
+        return ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: HsSize.tapTarget),
+          child: Row(
+            children: [
+              Container(
+                width: 8,
+                height: 8,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: source.accent.resolve(isDark: palette.isDark),
+                ),
+              ),
+              const SizedBox(width: HsSpace.x3),
+              Expanded(
+                child: Text(
+                  source.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HsType.row.copyWith(
+                    color: arrived ? palette.textPrimary : palette.textMuted,
+                  ),
+                ),
+              ),
+              AnimatedOpacity(
+                opacity: arrived ? 1 : 0,
+                duration: HsMotion.of(context, HsMotion.page),
+                curve: HsMotion.pageCurve,
+                child: Icon(
+                  Icons.check_circle_rounded,
+                  size: 22,
+                  color: palette.primary,
+                  semanticLabel: arrived ? 'Ready' : null,
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 }

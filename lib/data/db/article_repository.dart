@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:headshorts/core/util/canonical_url.dart';
@@ -36,8 +38,15 @@ String? ftsQuery(String raw) {
   return terms.map((t) => '"$t"*').join(' ');
 }
 
+/// The first 2000 characters of the body — enough for Linger's extract to
+/// fall back on when a feed gave no snippet and no summary.
+const _bodyHead = CustomExpression<String>(
+  'substr(articles.full_content_html, 1, 2000)',
+);
+
 /// An article together with the source that published it — what every list in
 /// the app actually renders.
+@immutable
 class Headline {
   const new(this.article, this.source);
 
@@ -48,13 +57,33 @@ class Headline {
   /// this app has been "read".
   bool get isRead => article.readFull;
 
-  /// The card settled in Linger. Keeps it from coming round again there, and
-  /// means nothing at all in Today.
-  bool get isSeen => article.seenInLinger;
-
   /// Where this item sits in the newest-first order. Paired with the id it is
   /// a total order, so pages never overlap or skip.
   ArticleCursor get cursor => ArticleCursor(article.publishedAt, article.id);
+
+  /// Equal when nothing a list draws has changed. The source's fetch
+  /// bookkeeping (`lastFetchedAt`, validators) moves on every refresh and is
+  /// deliberately not compared, so a refresh does not re-emit an unchanged
+  /// briefing.
+  @override
+  bool operator ==(Object other) =>
+      other is Headline &&
+      other.article == article &&
+      other.source.id == source.id &&
+      other.source.title == source.title &&
+      other.source.language == source.language &&
+      other.source.accentDark == source.accentDark &&
+      other.source.accentLight == source.accentLight;
+
+  @override
+  int get hashCode => Object.hash(
+    article,
+    source.id,
+    source.title,
+    source.language,
+    source.accentDark,
+    source.accentLight,
+  );
 }
 
 /// A position in the newest-first briefing.
@@ -154,21 +183,25 @@ List<Headline> capConsecutive(List<Headline> items, int maxRun) {
   return out..addAll(held);
 }
 
-/// Reads the cached briefing. Finite by construction: every query is bounded,
-/// there is no cursor and no "load more".
+/// Reads the cached briefing. Finite by construction: every query is bounded
+/// and the next page is only ever loaded from a keyset cursor.
 class ArticleRepository {
   const new(this._db);
 
   final HsDatabase _db;
 
-  /// The briefing for one category, newest first, capped so the list always
-  /// ends. Pass a null [category] for every enabled source.
-  /// One page of Today, plus everything above it.
+  /// One page of Today, plus everything above it, for one category (a null
+  /// [category] is every enabled source), newest first.
   ///
   /// Reactive over the whole loaded window: a refresh prepends new items and
   /// the reader's position is untouched, because the window is bounded by a
   /// cursor rather than by an offset. Nothing below [floor] is loaded until
-  /// the reader asks for it.
+  /// the reader asks for it. A [ceiling] holds the head of the list still:
+  /// nothing newer than it is shown, so new arrivals cannot push a reader
+  /// down the page.
+  ///
+  /// List columns only: no article bodies and no snippets cross the isolate
+  /// boundary for a list that never draws them.
   ///
   /// Today shows everything cached. `seenInLinger` has no bearing here at all,
   /// and `readFull` only de-emphasises.
@@ -177,6 +210,7 @@ class ArticleRepository {
     Set<int>? sourceIds,
     Set<int>? mutedSourceIds,
     ArticleCursor? floor,
+    ArticleCursor? ceiling,
     int pageSize = todayPageSize,
   }) {
     final query = _scoped(
@@ -184,6 +218,7 @@ class ArticleRepository {
       sourceIds: sourceIds,
       mutedSourceIds: mutedSourceIds,
     );
+    if (ceiling != null) query.where(_atOrBelow(ceiling));
 
     if (floor == null) {
       // Over-fetch: dedup removes items and the page must still fill.
@@ -204,17 +239,55 @@ class ArticleRepository {
     Set<int>? sourceIds,
     Set<int>? mutedSourceIds,
     ArticleCursor? floor,
+    ArticleCursor? ceiling,
     int pageSize = todayPageSize,
   }) async {
     final query = _scoped(
       category: category,
       sourceIds: sourceIds,
       mutedSourceIds: mutedSourceIds,
-    )..limit(pageSize);
-    if (floor != null) query.where(_below(floor));
+      keysOnly: true,
+    );
+    // A held list starts at its ceiling: counting newer rows would put the
+    // floor inside the window and shrink it.
+    if (ceiling != null) query.where(_atOrBelow(ceiling));
+    if (floor == null) {
+      // The first window is over-fetched to `pageSize * 2` (see
+      // [watchBriefing]). The first floor lies one page below that, or the
+      // first page turn would shrink the list under the reader (floor at
+      // item 25 of a window that already holds 48) or change nothing.
+      query.limit(pageSize * 3);
+    } else {
+      query
+        ..limit(pageSize)
+        ..where(_below(floor));
+    }
 
-    final page = _headlines(await query.get());
-    return page.isEmpty ? null : page.last.cursor;
+    final page = await query.get();
+    if (page.isEmpty) return null;
+    final last = page.last;
+    return ArticleCursor(
+      last.read(_db.articles.publishedAt)!,
+      last.read(_db.articles.id)!,
+    );
+  }
+
+  /// Whether anything newer than [ceiling] is waiting — what the "Latest
+  /// stories" chip over a held list watches. A yes or a no, never a number.
+  Stream<bool> watchNewerThan(
+    ArticleCursor ceiling, {
+    String? category,
+    Set<int>? mutedSourceIds,
+  }) {
+    final query =
+        _scoped(
+            category: category,
+            mutedSourceIds: mutedSourceIds,
+            keysOnly: true,
+          )
+          ..where(_above(ceiling))
+          ..limit(1);
+    return query.watch().map((rows) => rows.isNotEmpty);
   }
 
   /// The finite set Linger is working through: everything not yet seen there
@@ -228,12 +301,17 @@ class ArticleRepository {
     Set<int>? sourceIds,
     int limit = lingerQueueSize,
   }) async {
-    final query = _scoped(category: category, sourceIds: sourceIds)
-      ..where(_db.articles.seenInLinger.equals(false))
-      ..where(_db.articles.readFull.equals(false))
-      ..limit(limit * 2);
+    // The card's extract needs the snippet, the summary and, failing both,
+    // the start of the body — not the body.
+    final query =
+        _scoped(category: category, sourceIds: sourceIds, linger: true)
+          ..where(_db.articles.seenInLinger.equals(false))
+          ..where(_db.articles.readFull.equals(false))
+          ..limit(limit * 2);
 
-    return dedupeStories(_headlines(await query.get())).take(limit).toList();
+    return dedupeStories(_headlines(await query.get(), linger: true))
+        .take(limit)
+        .toList();
   }
 
   /// Full-text search over the cache.
@@ -266,9 +344,9 @@ class ArticleRepository {
     );
     if (ids.isEmpty) return const [];
 
-    final rows = await (_db.select(_db.articles).join([
-      innerJoin(_db.sources, _db.sources.id.equalsExp(_db.articles.sourceId)),
-    ])..where(_db.articles.id.isIn(ids))).get();
+    final rows = await (_scoped(
+      enabledOnly: false,
+    )..where(_db.articles.id.isIn(ids))).get();
 
     final found = _headlines(rows);
     // The ids came back in date order; the join did not promise to keep it.
@@ -295,31 +373,62 @@ class ArticleRepository {
 
   /// The enabled, in-scope articles, newest first, as a total order.
   /// Enforces a strict 90-day (< 3 months) freshness limit.
+  ///
+  /// Selects list columns only. [keysOnly] narrows that to the cursor's two
+  /// columns; [linger] adds what the Linger card's extract is made from.
+  /// [enabledOnly] false is Search, which looks in paused sources too and
+  /// takes its own date range.
   JoinedSelectStatement<HasResultSet, dynamic> _scoped({
     String? category,
     Set<int>? sourceIds,
     Set<int>? mutedSourceIds,
+    bool keysOnly = false,
+    bool linger = false,
+    bool enabledOnly = true,
   }) {
-    final cutoff = DateTime.now().subtract(maxArticleAge);
+    final a = _db.articles;
     final query =
-        _db.select(_db.articles).join([
-            innerJoin(
-              _db.sources,
-              _db.sources.id.equalsExp(_db.articles.sourceId),
-            ),
-          ])
-          ..where(_db.sources.enabled.equals(true))
-          ..where(_db.articles.publishedAt.isBiggerOrEqualValue(cutoff))
-          ..orderBy([
-            OrderingTerm.desc(_db.articles.publishedAt),
-            OrderingTerm.desc(_db.articles.id),
-          ]);
+        _db.selectOnly(a).join([
+          innerJoin(
+            _db.sources,
+            _db.sources.id.equalsExp(a.sourceId),
+            useColumns: !keysOnly,
+          ),
+        ])..addColumns([
+          if (keysOnly) ...[
+            a.publishedAt,
+            a.id,
+          ] else ...[
+            a.id,
+            a.sourceId,
+            a.guid,
+            a.title,
+            a.summary,
+            a.link,
+            a.canonicalUrl,
+            a.titleKey,
+            a.author,
+            a.publishedAt,
+            a.imageUrl,
+            a.fetchedAt,
+            a.seenInLinger,
+            a.readFull,
+            if (linger) ...[a.contentSnippet, _bodyHead],
+          ],
+        ]);
 
-    if (category != null) {
-      query.where(_db.sources.category.equals(category));
-    } else {
-      query.where(_db.sources.mutedInLatest.equals(false));
+    if (enabledOnly) {
+      final cutoff = DateTime.now().subtract(maxArticleAge);
+      query
+        ..where(_db.sources.enabled.equals(true))
+        ..where(a.publishedAt.isBiggerOrEqualValue(cutoff));
+      if (category != null) {
+        query.where(_db.sources.category.equals(category));
+      } else {
+        query.where(_db.sources.mutedInLatest.equals(false));
+      }
     }
+    query.orderBy([OrderingTerm.desc(a.publishedAt), OrderingTerm.desc(a.id)]);
 
     if (sourceIds != null) {
       query.where(_db.sources.id.isIn(sourceIds));
@@ -331,52 +440,55 @@ class ArticleRepository {
     return query;
   }
 
-  /// Watches unread article count by category and overall ('All').
-  Stream<Map<String, int>> watchUnreadCountByCategory() {
-    final cutoff = DateTime.now().subtract(maxArticleAge);
-    final count = _db.articles.id.count();
-    final query =
-        _db.selectOnly(_db.articles).join([
-            innerJoin(
-              _db.sources,
-              _db.sources.id.equalsExp(_db.articles.sourceId),
-            ),
-          ])
-          ..addColumns([_db.sources.category, count])
-          ..where(_db.sources.enabled.equals(true))
-          ..where(_db.articles.readFull.equals(false))
-          ..where(_db.articles.publishedAt.isBiggerOrEqualValue(cutoff))
-          ..groupBy([_db.sources.category]);
-
-    return query.watch().map((rows) {
-      final map = <String, int>{};
-      var total = 0;
-      for (final row in rows) {
-        final cat = row.read(_db.sources.category);
-        final cnt = row.read(count) ?? 0;
-        if (cat != null) {
-          map[cat] = cnt;
-          total += cnt;
-        }
-      }
-      map['All'] = total;
-      return map;
-    });
-  }
-
   Expression<bool> _atOrAbove(ArticleCursor cursor) =>
       _db.articles.publishedAt.isBiggerThanValue(cursor.publishedAt) |
       (_db.articles.publishedAt.equals(cursor.publishedAt) &
           _db.articles.id.isBiggerOrEqualValue(cursor.id));
+
+  Expression<bool> _atOrBelow(ArticleCursor cursor) =>
+      _db.articles.publishedAt.isSmallerThanValue(cursor.publishedAt) |
+      (_db.articles.publishedAt.equals(cursor.publishedAt) &
+          _db.articles.id.isSmallerOrEqualValue(cursor.id));
+
+  Expression<bool> _above(ArticleCursor cursor) =>
+      _db.articles.publishedAt.isBiggerThanValue(cursor.publishedAt) |
+      (_db.articles.publishedAt.equals(cursor.publishedAt) &
+          _db.articles.id.isBiggerThanValue(cursor.id));
 
   Expression<bool> _below(ArticleCursor cursor) =>
       _db.articles.publishedAt.isSmallerThanValue(cursor.publishedAt) |
       (_db.articles.publishedAt.equals(cursor.publishedAt) &
           _db.articles.id.isSmallerThanValue(cursor.id));
 
-  List<Headline> _headlines(List<TypedResult> rows) => rows
-      .map((r) => Headline(r.readTable(_db.articles), r.readTable(_db.sources)))
-      .toList();
+  /// Rows from [_scoped]. The skipped columns come back null, which the
+  /// nullable ones already allow for.
+  List<Headline> _headlines(List<TypedResult> rows, {bool linger = false}) {
+    final a = _db.articles;
+    return [
+      for (final r in rows)
+        Headline(
+          ArticleRow(
+            id: r.read(a.id)!,
+            sourceId: r.read(a.sourceId)!,
+            guid: r.read(a.guid)!,
+            title: r.read(a.title)!,
+            summary: r.read(a.summary),
+            contentSnippet: linger ? r.read(a.contentSnippet) : null,
+            fullContentHtml: linger ? r.read(_bodyHead) : null,
+            link: r.read(a.link)!,
+            canonicalUrl: r.read(a.canonicalUrl)!,
+            titleKey: r.read(a.titleKey)!,
+            author: r.read(a.author),
+            publishedAt: r.read(a.publishedAt)!,
+            imageUrl: r.read(a.imageUrl),
+            fetchedAt: r.read(a.fetchedAt)!,
+            seenInLinger: r.read(a.seenInLinger)!,
+            readFull: r.read(a.readFull)!,
+          ),
+          r.readTable(_db.sources),
+        ),
+    ];
+  }
 
   Stream<Headline?> watchOne(int articleId) {
     final cutoff = DateTime.now().subtract(maxArticleAge);
@@ -434,17 +546,41 @@ class ArticleRepository {
         .toList();
     if (fresh.isEmpty) return 0;
 
+    // Only the columns an update is judged on. Bodies stay in the database:
+    // pulling every cached article's body back across the isolate on every
+    // refresh to compare it was the most expensive thing the refresh did.
+    final a = _db.articles;
+    const bodyLength = CustomExpression<int>(
+      // Bytes: length() of text counts characters, Dart counts UTF-16
+      // units, and one emoji would make every refresh a rewrite.
+      'coalesce(length(CAST(articles.full_content_html AS BLOB)), 0)',
+    );
     final existing =
-        await (_db.select(_db.articles)
-              ..where((a) => a.sourceId.equals(sourceId))
-              ..where((a) => a.guid.isIn(fresh.map((p) => p.guid))))
+        await (_db.selectOnly(a)
+              ..addColumns([
+                a.id,
+                a.guid,
+                a.title,
+                a.link,
+                a.summary,
+                a.contentSnippet,
+                a.author,
+                a.imageUrl,
+                a.canonicalUrl,
+                a.titleKey,
+                bodyLength,
+              ])
+              ..where(a.sourceId.equals(sourceId))
+              ..where(a.guid.isIn(fresh.map((p) => p.guid))))
             .get();
-    final known = {for (final row in existing) row.guid: row};
+    final known = {for (final row in existing) row.read(a.guid)!: row};
 
     var added = 0;
     await _db.batch((batch) {
       for (final item in fresh) {
         final prior = known[item.guid];
+        final canonical = canonicalUrl(item.link);
+        final key = titleFingerprint(item.title);
         if (prior == null) {
           added++;
           batch.insert(
@@ -455,8 +591,8 @@ class ArticleRepository {
               title: item.title,
               link: item.link,
               publishedAt: item.publishedAt,
-              canonicalUrl: Value(canonicalUrl(item.link)),
-              titleKey: Value(titleFingerprint(item.title)),
+              canonicalUrl: Value(canonical),
+              titleKey: Value(key),
               summary: Value(item.summary),
               contentSnippet: Value(item.contentSnippet),
               fullContentHtml: Value(item.fullContentHtml),
@@ -465,25 +601,49 @@ class ArticleRepository {
             ),
             mode: InsertMode.insertOrIgnore,
           );
-        } else {
-          // A publisher may correct a headline or fill in the body later.
-          batch.update(
-            _db.articles,
-            ArticlesCompanion(
-              title: Value(item.title),
-              canonicalUrl: Value(canonicalUrl(item.link)),
-              titleKey: Value(titleFingerprint(item.title)),
-              summary: Value(item.summary),
-              contentSnippet: Value(item.contentSnippet),
-              author: Value(item.author ?? prior.author),
-              fullContentHtml: Value(
-                item.fullContentHtml ?? prior.fullContentHtml,
-              ),
-              imageUrl: Value(item.imageUrl ?? prior.imageUrl),
-            ),
-            where: (a) => a.id.equals(prior.id),
-          );
+          continue;
         }
+
+        // A publisher may correct a headline or fill in the body later. Most
+        // refreshes change nothing, and an UPDATE that changes nothing still
+        // costs a write, a stream re-query and (before the trigger had a
+        // column list) an FTS rewrite.
+        final body = item.fullContentHtml;
+        final changed =
+            prior.read(a.title) != item.title ||
+            prior.read(a.link) != item.link ||
+            prior.read(a.summary) != item.summary ||
+            prior.read(a.contentSnippet) != item.contentSnippet ||
+            prior.read(a.canonicalUrl) != canonical ||
+            prior.read(a.titleKey) != key ||
+            (item.author != null && item.author != prior.read(a.author)) ||
+            (item.imageUrl != null &&
+                item.imageUrl != prior.read(a.imageUrl)) ||
+            (body != null &&
+                utf8.encode(body).length != prior.read(bodyLength));
+        if (!changed) continue;
+
+        batch.update(
+          _db.articles,
+          ArticlesCompanion(
+            title: Value(item.title),
+            link: Value(item.link),
+            canonicalUrl: Value(canonical),
+            titleKey: Value(key),
+            summary: Value(item.summary),
+            contentSnippet: Value(item.contentSnippet),
+            // Absent, not null: a feed that stopped sending these must not
+            // erase what an earlier fetch or extraction stored.
+            author: item.author == null
+                ? const Value.absent()
+                : Value(item.author),
+            fullContentHtml: body == null ? const Value.absent() : Value(body),
+            imageUrl: item.imageUrl == null
+                ? const Value.absent()
+                : Value(item.imageUrl),
+          ),
+          where: (t) => t.id.equals(prior.read(a.id)!),
+        );
       }
     });
     return added;

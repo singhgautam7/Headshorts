@@ -72,14 +72,14 @@ class SearchDateRange {
   /// about whether the reader has narrowed anything.
   bool get isInitial => preset == DateRangePreset.week;
 
-  /// What the chip says. "14 Sep – today" rather than a pair of full dates:
+  /// What the chip says. "14 Sep to today" rather than a pair of full dates:
   /// the chip is a statement of scope, not a field.
   String get chipLabel {
     if (preset != DateRangePreset.between) return preset.label;
     final start = from;
     if (start == null) return DateRangePreset.between.label;
     final finish = to == null ? 'today' : shortDate(to!);
-    return '${shortDate(start)} – $finish';
+    return '${shortDate(start)} to $finish';
   }
 
   static String shortDate(DateTime when) =>
@@ -200,56 +200,36 @@ final searchDateProvider = NotifierProvider<SearchDateFilter, SearchDateRange>(
   SearchDateFilter.new,
 );
 
-/// The sources this search looks through, by feed address.
+/// The sources a search looks through: whatever the reader follows and has
+/// switched on, and nothing else. Changing it is Sources' job, so there is one
+/// place that decides what the app reads.
 ///
-/// Null means "whatever I follow and have switched on" — the default, and
-/// deliberately not a snapshot of it: a source enabled tomorrow is in scope
-/// tomorrow without the reader having to come back here and add it.
-///
-/// A lens, like Filter. Adding an unfollowed source searches it once; it does
-/// not subscribe, fetch on a schedule, or appear in the briefing.
-class SearchScope extends Notifier<Set<String>?> {
-  @override
-  Set<String>? build() => null;
-
-  /// Records the chosen scope.
-  ///
-  // A setter would read as assigning `state` from outside the notifier.
-  // ignore: use_setters_to_change_properties
-  void set(Set<String> feedUrls) => state = feedUrls;
-
-  /// Back to what the reader follows.
-  void reset() => state = null;
-}
-
-final searchScopeProvider = NotifierProvider<SearchScope, Set<String>?>(
-  SearchScope.new,
+/// The count-free list: unseen counts change constantly and have nothing to
+/// do with which sources a search covers.
+final searchScopeEntriesProvider = Provider<List<SourceEntry>>(
+  (ref) => [
+    for (final e in ref.watch(sourceEntriesProvider))
+      if (e.isOn) e,
+  ],
 );
 
-/// The scope resolved against what actually exists: the chosen feed addresses
-/// as source entries, or the enabled subscriptions when nothing was chosen.
-final searchScopeEntriesProvider = Provider<List<SourceEntry>>((ref) {
-  // The count-free list: unseen counts change constantly and have nothing to
-  // do with which sources a search covers.
-  final entries = ref.watch(sourceEntriesProvider);
-  final chosen = ref.watch(searchScopeProvider);
-  if (chosen == null) {
-    return [
-      for (final e in entries)
-        if (e.isOn) e,
-    ];
-  }
-  return [
-    for (final e in entries)
-      if (chosen.contains(e.feedUrl)) e,
-  ];
-});
+/// Which sources a search covers, as a value that only changes when the set
+/// does. The entries list is rebuilt on every write to `sources` — forty-five
+/// per refresh — and a search that re-ran for each would hit the cache and
+/// Google News forty-five times for the same question.
+final _searchScopeKeyProvider = Provider<String>(
+  (ref) => [
+    for (final entry in ref.watch(searchScopeEntriesProvider))
+      '${entry.feedUrl}|${entry.subscription?.id}',
+  ].join('\n'),
+);
 
 /// The results: the cache first, then whatever had to be fetched.
 final searchResultsProvider = FutureProvider<SearchOutcome>((ref) async {
   final query = ref.watch(searchQueryProvider).trim();
   final range = ref.watch(searchDateProvider);
-  final scope = ref.watch(searchScopeEntriesProvider);
+  ref.watch(_searchScopeKeyProvider);
+  final scope = ref.read(searchScopeEntriesProvider);
   // Read before the first await. `ref.watch` past an await registers a
   // dependency on a provider that may already have moved on, and Riverpod is
   // entitled to throw for it.

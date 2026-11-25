@@ -29,12 +29,42 @@ extension HsThemeContext on BuildContext {
 
 final _cache = <String, ThemeData>{};
 
-/// Builds — and caches — one [ThemeData] per (family, tone). `ThemeData`
-/// construction is not free and a theme is stable for the life of a setting.
-ThemeData hsThemeOf(ThemeFamily family, Tone tone) => _cache.putIfAbsent(
-  '${family.id}:${tone.name}',
-  () => buildHsTheme(family.colors(tone)),
-);
+/// Builds — and caches — one [ThemeData] per (family, tone, expressive).
+/// `ThemeData` construction is not free and a theme is stable for the life of
+/// a setting. A wallpaper family is keyed by its hue, which is all a seed
+/// contributes.
+ThemeData hsThemeOf(ThemeFamily family, Tone tone, {bool expressive = true}) =>
+    _cache.putIfAbsent(
+      '${family.id}:${family.primaryHue}:${tone.name}:$expressive',
+      () => buildHsTheme(family.colors(tone, expressive: expressive)),
+    );
+
+/// The one place the theme settings become a [ThemeData]: the app, the home
+/// widget bridge and the Theme screen's previews all resolve through here.
+///
+/// [seed] is the wallpaper colour, passed only while that option is on and a
+/// seed is known; it replaces the chosen family.
+ThemeData themeFor({
+  required String familyId,
+  required ThemeMode mode,
+  required bool amoled,
+  required bool systemDark,
+  bool expressive = true,
+  Color? seed,
+}) {
+  final dark =
+      mode == ThemeMode.dark || (mode == ThemeMode.system && systemDark);
+  final tone = !dark
+      ? Tone.light
+      : amoled
+      ? Tone.amoled
+      : Tone.dark;
+  return hsThemeOf(
+    seed == null ? ThemeFamily.byId(familyId) : ThemeFamily.fromSeed(seed),
+    tone,
+    expressive: expressive,
+  );
+}
 
 /// Builds the [ThemeData] for a palette.
 ///

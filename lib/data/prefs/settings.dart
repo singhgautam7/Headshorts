@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter/widgets.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/tokens/theme_family.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -17,27 +18,16 @@ enum LinkOpenMode {
   };
 }
 
-/// How often the app checks for new items on its own.
-///
-/// The app refreshes on launch and on a pull; this only decides how stale the
-/// cache has to be before a launch bothers to fetch. There is no background
-/// polling and no notification.
-enum RefreshCadence {
-  manual(null),
-  hourly(Duration(hours: 1)),
-  fourHourly(Duration(hours: 4)),
-  daily(Duration(days: 1));
-
-  new(this.interval);
-
-  /// Null means "only when I ask".
-  final Duration? interval;
+/// When the floating header shows its pill. Kuber's three choices.
+enum PillMode {
+  always,
+  scrollUp,
+  scrollStop;
 
   String get label => switch (this) {
-    RefreshCadence.manual => 'Only when I ask',
-    RefreshCadence.hourly => 'Every hour',
-    RefreshCadence.fourHourly => 'Every four hours',
-    RefreshCadence.daily => 'Once a day',
+    PillMode.always => 'Always',
+    PillMode.scrollUp => 'When scrolling up',
+    PillMode.scrollStop => 'When scrolling stops',
   };
 }
 
@@ -116,23 +106,28 @@ enum SpeechRate {
 @immutable
 class Settings {
   const new({
-    this.familyId = 'paper',
+    this.familyId = 'signature',
     this.themeMode = ThemeMode.dark,
     this.amoled = true,
-    this.blurBehindNav = false,
     this.textSize = TextSizeStep.small,
     this.onboarded = false,
     this.linkOpenMode = LinkOpenMode.inApp,
-    this.refreshCadence = RefreshCadence.hourly,
     this.maxConsecutivePerSource = 0,
     this.listSize = ListSize.large,
     this.speechRate = SpeechRate.slow,
     this.highlightWords = true,
     this.voiceByLanguage = const {},
     this.searchTheWeb = true,
+    this.deviceClass = DeviceClass.unknown,
+    this.haptics = true,
+    this.expressiveColors = true,
+    this.wallpaperColor = false,
+    this.wallpaperSeed,
+    this.floatingHeader = true,
+    this.pillMode = PillMode.always,
   });
 
-  /// Which [ThemeFamily] is in force; unknown ids fall back to the board's.
+  /// Which [ThemeFamily] is in force; unknown ids fall back to Signature.
   final String familyId;
   final ThemeMode themeMode;
 
@@ -141,13 +136,10 @@ class Settings {
 
   ThemeFamily get family => ThemeFamily.byId(familyId);
 
-  /// Opaque by default — blur costs battery for no legibility gain.
-  final bool blurBehindNav;
   final TextSizeStep textSize;
   final bool onboarded;
 
   final LinkOpenMode linkOpenMode;
-  final RefreshCadence refreshCadence;
 
   /// At most this many items in a row from one source in a merged list.
   /// Zero leaves the order strictly chronological, which is the default.
@@ -177,30 +169,59 @@ class Settings {
   /// feeds is the thing readers report as broken.
   final bool searchTheWeb;
 
+  /// The one-off RAM check's result, until which the phone counts as normal.
+  final DeviceClass deviceClass;
+
+  /// A light tap when something is picked. On: the app already had haptics.
+  final bool haptics;
+
+  /// Surfaces take a light tint of the theme; off is one neutral grey ramp.
+  final bool expressiveColors;
+
+  /// The accent comes from the phone's wallpaper (Android 12 and later).
+  final bool wallpaperColor;
+
+  /// The last wallpaper seed (ARGB) the phone handed over, so a cold start
+  /// paints the right colours before the platform has answered.
+  final int? wallpaperSeed;
+
+  /// The header turns into a pill on scroll; off, it scrolls away.
+  final bool floatingHeader;
+
+  /// When that pill is drawn.
+  final PillMode pillMode;
+
+  /// The level in force, before the phone's own Remove animations setting
+  /// (the motion scope applies that).
+  MotionLevel get motionLevel => resolveMotionLevel(deviceClass);
+
   Settings copyWith({
     String? familyId,
     ThemeMode? themeMode,
     bool? amoled,
-    bool? blurBehindNav,
     TextSizeStep? textSize,
     bool? onboarded,
     LinkOpenMode? linkOpenMode,
-    RefreshCadence? refreshCadence,
     int? maxConsecutivePerSource,
     ListSize? listSize,
     SpeechRate? speechRate,
     bool? highlightWords,
     Map<String, String>? voiceByLanguage,
     bool? searchTheWeb,
+    DeviceClass? deviceClass,
+    bool? haptics,
+    bool? expressiveColors,
+    bool? wallpaperColor,
+    int? wallpaperSeed,
+    bool? floatingHeader,
+    PillMode? pillMode,
   }) => Settings(
     familyId: familyId ?? this.familyId,
     themeMode: themeMode ?? this.themeMode,
     amoled: amoled ?? this.amoled,
-    blurBehindNav: blurBehindNav ?? this.blurBehindNav,
     textSize: textSize ?? this.textSize,
     onboarded: onboarded ?? this.onboarded,
     linkOpenMode: linkOpenMode ?? this.linkOpenMode,
-    refreshCadence: refreshCadence ?? this.refreshCadence,
     maxConsecutivePerSource:
         maxConsecutivePerSource ?? this.maxConsecutivePerSource,
     listSize: listSize ?? this.listSize,
@@ -208,6 +229,13 @@ class Settings {
     highlightWords: highlightWords ?? this.highlightWords,
     voiceByLanguage: voiceByLanguage ?? this.voiceByLanguage,
     searchTheWeb: searchTheWeb ?? this.searchTheWeb,
+    deviceClass: deviceClass ?? this.deviceClass,
+    haptics: haptics ?? this.haptics,
+    expressiveColors: expressiveColors ?? this.expressiveColors,
+    wallpaperColor: wallpaperColor ?? this.wallpaperColor,
+    wallpaperSeed: wallpaperSeed ?? this.wallpaperSeed,
+    floatingHeader: floatingHeader ?? this.floatingHeader,
+    pillMode: pillMode ?? this.pillMode,
   );
 }
 
@@ -218,28 +246,34 @@ class SettingsStore {
   final SharedPreferences _prefs;
 
   static const _familyId = 'familyId';
+  static const _signatureDefault = 'signatureDefault';
   static const _themeMode = 'themeMode';
   static const _amoled = 'amoled';
 
   /// The pre-family setting: `amoled` / `white` / `system`. Read once so an
   /// existing install keeps its look, never written again.
   static const _legacyTheme = 'theme';
-  static const _blur = 'blurBehindNav';
   static const _textSize = 'textSize';
   static const _onboarded = 'onboarded';
   static const _maxRun = 'maxConsecutivePerSource';
   static const _linkMode = 'linkOpenMode';
-  static const _cadence = 'refreshCadence';
   static const _listSize = 'listSize';
   static const _speechRate = 'speechRate';
   static const _highlight = 'highlightWords';
   static const _voices = 'voiceByLanguage';
   static const _searchWeb = 'searchTheWeb';
+  static const _deviceClass = 'motionDeviceClass';
+  static const _haptics = 'haptics';
+  static const _expressive = 'expressiveColors';
+  static const _wallpaper = 'wallpaperColor';
+  static const _wallpaperSeed = 'wallpaperSeed';
+  static const _floatingHeader = 'floatingHeader';
+  static const _pillMode = 'pillMode';
 
   Settings read() {
     const fallback = Settings();
     return Settings(
-      familyId: _prefs.getString(_familyId) ?? fallback.familyId,
+      familyId: _readFamily(fallback.familyId),
       themeMode:
           ThemeMode.values.asNameMap()[_prefs.getString(_themeMode)] ??
           switch (_prefs.getString(_legacyTheme)) {
@@ -248,7 +282,6 @@ class SettingsStore {
             _ => fallback.themeMode,
           },
       amoled: _prefs.getBool(_amoled) ?? fallback.amoled,
-      blurBehindNav: _prefs.getBool(_blur) ?? fallback.blurBehindNav,
       textSize:
           TextSizeStep.values.asNameMap()[_prefs.getString(_textSize)] ??
           fallback.textSize,
@@ -256,9 +289,6 @@ class SettingsStore {
       linkOpenMode:
           LinkOpenMode.values.asNameMap()[_prefs.getString(_linkMode)] ??
           fallback.linkOpenMode,
-      refreshCadence:
-          RefreshCadence.values.asNameMap()[_prefs.getString(_cadence)] ??
-          fallback.refreshCadence,
       maxConsecutivePerSource:
           _prefs.getInt(_maxRun) ?? fallback.maxConsecutivePerSource,
       listSize:
@@ -268,6 +298,20 @@ class SettingsStore {
           SpeechRate.values.asNameMap()[_prefs.getString(_speechRate)] ??
           fallback.speechRate,
       highlightWords: _prefs.getBool(_highlight) ?? fallback.highlightWords,
+      searchTheWeb: _prefs.getBool(_searchWeb) ?? fallback.searchTheWeb,
+      deviceClass:
+          DeviceClass.values.asNameMap()[_prefs.getString(_deviceClass)] ??
+          fallback.deviceClass,
+      haptics: _prefs.getBool(_haptics) ?? fallback.haptics,
+      expressiveColors:
+          _prefs.getBool(_expressive) ?? fallback.expressiveColors,
+      wallpaperColor: _prefs.getBool(_wallpaper) ?? fallback.wallpaperColor,
+      wallpaperSeed: _prefs.getInt(_wallpaperSeed),
+      floatingHeader:
+          _prefs.getBool(_floatingHeader) ?? fallback.floatingHeader,
+      pillMode:
+          PillMode.values.asNameMap()[_prefs.getString(_pillMode)] ??
+          fallback.pillMode,
       // A flat "tag=voice" list rather than JSON: nothing else in the app
       // speaks JSON, and a map of a dozen entries does not start now.
       voiceByLanguage: {
@@ -280,20 +324,38 @@ class SettingsStore {
     );
   }
 
+  /// Signature replaced Paper as the default. Every install that ever saved
+  /// anything has `paper` written down whether or not it was chosen, so it is
+  /// moved over once; picking Paper again after that sticks.
+  String _readFamily(String fallback) {
+    final stored = _prefs.getString(_familyId);
+    if (stored == null) return fallback;
+    final moved = _prefs.getBool(_signatureDefault) ?? false;
+    return stored == 'paper' && !moved ? fallback : stored;
+  }
+
   Future<void> write(Settings s) async {
+    await _prefs.setBool(_signatureDefault, true);
     await _prefs.setString(_familyId, s.familyId);
     await _prefs.setString(_themeMode, s.themeMode.name);
     await _prefs.setBool(_amoled, s.amoled);
-    await _prefs.setBool(_blur, s.blurBehindNav);
     await _prefs.setString(_textSize, s.textSize.name);
     await _prefs.setBool(_onboarded, s.onboarded);
     await _prefs.setInt(_maxRun, s.maxConsecutivePerSource);
     await _prefs.setString(_linkMode, s.linkOpenMode.name);
-    await _prefs.setString(_cadence, s.refreshCadence.name);
     await _prefs.setString(_listSize, s.listSize.name);
     await _prefs.setString(_speechRate, s.speechRate.name);
     await _prefs.setBool(_highlight, s.highlightWords);
     await _prefs.setBool(_searchWeb, s.searchTheWeb);
+    await _prefs.setString(_deviceClass, s.deviceClass.name);
+    await _prefs.setBool(_haptics, s.haptics);
+    await _prefs.setBool(_expressive, s.expressiveColors);
+    await _prefs.setBool(_wallpaper, s.wallpaperColor);
+    if (s.wallpaperSeed != null) {
+      await _prefs.setInt(_wallpaperSeed, s.wallpaperSeed!);
+    }
+    await _prefs.setBool(_floatingHeader, s.floatingHeader);
+    await _prefs.setString(_pillMode, s.pillMode.name);
     await _prefs.setStringList(_voices, [
       for (final entry in s.voiceByLanguage.entries)
         '${entry.key}=${entry.value}',

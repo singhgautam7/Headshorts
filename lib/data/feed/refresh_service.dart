@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show debugPrint;
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/source_repository.dart';
@@ -43,12 +44,21 @@ class RefreshProgress {
 /// the database is what every screen watches. Nothing here throws — a dead
 /// feed is a state recorded against the source, not an error dialog.
 class RefreshService {
-  const new({
+  new({
     required HsDatabase database,
     required this._sources,
     required this._articles,
     required this._registry,
+    this._now = DateTime.now,
   }) : _db = database;
+
+  final DateTime Function() _now;
+
+  /// When each abandoned source was last given another go, this session.
+  final _abandonedTried = <int, DateTime>{};
+
+  /// How often an abandoned source is retried by a routine refresh.
+  static const abandonedRetryEvery = Duration(days: 1);
 
   final HsDatabase _db;
   final SourceRepository _sources;
@@ -73,10 +83,24 @@ class RefreshService {
   /// Refreshes every enabled source, at most [concurrency] at a time, and
   /// reports progress as each one lands rather than in subscription order —
   /// so one slow feed does not hold up the bars for the rest.
-  Stream<RefreshProgress> refreshAll() async* {
-    final sources = (await _sources.enabled())
-        .where((s) => !s.isAbandoned)
-        .toList();
+  ///
+  /// A source abandoned after fourteen days of silence is skipped, except
+  /// that a routine refresh tries it once a day and an [explicit] one (a
+  /// pull, a tap on the refresh mark) always does: the reader asking is the
+  /// only way a feed that was down for a fortnight ever comes back.
+  Stream<RefreshProgress> refreshAll({bool explicit = false}) async* {
+    final now = _now();
+    final sources = [
+      for (final s in await _sources.enabled())
+        if (!s.isAbandoned ||
+            explicit ||
+            now.difference(_abandonedTried[s.id] ?? DateTime(0)) >=
+                abandonedRetryEvery)
+          s,
+    ];
+    for (final s in sources) {
+      if (s.isAbandoned) _abandonedTried[s.id] = now;
+    }
     if (sources.isEmpty) {
       yield const RefreshProgress(total: 0, done: 0, added: 0, finished: true);
       return;
@@ -186,9 +210,10 @@ class RefreshService {
           await _sources.recordFailure(source.id, message);
           return _Outcome(source.id, 0);
       }
-    } on Object catch (_) {
+    } on Object catch (error, stack) {
       // Whatever it was — a malformed document a parser choked on, a write
       // that failed — it is this source's problem and nobody else's.
+      debugPrint('Refreshing ${source.feedUrl} failed: $error\n$stack');
       await _sources.recordFailure(source.id, 'The feed could not be read.');
       return _Outcome(source.id, 0);
     }

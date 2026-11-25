@@ -1,6 +1,7 @@
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart' show ThemeMode;
 import 'package:flutter_test/flutter_test.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/source_repository.dart';
@@ -22,17 +23,39 @@ void main() {
     test('defaults are the calm ones', () async {
       final settings = (await store()).read();
 
-      expect(settings.familyId, 'paper');
+      expect(
+        settings.familyId,
+        'signature',
+        reason: 'the icon is the default for anyone who has not picked',
+      );
       expect(settings.themeMode, ThemeMode.dark);
       expect(settings.amoled, isTrue);
-      expect(settings.blurBehindNav, isFalse);
       expect(settings.linkOpenMode, LinkOpenMode.inApp);
-      expect(settings.refreshCadence, RefreshCadence.hourly);
       expect(
         settings.maxConsecutivePerSource,
         0,
         reason: 'strictly chronological unless asked otherwise',
       );
+    });
+
+    test('a Paper saved as the old default moves to Signature once', () async {
+      SharedPreferences.setMockInitialValues({'familyId': 'paper'});
+      final prefs = await SharedPreferences.getInstance();
+      final old = SettingsStore(prefs);
+      expect(old.read().familyId, 'signature');
+      await old.write(old.read().copyWith(familyId: 'paper'));
+      expect(old.read().familyId, 'paper', reason: 'picked again, it sticks');
+    });
+
+    test('a stored family and wallpaper seed survive a restart', () async {
+      final written = await store();
+      await written.write(
+        const Settings(familyId: 'paper', wallpaperSeed: 0xFF3366CC),
+      );
+      final read = (await store()).read();
+      expect(read.familyId, 'paper', reason: 'a stored pick is kept');
+      expect(read.wallpaperSeed, 0xFF3366CC);
+      expect(const Settings().wallpaperSeed, isNull);
     });
 
     test('round-trips every field', () async {
@@ -41,11 +64,9 @@ void main() {
         familyId: 'ember',
         themeMode: ThemeMode.light,
         amoled: false,
-        blurBehindNav: true,
         textSize: TextSizeStep.large,
         onboarded: true,
         linkOpenMode: LinkOpenMode.browser,
-        refreshCadence: RefreshCadence.daily,
         maxConsecutivePerSource: 5,
       );
       await written.write(settings);
@@ -54,41 +75,39 @@ void main() {
       expect(read.familyId, 'ember');
       expect(read.themeMode, ThemeMode.light);
       expect(read.amoled, isFalse);
-      expect(read.blurBehindNav, isTrue);
       expect(read.textSize, TextSizeStep.large);
       expect(read.onboarded, isTrue);
       expect(read.linkOpenMode, LinkOpenMode.browser);
-      expect(read.refreshCadence, RefreshCadence.daily);
       expect(read.maxConsecutivePerSource, 5);
+    });
+
+    test('searchTheWeb Off is remembered across a restart', () async {
+      final written = await store();
+      await written.write(const Settings(searchTheWeb: false));
+      expect((await store()).read().searchTheWeb, isFalse);
+    });
+
+    test('motion and haptics round-trip, with calm defaults', () async {
+      final fresh = (await store()).read();
+      expect(fresh.deviceClass, DeviceClass.unknown);
+      expect(fresh.haptics, isTrue);
+
+      await (await store()).write(
+        const Settings(deviceClass: DeviceClass.low, haptics: false),
+      );
+      final read = (await store()).read();
+      expect(read.deviceClass, DeviceClass.low);
+      expect(read.haptics, isFalse);
+      expect(read.motionLevel, MotionLevel.subtle);
     });
 
     test('survives a value it does not recognise', () async {
       SharedPreferences.setMockInitialValues({
-        'refreshCadence': 'fortnightly',
         'linkOpenMode': 'carrier-pigeon',
       });
 
       final settings = (await store()).read();
-      expect(settings.refreshCadence, RefreshCadence.hourly);
       expect(settings.linkOpenMode, LinkOpenMode.inApp);
-    });
-  });
-
-  group('refresh cadence', () {
-    test('manual has no interval, so nothing is ever due', () {
-      expect(RefreshCadence.manual.interval, isNull);
-    });
-
-    test('the others are ordered shortest first', () {
-      final intervals = RefreshCadence.values
-          .map((c) => c.interval)
-          .whereType<Duration>()
-          .toList();
-      expect(intervals, [
-        const Duration(hours: 1),
-        const Duration(hours: 4),
-        const Duration(days: 1),
-      ]);
     });
   });
 

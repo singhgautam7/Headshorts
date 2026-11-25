@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:flutter/widgets.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
@@ -35,6 +36,9 @@ class _Notice extends StatefulWidget {
 class _NoticeState extends State<_Notice> {
   static const _visibleFor = Duration(seconds: 4);
 
+  Duration get _exit => _off ? HsMotion.fxInstant : HsMotion.snackExit;
+  bool _off = false;
+
   bool _shown = false;
   Timer? _timer;
 
@@ -47,7 +51,7 @@ class _NoticeState extends State<_Notice> {
     _timer = Timer(_visibleFor, () {
       if (!mounted) return;
       setState(() => _shown = false);
-      _timer = Timer(HsMotion.page, widget.onDone);
+      _timer = Timer(_exit, widget.onDone);
     });
   }
 
@@ -60,6 +64,14 @@ class _NoticeState extends State<_Notice> {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
+    final level = HsMotion.levelOf(context);
+    _off = level == MotionLevel.off;
+    // In on springDefault, clamped so there is no overshoot gap; a fade at
+    // Off; out on a short fade.
+    final inCurve = HsMotion.spatialCurve(level, HsMotion.defaultCurve).clamped;
+    final duration = _shown
+        ? (_off ? HsMotion.fxInstant : inCurve.settle)
+        : _exit;
 
     return Positioned(
       left: HsSpace.x5,
@@ -67,25 +79,30 @@ class _NoticeState extends State<_Notice> {
       // Above the floating pill, so it never covers navigation.
       bottom: HsSpace.navClearance,
       child: IgnorePointer(
-        child: AnimatedOpacity(
-          opacity: _shown ? 1 : 0,
-          duration: HsMotion.page,
-          curve: HsMotion.pageCurve,
-          child: Semantics(
-            liveRegion: true,
-            child: Container(
-              padding: const EdgeInsets.symmetric(
-                horizontal: HsSpace.x4,
-                vertical: HsSpace.x3,
-              ),
-              decoration: BoxDecoration(
-                color: palette.surfaceVariant,
-                borderRadius: HsRadius.buttonBorder,
-              ),
-              child: Text(
-                widget.message,
-                textAlign: TextAlign.center,
-                style: HsType.bodySans.copyWith(color: palette.textPrimary),
+        child: AnimatedSlide(
+          offset: _shown || _off ? Offset.zero : const Offset(0, 0.4),
+          duration: duration,
+          curve: _shown ? inCurve : HsMotion.curveEffects,
+          child: AnimatedOpacity(
+            opacity: _shown ? 1 : 0,
+            duration: duration,
+            curve: HsMotion.curveEffects,
+            child: Semantics(
+              liveRegion: true,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: HsSpace.x4,
+                  vertical: HsSpace.x3,
+                ),
+                decoration: BoxDecoration(
+                  color: palette.surfaceVariant,
+                  borderRadius: HsRadius.buttonBorder,
+                ),
+                child: Text(
+                  widget.message,
+                  textAlign: TextAlign.center,
+                  style: HsType.bodySans.copyWith(color: palette.textPrimary),
+                ),
               ),
             ),
           ),

@@ -13,7 +13,6 @@ abstract final class HsSpace {
   /// space-6 — the gap between headline cards in Today.
   static const x6 = 32.0;
   static const x7 = 48.0;
-  static const x8 = 64.0;
 
   /// Bottom padding that keeps scrolling content clear of the floating pill.
   static const navClearance = 104.0;
@@ -26,6 +25,15 @@ abstract final class HsRadius {
   static const sheet = Radius.circular(26);
   static const menu = Radius.circular(20);
   static const pill = Radius.circular(999);
+
+  /// A held button (48 dp or taller), a selected chip or segment.
+  static const double squircle = 12;
+
+  /// A held button under 48 dp.
+  static const double heldCompact = 8;
+
+  /// An icon button while pressed.
+  static const double heldIcon = 12;
 
   static const chipBorder = BorderRadius.all(chip);
   static const buttonBorder = BorderRadius.all(button);
@@ -61,9 +69,20 @@ abstract final class HsSize {
   static const buttonSmall = 46.0;
   static const buttonCompact = 44.0;
 
+  /// The shape loader inside a button.
+  static const buttonLoader = 28.0;
+
   static const rowHeight = 56.0;
   static const sourceRowHeight = 60.0;
-  static const settingsRowHeight = 58.0;
+
+  /// The least a control's tap region is, and the height a chip's hit
+  /// region takes around its 32 dp visual.
+  static const tapTarget = 48.0;
+
+  /// The widest a lit Linger caption gets, on a tablet or in landscape.
+  static const litMaxWidth = 600.0;
+  static const chipVisual = 32.0;
+  static const toggleKnobOff = 14.0;
 
   static const toggleWidth = 44.0;
   static const toggleHeight = 26.0;

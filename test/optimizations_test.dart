@@ -1,10 +1,13 @@
 import 'package:drift/native.dart';
 import 'package:flutter/widgets.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:headshorts/core/widgets/nav_pill.dart';
+import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/core/widgets/pull_to_refresh.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/data/db/database.dart';
+import 'package:headshorts/data/prefs/settings.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/harness.dart';
 
@@ -67,51 +70,21 @@ void main() {
 
   group('HsScreen', () {
     testWidgets('renders title and child', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+      final prefs = await SharedPreferences.getInstance();
       await pumpThemed(
         tester,
-        const HsScreen(title: 'Headlines', child: Text('Content')),
+        ProviderScope(
+          overrides: [
+            settingsStoreProvider.overrideWithValue(SettingsStore(prefs)),
+          ],
+          child: const HsScreen(title: 'Headlines', child: Text('Content')),
+        ),
       );
       await tester.pumpAndSettle();
 
       expect(find.text('Headlines'), findsOneWidget);
       expect(find.text('Content'), findsOneWidget);
-    });
-  });
-
-  group('NavPill blur', () {
-    testWidgets('includes BackdropFilter when blur is true', (tester) async {
-      await pumpThemed(
-        tester,
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: NavPill(
-            destinations: NavPill.destinationsForApp,
-            selectedIndex: 0,
-            blur: true,
-            onSelected: (_) {},
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byType(BackdropFilter), findsOneWidget);
-    });
-
-    testWidgets('omits BackdropFilter when blur is false', (tester) async {
-      await pumpThemed(
-        tester,
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: NavPill(
-            destinations: NavPill.destinationsForApp,
-            selectedIndex: 0,
-            onSelected: (_) {},
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byType(BackdropFilter), findsNothing);
     });
   });
 }

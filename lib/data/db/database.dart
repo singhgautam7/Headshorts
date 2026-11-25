@@ -1,6 +1,7 @@
 import 'package:drift/drift.dart';
 import 'package:drift_flutter/drift_flutter.dart';
 import 'package:headshorts/data/db/tables.dart';
+import 'package:sqlite3/common.dart' show CommonDatabase;
 
 part 'database.g.dart';
 
@@ -9,9 +10,30 @@ part 'database.g.dart';
 /// working offline.
 @DriftDatabase(tables: [Sources, Articles, ReadEvents, CaughtUpDays, Bookmarks])
 class HsDatabase extends _$HsDatabase {
-  new() : super(driftDatabase(name: 'headshorts'));
+  new()
+    : super(
+        driftDatabase(
+          name: 'headshorts',
+          native: const DriftNativeOptions(setup: _setup),
+        ),
+      );
 
   new forTesting(super.e);
+
+  /// WAL so a second engine (a home-screen widget's headless refresh) can
+  /// write while the UI reads, and a busy timeout so the loser of a race
+  /// waits instead of recording a feed failure.
+  static void _setup(CommonDatabase db) => db
+    ..execute('PRAGMA journal_mode=WAL')
+    ..execute('PRAGMA busy_timeout=5000')
+    ..execute('PRAGMA synchronous=NORMAL');
+
+  /// Another isolate or engine wrote to this file. Drift only sees its own
+  /// writes, so call this when one finishes (app resume) to re-run streams.
+  void notifyExternalWrite() => notifyUpdates({
+    TableUpdate.onTable(articles),
+    TableUpdate.onTable(sources),
+  });
 
   @override
   int get schemaVersion => 4;
@@ -51,6 +73,9 @@ class HsDatabase extends _$HsDatabase {
       await customStatement('PRAGMA foreign_keys = ON');
       await _createIndices();
       await _createSearchIndex();
+      // The end-of-refresh prune never runs when the app is killed mid-run,
+      // so a launch does it too. Cheap: both statements ride indices.
+      await pruneToRetention();
     },
   );
 
@@ -80,6 +105,19 @@ class HsDatabase extends _$HsDatabase {
     await customStatement(
       'CREATE INDEX IF NOT EXISTS idx_articles_unread '
       'ON articles(source_id, read_full)',
+    );
+    // The prune window runs per source in date order; the cascade from
+    // `articles` and the stats window both scan `read_events` otherwise.
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_articles_source_published '
+      'ON articles(source_id, published_at DESC)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_read_events_article '
+      'ON read_events(article_id)',
+    );
+    await customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_read_events_at ON read_events(at)',
     );
   }
 
@@ -120,9 +158,17 @@ class HsDatabase extends _$HsDatabase {
       "VALUES ('delete', old.id, old.title, old.summary, "
       'old.content_snippet); END',
     );
+    // Installs from before the column list ran the index on every read mark.
+    final old = await customSelect(
+      "SELECT sql FROM sqlite_master WHERE type = 'trigger'"
+      " AND name = 'articles_fts_update'",
+    ).getSingleOrNull();
+    if (old != null && !old.read<String>('sql').contains(' OF ')) {
+      await customStatement('DROP TRIGGER articles_fts_update');
+    }
     await customStatement(
       'CREATE TRIGGER IF NOT EXISTS articles_fts_update '
-      'AFTER UPDATE ON articles BEGIN '
+      'AFTER UPDATE OF title, summary, content_snippet ON articles BEGIN '
       'INSERT INTO articles_fts(articles_fts, rowid, title, summary, '
       'content_snippet) '
       "VALUES ('delete', old.id, old.title, old.summary, "
@@ -214,7 +260,7 @@ class HsDatabase extends _$HsDatabase {
       DELETE FROM articles WHERE id IN (
         SELECT id FROM (
           SELECT id, ROW_NUMBER() OVER (
-            PARTITION BY source_id ORDER BY published_at DESC
+            PARTITION BY source_id ORDER BY published_at DESC, id DESC
           ) AS rn FROM articles
         ) WHERE rn > ?
       ) AND link NOT IN (SELECT link FROM bookmarks)

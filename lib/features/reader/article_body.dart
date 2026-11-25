@@ -7,6 +7,7 @@ import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/palette.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/open_in_web.dart';
+import 'package:headshorts/core/util/text_direction.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/data/readability/article_cleaner.dart';
 import 'package:headshorts/data/readability/extraction_service.dart';
@@ -23,6 +24,7 @@ class ArticleBody extends StatelessWidget {
     required this.articleUrl,
     required this.bodySize,
     required this.linkMode,
+    this.asSliver = false,
     super.key,
   });
 
@@ -39,24 +41,37 @@ class ArticleBody extends StatelessWidget {
   /// Where a tapped link goes — a Custom Tab, or the reader's own browser.
   final LinkOpenMode linkMode;
 
+  /// Laid out lazily, block by block, inside a `CustomScrollView`. A long
+  /// article built as one column is the slowest frame in the app.
+  final bool asSliver;
+
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
     final accent = AccentScope.of(context).resolve(isDark: palette.isDark);
 
-    return HtmlWidget(
-      html,
-      textStyle: HsType.readerBody(bodySize)
-          .copyWith(color: palette.textPrimary),
-      onTapUrl: (url) => openInWeb(
-        // A relative href that survived the cleaner is resolved here rather
-        // than handed to the browser as-is.
-        ArticleCleaner.absolutise(url, Uri.parse(articleUrl)) ?? url,
-        mode: linkMode,
+    // Direction from the first strong character, as `dir=auto` does: an
+    // Urdu or Arabic body sets right to left even under an English app.
+    return Directionality(
+      textDirection: textDirectionOf(html),
+      child: HtmlWidget(
+        html,
+        textStyle: HsType.forText(
+          HsType.readerBody(bodySize),
+          html,
+        ).copyWith(color: palette.textPrimary),
+        renderMode: asSliver ? RenderMode.sliverList : RenderMode.column,
+        rebuildTriggers: [bodySize, palette, accent],
+        onTapUrl: (url) => openInWeb(
+          // A relative href that survived the cleaner is resolved here rather
+          // than handed to the browser as-is.
+          ArticleCleaner.absolutise(url, Uri.parse(articleUrl)) ?? url,
+          mode: linkMode,
+        ),
+        customWidgetBuilder: (element) => _custom(context, element),
+        customStylesBuilder: (element) =>
+            _styles(element, palette, accent, bodySize),
       ),
-      customWidgetBuilder: (element) => _custom(context, element),
-      customStylesBuilder: (element) =>
-          _styles(element, palette, accent, bodySize),
     );
   }
 
@@ -103,8 +118,8 @@ class ArticleBody extends StatelessWidget {
         'font-style': 'italic',
         'color': _hex(palette.textSecondary),
         'margin': '${HsSpace.x5}px 0',
-        'padding': '0 0 0 ${HsSpace.x4}px',
-        'border-left': '${HsSize.accentBar}px solid ${_hex(accent)}',
+        'padding-inline-start': '${HsSpace.x4}px',
+        'border-inline-start': '${HsSize.accentBar}px solid ${_hex(accent)}',
       },
       'ul' || 'ol' => {'margin': '${HsSpace.x3}px 0 ${HsSpace.x3}px'},
       'li' => {'padding': '0 0 ${HsSpace.x2}px 0'},
@@ -131,7 +146,7 @@ class ArticleBody extends StatelessWidget {
         'margin': '${HsSpace.x2}px 0 ${HsSpace.x4}px',
       },
       'table' => {'font-size': '${body - 2}px'},
-      'th' => {'font-weight': '600', 'text-align': 'left'},
+      'th' => {'font-weight': '600', 'text-align': 'start'},
       _ => null,
     };
   }
@@ -153,8 +168,21 @@ class ArticleBody extends StatelessWidget {
     }
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: HsSpace.x2),
-      child: ArticleImage(url: src, articleUrl: articleUrl),
+      child: ArticleImage(
+        url: src,
+        articleUrl: articleUrl,
+        aspectRatio: _declaredRatio(element),
+      ),
     );
+  }
+
+  /// The shape the page declared, when `width` and `height` survived. The
+  /// cleaner keeps only `src` and `alt`, so this is usually null and the
+  /// placeholder takes [ArticleImage.placeholderRatio].
+  static double? _declaredRatio(dom.Element element) {
+    final w = double.tryParse(element.attributes['width'] ?? '');
+    final h = double.tryParse(element.attributes['height'] ?? '');
+    return (w == null || h == null || w <= 0 || h <= 0) ? null : w / h;
   }
 
   static String _hex(Color color) =>
@@ -180,14 +208,27 @@ class _Rule extends StatelessWidget {
 /// so a run of pictures reads as one column rather than a jumble of sizes.
 /// One that will not load collapses to nothing.
 class ArticleImage extends StatelessWidget {
-  const new({required this.url, required this.articleUrl, super.key});
+  const new({
+    required this.url,
+    required this.articleUrl,
+    this.aspectRatio,
+    super.key,
+  });
 
   final String url;
   final String articleUrl;
 
+  /// Width over height when known; reserves the space while the picture
+  /// loads so the text below does not jump.
+  final double? aspectRatio;
+
+  /// The shape reserved when the page did not declare one: a 3:2 photograph.
+  static const placeholderRatio = 1.5;
+
   @override
   Widget build(BuildContext context) {
     final width = MediaQuery.sizeOf(context).width;
+    final palette = context.hs;
     return ClipRRect(
       borderRadius: HsRadius.imageBorder,
       child: CachedNetworkImage(
@@ -196,11 +237,17 @@ class ArticleImage extends StatelessWidget {
         // Decoding is capped at the column's own width in device pixels, so
         // a long article does not hold a dozen full-resolution bitmaps.
         memCacheWidth: (width * MediaQuery.devicePixelRatioOf(context)).round(),
+        maxWidthDiskCache: (width * MediaQuery.devicePixelRatioOf(context))
+            .round(),
         imageBuilder: (context, image) => ConstrainedBox(
           constraints: BoxConstraints(maxHeight: width),
           child: Image(image: image, width: double.infinity, fit: BoxFit.cover),
         ),
-        placeholder: (_, _) => const SizedBox.shrink(),
+        // Flat fill at the expected shape; an image that fails collapses it.
+        placeholder: (_, _) => AspectRatio(
+          aspectRatio: aspectRatio ?? placeholderRatio,
+          child: ColoredBox(color: palette.surfaceVariant),
+        ),
         errorWidget: (_, _, _) => const SizedBox.shrink(),
       ),
     );

@@ -14,6 +14,7 @@ import 'package:headshorts/features/bookmarks/bookmarks_controller.dart';
 import 'package:headshorts/features/reader/listen_controller.dart';
 import 'package:headshorts/features/reader/reader_controller.dart';
 import 'package:headshorts/features/reader/reader_screen.dart';
+import 'package:headshorts/features/reader/text_size_slider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'support/harness.dart';
@@ -204,7 +205,7 @@ void main() {
       await open(tester);
       // The barrier is what the finger lands on; the drag closes it.
       await tester.drag(
-        find.byType(ListView),
+        find.byType(CustomScrollView),
         const Offset(0, -200),
         warnIfMissed: false,
       );

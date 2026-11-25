@@ -1,39 +1,37 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
-import 'package:headshorts/core/widgets/controls.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/screen.dart';
-import 'package:headshorts/core/widgets/sheet.dart';
-import 'package:headshorts/data/prefs/settings.dart';
-import 'package:headshorts/features/bookmarks/bookmarks_controller.dart';
 import 'package:headshorts/features/more/settings_widgets.dart';
+import 'package:headshorts/features/more/stats_card.dart';
 import 'package:package_info_plus/package_info_plus.dart';
 
+export 'segmented_control.dart';
 export 'settings_widgets.dart';
 
-/// More — three short groups in Perch's arrangement, each row showing its
-/// current value on the right so most questions are answered without opening
-/// anything. A one-of-N setting opens the shared option sheet; nothing here
-/// cycles in place.
-class MoreScreen extends ConsumerWidget {
+/// More: the stats card leads, then Saved, Manage and About, in Kuber's
+/// classic rows. Every setting is behind the Settings row, so this page stays
+/// a hub for what the app holds.
+class MoreScreen extends StatelessWidget {
   const new({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final s = ref.watch(settingsProvider);
-    final controller = ref.read(settingsProvider.notifier);
-    final version = ref.watch(packageInfoProvider).value?.version;
-
+  Widget build(BuildContext context) {
     return HsScreen(
       title: 'More',
-      titlePadding: const EdgeInsets.fromLTRB(HsSpace.x5, 6, HsSpace.x5, 18),
+      underHeader: true,
       child: ListView(
         padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
         children: [
+          HeaderPage.gap(),
+          const Padding(
+            padding: EdgeInsets.only(bottom: HsSpace.x5),
+            child: StatsCard(),
+          ),
           SettingsGroup(
             label: 'Saved',
             children: [
@@ -41,218 +39,13 @@ class MoreScreen extends ConsumerWidget {
                 icon: Icons.bookmark_border_rounded,
                 label: 'Bookmarks',
                 sub: 'Articles you kept to read later',
-                // A plain value on the right, like every other row. It never
-                // reaches the nav and it is not something to clear.
-                value: '${ref.watch(bookmarkCountProvider).value ?? 0}',
                 onTap: () => context.push('/bookmarks'),
               ),
             ],
           ),
           SettingsGroup(
-            label: 'General',
+            label: 'Manage',
             children: [
-              SettingsRow(
-                icon: Icons.palette_outlined,
-                label: 'Appearance',
-                value: '${s.family.name} · ${_modeLabel(s.themeMode)}',
-                onTap: () => context.push('/more/appearance'),
-              ),
-              SettingsRow(
-                icon: Icons.open_in_browser_rounded,
-                label: 'Open links',
-                value: s.linkOpenMode.label,
-                onTap: () async {
-                  final picked = await showOptionSheet<LinkOpenMode>(
-                    context,
-                    title: 'Open links',
-                    description:
-                        'Where an article opens when you leave the '
-                        'Reader for the publisher.',
-                    selected: s.linkOpenMode,
-                    options: const [
-                      SheetOption(
-                        value: LinkOpenMode.inApp,
-                        label: 'In the app',
-                        description: 'A Custom Tab over HeadShorts — you come straight back',
-                      ),
-                      SheetOption(
-                        value: LinkOpenMode.browser,
-                        label: 'In your browser',
-                        description:
-                            'Your own browser, extensions and sign-ins',
-                      ),
-                    ],
-                  );
-                  if (picked != null) await controller.setLinkOpenMode(picked);
-                },
-              ),
-              SettingsRow(
-                icon: Icons.format_size_rounded,
-                label: 'Text size',
-                value: s.textSize.label,
-                onTap: () async {
-                  final picked = await showOptionSheet<TextSizeStep>(
-                    context,
-                    title: 'Text size',
-                    description:
-                        "The Reader's measure. It offsets the system setting "
-                        'rather than overriding it.',
-                    selected: s.textSize,
-                    options: [
-                      for (final step in TextSizeStep.values)
-                        SheetOption(value: step, label: step.label),
-                    ],
-                  );
-                  if (picked != null) await controller.setTextSize(picked);
-                },
-              ),
-              SettingsRow(
-                icon: Icons.view_agenda_outlined,
-                label: 'List size',
-                value: s.listSize.label,
-                onTap: () async {
-                  final picked = await showOptionSheet<ListSize>(
-                    context,
-                    title: 'List size',
-                    description:
-                        'How much of each item Headlines, Search and '
-                        'Bookmarks show. Headlines also has this beside its '
-                        'title.',
-                    selected: s.listSize,
-                    options: [
-                      for (final size in ListSize.values)
-                        SheetOption(
-                          value: size,
-                          label: size.label,
-                          description: size.description,
-                        ),
-                    ],
-                  );
-                  if (picked != null) await controller.setListSize(picked);
-                },
-              ),
-              SettingsRow(
-                icon: Icons.volume_up_outlined,
-                label: 'Read aloud',
-                value:
-                    '${s.speechRate.label} · '
-                    '${s.voiceByLanguage.isEmpty ? 'System voice' : 'Your voice'}',
-                onTap: () async {
-                  final picked = await showOptionSheet<SpeechRate>(
-                    context,
-                    title: 'Read aloud',
-                    description:
-                        "Speed for the Reader's Listen. The voice is chosen "
-                        'per language while it reads, and remembered.',
-                    selected: s.speechRate,
-                    options: [
-                      for (final rate in SpeechRate.values)
-                        SheetOption(value: rate, label: rate.label),
-                    ],
-                  );
-                  if (picked != null) await controller.setSpeechRate(picked);
-                },
-              ),
-              SettingsRow(
-                icon: Icons.travel_explore_rounded,
-                label: 'Search the web',
-                value: s.searchTheWeb ? 'Google News' : 'Off',
-                onTap: () async {
-                  final picked = await showOptionSheet<bool>(
-                    context,
-                    title: 'Search the web',
-                    description:
-                        'Your own feeds carry only their most recent items, '
-                        'so a search of them alone cannot reach far back. '
-                        'With this on, Search also asks Google News and '
-                        'shows what it finds under its own heading.',
-                    selected: s.searchTheWeb,
-                    options: const [
-                      SheetOption(
-                        value: true,
-                        label: 'Also search Google News',
-                        description:
-                            'Your search term is sent to Google. Nothing '
-                            'else is — not what you read, follow or save',
-                      ),
-                      SheetOption(
-                        value: false,
-                        label: 'Off',
-                        description:
-                            'Search only what is on this device. Nothing '
-                            'leaves it',
-                      ),
-                    ],
-                  );
-                  if (picked != null) {
-                    await controller.setSearchTheWeb(enabled: picked);
-                  }
-                },
-              ),
-              SettingsRow(
-                icon: Icons.balance_rounded,
-                label: 'Reading fairness',
-                value: s.maxConsecutivePerSource == 0
-                    ? 'Off'
-                    : '${s.maxConsecutivePerSource} in a row',
-                onTap: () async {
-                  final picked = await showOptionSheet<int>(
-                    context,
-                    title: 'Reading fairness',
-                    description:
-                        'Caps how many items in a row one source can take. '
-                        'Nothing is dropped or scored — an item that would '
-                        'exceed the run waits for something from elsewhere.',
-                    selected: s.maxConsecutivePerSource,
-                    options: const [
-                      SheetOption(
-                        value: 0,
-                        label: 'Off',
-                        description: 'Strictly newest first',
-                      ),
-                      SheetOption(value: 3, label: 'At most 3 in a row'),
-                      SheetOption(value: 5, label: 'At most 5 in a row'),
-                      SheetOption(value: 8, label: 'At most 8 in a row'),
-                    ],
-                  );
-                  if (picked != null) {
-                    await controller.setMaxConsecutivePerSource(picked);
-                  }
-                },
-              ),
-              SettingsRow(
-                icon: Icons.update_rounded,
-                label: 'Check for new',
-                value: s.refreshCadence.label,
-                onTap: () async {
-                  final picked = await showOptionSheet<RefreshCadence>(
-                    context,
-                    title: 'Check for new',
-                    description:
-                        'How stale the briefing may be before opening the app '
-                        'or returning to it fetches again. A pull always does.',
-                    selected: s.refreshCadence,
-                    options: [
-                      for (final c in RefreshCadence.values)
-                        SheetOption(value: c, label: c.label),
-                    ],
-                  );
-                  if (picked != null) {
-                    await controller.setRefreshCadence(picked);
-                  }
-                },
-              ),
-            ],
-          ),
-          SettingsGroup(
-            label: 'Your data',
-            children: [
-              SettingsRow(
-                icon: Icons.bar_chart_rounded,
-                label: 'Stats',
-                sub: 'What you have read, with nothing to beat',
-                onTap: () => context.push('/stats'),
-              ),
               SettingsRow(
                 icon: Icons.swap_vert_rounded,
                 label: 'Data',
@@ -262,7 +55,7 @@ class MoreScreen extends ConsumerWidget {
               SettingsRow(
                 icon: Icons.key_outlined,
                 label: 'Permissions',
-                sub: 'What HeadShorts asks for, and what it does not',
+                sub: 'What HeadShorts asks for',
                 onTap: () => context.push('/more/permissions'),
               ),
             ],
@@ -270,6 +63,12 @@ class MoreScreen extends ConsumerWidget {
           SettingsGroup(
             label: 'About HeadShorts',
             children: [
+              SettingsRow(
+                icon: Icons.tune_rounded,
+                label: 'Settings',
+                sub: 'Look, reading, search, haptics',
+                onTap: () => context.push('/more/settings'),
+              ),
               SettingsRow(
                 icon: Icons.mail_outline_rounded,
                 label: 'Contact us',
@@ -279,15 +78,10 @@ class MoreScreen extends ConsumerWidget {
               SettingsRow(
                 icon: Icons.shield_outlined,
                 label: 'Privacy',
-                value: 'Local only',
+                sub: 'Everything stays on your phone',
                 onTap: () => context.push('/more/privacy'),
               ),
-              SettingsRow(
-                icon: Icons.info_outline_rounded,
-                label: 'About',
-                value: version,
-                onTap: () => context.push('/more/about'),
-              ),
+              const _AboutRow(),
             ],
           ),
           const VersionLine(),
@@ -302,12 +96,23 @@ class MoreScreen extends ConsumerWidget {
       ),
     );
   }
+}
 
-  static String _modeLabel(ThemeMode mode) => switch (mode) {
-    ThemeMode.light => 'Light',
-    ThemeMode.dark => 'Dark',
-    ThemeMode.system => 'System',
-  };
+class _AboutRow extends ConsumerWidget {
+  const new();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final version = ref.watch(
+      packageInfoProvider.select((v) => v.value?.version),
+    );
+    return SettingsRow(
+      icon: Icons.info_outline_rounded,
+      label: 'About',
+      sub: version == null ? 'Why HeadShorts exists' : 'Version $version',
+      onTap: () => context.push('/more/about'),
+    );
+  }
 }
 
 /// The installed package's version and build, resolved once and cached: a
@@ -345,59 +150,4 @@ class MadeInIndia extends StatelessWidget {
     textAlign: TextAlign.center,
     style: HsType.note.copyWith(color: context.hs.textMuted),
   );
-}
-
-class SegmentedControl<T> extends StatelessWidget {
-  const new({
-    required this.value,
-    required this.options,
-    required this.onChanged,
-    super.key,
-  });
-
-  final T value;
-  final Map<T, String> options;
-  final ValueChanged<T> onChanged;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    return Container(
-      padding: const EdgeInsets.all(HsSpace.x1),
-      decoration: BoxDecoration(
-        color: palette.isDark ? palette.surface : palette.surfaceVariant,
-        borderRadius: HsRadius.buttonBorder,
-      ),
-      child: Row(
-        children: [
-          for (final entry in options.entries)
-            Expanded(
-              child: Pressable(
-                onTap: () => onChanged(entry.key),
-                child: Container(
-                  height: 40,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: entry.key == value
-                        ? (palette.isDark ? palette.navActive : palette.nav)
-                        : null,
-                    borderRadius: BorderRadius.circular(9),
-                  ),
-                  child: Text(
-                    entry.value,
-                    style:
-                        (entry.key == value ? HsType.chipSelected : HsType.chip)
-                            .copyWith(
-                              color: entry.key == value
-                                  ? palette.textPrimary
-                                  : palette.textMuted,
-                            ),
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
 }

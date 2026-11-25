@@ -27,9 +27,9 @@ import 'package:headshorts/features/reader/listen_controller.dart';
 /// the moment a publisher puts a link in the middle of a sentence.
 ///
 /// The rendered body comes straight back when listening stops.
-class ListenView extends StatelessWidget {
+class ListenView extends ConsumerWidget {
   const new({
-    required this.listen,
+    required this.language,
     required this.accent,
     required this.bodySize,
     required this.spokenKey,
@@ -37,7 +37,7 @@ class ListenView extends StatelessWidget {
     super.key,
   });
 
-  final ListenState listen;
+  final String language;
   final Color accent;
   final double bodySize;
 
@@ -49,49 +49,95 @@ class ListenView extends StatelessWidget {
   final bool highlightWords;
 
   @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    // The accent at 32% under full ink, which keeps body contrast above 7:1
-    // in both themes — mixed in oklab, as every wash in this app is.
-    final wash = Oklab.mix(accent, palette.background, 0.32);
-    final (sentenceStart, sentenceEnd) = listen.sentenceRange;
+  Widget build(BuildContext context, WidgetRef ref) {
+    // The paragraphs and which one is spoken: changes once a paragraph, not
+    // once a word. The word highlight lives in [_Paragraph], which is the
+    // only thing that rebuilds on it.
+    final paragraphs = ref.watch(
+      listenProvider(language).select((s) => s.paragraphs),
+    );
+    final spoken = ref.watch(listenProvider(language).select((s) => s.index));
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        for (var i = 0; i < listen.paragraphs.length; i++)
-          Padding(
-            key: i == listen.index ? spokenKey : null,
-            padding: const EdgeInsets.only(bottom: 18),
-            child: Text.rich(
-              i == listen.index
-                  ? _spans(
-                      listen.paragraphs[i].text,
-                      sentenceStart: sentenceStart,
-                      sentenceEnd: sentenceEnd,
-                      wash: wash,
-                      palette: palette,
-                    )
-                  : TextSpan(text: listen.paragraphs[i].text),
-              style:
-                  HsType.forText(
-                    HsType.readerBody(bodySize),
-                    listen.paragraphs[i].text,
-                  ).copyWith(
-                    // Everything but the sentence in hand steps back, so the
-                    // place is obvious without anything having to flash.
-                    color: i == listen.index
-                        ? palette.textPrimary
-                        : palette.textSecondary,
-                  ),
-            ),
+        for (var i = 0; i < paragraphs.length; i++)
+          _Paragraph(
+            key: i == spoken ? spokenKey : null,
+            language: language,
+            index: i,
+            text: paragraphs[i].text,
+            spoken: i == spoken,
+            accent: accent,
+            bodySize: bodySize,
+            highlightWords: highlightWords,
           ),
       ],
+    );
+  }
+}
+
+/// One paragraph. Only the spoken one watches the word range.
+class _Paragraph extends ConsumerWidget {
+  const new({
+    required this.language,
+    required this.index,
+    required this.text,
+    required this.spoken,
+    required this.accent,
+    required this.bodySize,
+    required this.highlightWords,
+    super.key,
+  });
+
+  final String language;
+  final int index;
+  final String text;
+  final bool spoken;
+  final Color accent;
+  final double bodySize;
+  final bool highlightWords;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.hs;
+    // Everything but the sentence in hand steps back, so the place is
+    // obvious without anything having to flash.
+    final style = HsType.forText(
+      HsType.readerBody(bodySize),
+      text,
+    ).copyWith(color: spoken ? palette.textPrimary : palette.textSecondary);
+    var span = TextSpan(text: text);
+    if (spoken) {
+      final range = ref.watch(
+        listenProvider(language).select(
+          (s) =>
+              (s.wordStart, s.wordEnd, s.sentenceRange.$1, s.sentenceRange.$2),
+        ),
+      );
+      // The accent at 32% under full ink, which keeps body contrast above 7:1
+      // in both themes — mixed in oklab, as every wash in this app is.
+      final wash = Oklab.mix(accent, palette.background, 0.32);
+      span = _spans(
+        text,
+        wordStart: range.$1,
+        wordEnd: range.$2,
+        sentenceStart: range.$3,
+        sentenceEnd: range.$4,
+        wash: wash,
+        palette: palette,
+      );
+    }
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 18),
+      child: Text.rich(span, style: style),
     );
   }
 
   TextSpan _spans(
     String text, {
+    required int wordStart,
+    required int wordEnd,
     required int sentenceStart,
     required int sentenceEnd,
     required Color wash,
@@ -99,26 +145,26 @@ class ListenView extends StatelessWidget {
   }) {
     final start = sentenceStart.clamp(0, text.length);
     final end = sentenceEnd.clamp(start, text.length);
-    final wordStart = listen.wordStart.clamp(start, end);
-    final wordEnd = listen.wordEnd.clamp(wordStart, end);
+    final wStart = wordStart.clamp(start, end);
+    final wEnd = wordEnd.clamp(wStart, end);
 
     return TextSpan(
       children: [
         if (start > 0) TextSpan(text: text.substring(0, start)),
-        if (highlightWords && wordEnd > wordStart) ...[
+        if (highlightWords && wEnd > wStart) ...[
           TextSpan(
-            text: text.substring(start, wordStart),
+            text: text.substring(start, wStart),
             style: TextStyle(backgroundColor: wash),
           ),
           TextSpan(
-            text: text.substring(wordStart, wordEnd),
+            text: text.substring(wStart, wEnd),
             style: TextStyle(
               backgroundColor: accent,
               color: palette.background,
             ),
           ),
           TextSpan(
-            text: text.substring(wordEnd, end),
+            text: text.substring(wEnd, end),
             style: TextStyle(backgroundColor: wash),
           ),
         ] else
@@ -139,31 +185,21 @@ class ListenView extends StatelessWidget {
 /// of links while reading is nothing; losing the pause button while something
 /// is talking is not the same thing at all.
 class ListenBar extends ConsumerWidget {
-  const new({
-    required this.listen,
-    required this.accent,
-    required this.language,
-    super.key,
-  });
+  const new({required this.accent, required this.language, super.key});
 
-  final ListenState listen;
   final Color accent;
   final String language;
-
-  /// Roughly how fast speech runs, in characters a second at 1.0×. Only ever
-  /// used for the two times on the bar, which are an orientation rather than
-  /// a measurement — no engine will tell us the real duration up front.
-  static const _charsPerSecond = 15.0;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final palette = context.hs;
     final controller = ref.read(listenProvider(language).notifier);
+    // Only what the buttons show. The time and the progress line tick with
+    // every word and live in [_Meter], so the bar itself does not rebuild.
+    final playing = ref.watch(
+      listenProvider(language).select((s) => s.playing),
+    );
     final rate = ref.watch(settingsProvider.select((s) => s.speechRate));
-    final pace = _charsPerSecond * rate.multiplier;
-
-    final total = Duration(seconds: (listen.totalChars / pace).round());
-    final elapsed = Duration(seconds: (listen.spokenChars / pace).round());
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -193,21 +229,22 @@ class ListenBar extends ConsumerWidget {
                   child: Row(
                     children: [
                       Pressable(
+                        kind: PressKind.iconButton,
                         onTap: () => unawaited(
-                          listen.playing
-                              ? controller.pause()
-                              : controller.resume(),
+                          playing ? controller.pause() : controller.resume(),
                         ),
-                        semanticLabel: listen.playing ? 'Pause' : 'Play',
-                        child: Container(
+                        semanticLabel: playing ? 'Pause' : 'Play',
+                        restRadius: HsSize.navItem / 2,
+                        pressedRadius: HsRadius.heldIcon,
+                        builder: (context, radius, _) => Container(
                           width: HsSize.navItem,
                           height: HsSize.navItem,
                           decoration: BoxDecoration(
                             color: palette.primary,
-                            shape: BoxShape.circle,
+                            borderRadius: BorderRadius.circular(radius),
                           ),
                           child: Icon(
-                            listen.playing
+                            playing
                                 ? Icons.pause_rounded
                                 : Icons.play_arrow_rounded,
                             size: 18,
@@ -216,47 +253,33 @@ class ListenBar extends ConsumerWidget {
                         ),
                       ),
                       Expanded(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 10),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Text(
-                                      listen.playing ? 'Listening' : 'Paused',
-                                      style: HsType.chipSelected.copyWith(
-                                        fontSize: 12,
-                                        color: palette.textPrimary,
-                                      ),
-                                    ),
-                                  ),
-                                  Text(
-                                    '${_clock(elapsed)} / ${_clock(total)}',
-                                    style: HsType.timestamp.copyWith(
-                                      color: palette.textMuted,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 7),
-                              _Progress(value: listen.progress, accent: accent),
-                            ],
-                          ),
+                        child: _Meter(
+                          language: language,
+                          accent: accent,
+                          playing: playing,
+                          rate: rate,
                         ),
                       ),
                       Pressable(
+                        kind: PressKind.iconButton,
                         onTap: () => showListenSettings(context, language),
                         semanticLabel: 'Speed ${rate.spokenLabel}',
-                        child: Container(
+                        restRadius: HsSize.navItem / 2,
+                        pressedRadius: HsRadius.heldIcon,
+                        builder: (context, radius, pressed) => Container(
                           height: HsSize.navItem,
                           constraints: const BoxConstraints(minWidth: 44),
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           alignment: Alignment.center,
+                          decoration: BoxDecoration(
+                            color: palette.primaryContainer.withValues(
+                              alpha: pressed.clamp(0.0, 1.0),
+                            ),
+                            borderRadius: BorderRadius.circular(radius),
+                          ),
                           child: Text(
                             rate.label,
+                            maxLines: 1,
                             style: HsType.buttonSmall.copyWith(
                               fontWeight: FontWeight.w600,
                               color: palette.textPrimary,
@@ -264,31 +287,23 @@ class ListenBar extends ConsumerWidget {
                           ),
                         ),
                       ),
-                      Pressable(
-                        onTap: () => showListenSettings(context, language),
+                      HsIconButton(
+                        icon: Icons.record_voice_over_outlined,
+                        glyphSize: 19,
+                        filled: false,
+                        size: HsSize.navItem,
+                        tint: palette.textSecondary,
+                        onPressed: () => showListenSettings(context, language),
                         semanticLabel: 'Voice',
-                        child: SizedBox(
-                          width: HsSize.navItem,
-                          height: HsSize.navItem,
-                          child: Icon(
-                            Icons.record_voice_over_outlined,
-                            size: 19,
-                            color: palette.textSecondary,
-                          ),
-                        ),
                       ),
-                      Pressable(
-                        onTap: () => unawaited(controller.stop()),
+                      HsIconButton(
+                        icon: Icons.close_rounded,
+                        glyphSize: 18,
+                        filled: false,
+                        size: HsSize.navItem,
+                        tint: palette.textSecondary,
+                        onPressed: () => unawaited(controller.stop()),
                         semanticLabel: 'Stop listening',
-                        child: SizedBox(
-                          width: HsSize.navItem,
-                          height: HsSize.navItem,
-                          child: Icon(
-                            Icons.close_rounded,
-                            size: 18,
-                            color: palette.textSecondary,
-                          ),
-                        ),
                       ),
                     ],
                   ),
@@ -300,9 +315,77 @@ class ListenBar extends ConsumerWidget {
       ),
     );
   }
+}
+
+/// Where it has got to: the state, the clock and the progress line. The only
+/// part of the bar that follows the voice word by word.
+class _Meter extends ConsumerWidget {
+  const new({
+    required this.language,
+    required this.accent,
+    required this.playing,
+    required this.rate,
+  });
+
+  final String language;
+  final Color accent;
+  final bool playing;
+  final SpeechRate rate;
+
+  /// Roughly how fast speech runs, in characters a second at 1.0×. Only ever
+  /// used for the two times on the bar, which are an orientation rather than
+  /// a measurement — no engine will tell us the real duration up front.
+  static const _charsPerSecond = 15.0;
 
   static String _clock(Duration d) =>
       '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final palette = context.hs;
+    final listen = ref.watch(listenProvider(language));
+    final pace = _charsPerSecond * rate.multiplier;
+    final total = Duration(seconds: (listen.totalChars / pace).round());
+    final elapsed = Duration(seconds: (listen.spokenChars / pace).round());
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 10),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  playing ? 'Listening' : 'Paused',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: HsType.chipSelected.copyWith(
+                    fontSize: 12,
+                    color: palette.textPrimary,
+                  ),
+                ),
+              ),
+              // Scales down rather than overflowing at a large font size.
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    '${_clock(elapsed)} / ${_clock(total)}',
+                    maxLines: 1,
+                    style: HsType.timestamp.copyWith(color: palette.textMuted),
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 7),
+          _Progress(value: listen.progress, accent: accent),
+        ],
+      ),
+    );
+  }
 }
 
 class _Progress extends StatelessWidget {
@@ -394,6 +477,8 @@ class _ListenSettingsSheetState extends ConsumerState<_ListenSettingsSheet> {
                     selected: rate == settings.speechRate,
                     label: rate.spokenLabel,
                     child: Pressable(
+                      kind: PressKind.chip,
+                      haptic: true,
                       onTap: () async {
                         await controller.setSpeechRate(rate);
                         await listen.reapply();
@@ -500,6 +585,8 @@ class _VoiceRow extends StatelessWidget {
       inMutuallyExclusiveGroup: true,
       selected: selected,
       child: Pressable(
+        kind: PressKind.row,
+        haptic: true,
         onTap: onTap,
         child: DecoratedBox(
           decoration: BoxDecoration(

@@ -8,6 +8,7 @@ import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/relative_time.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/core/widgets/sheet.dart';
@@ -46,6 +47,7 @@ class SourceDetailScreen extends ConsumerWidget {
         child: ListView(
           padding: const EdgeInsets.all(HsSpace.x5),
           children: [
+            HeaderPage.gap(),
             Row(
               children: [
                 Container(
@@ -92,12 +94,17 @@ class SourceDetailScreen extends ConsumerWidget {
               label: 'Category',
               trailing: Text(
                 source.category,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: HsType.rowValue.copyWith(color: palette.textMuted),
               ),
               onTap: () => _editCategory(context, ref, source),
             ),
             _DetailRow(
               label: 'Show in Latest',
+              onTap: () => ref
+                  .read(sourceRepositoryProvider)
+                  .setMutedInLatest(source.id, muted: !source.mutedInLatest),
               trailing: HsToggle(
                 value: !source.mutedInLatest,
                 onChanged: (show) => ref
@@ -149,7 +156,7 @@ class SourceDetailScreen extends ConsumerWidget {
         children: [
           Wrap(
             spacing: HsSpace.x2,
-            runSpacing: HsSpace.x2,
+            runSpacing: HsChip.runSpacing(HsSpace.x2),
             children: [
               for (final category in {...existing, ...defaultCategories})
                 HsChip(
@@ -178,12 +185,12 @@ class SourceDetailScreen extends ConsumerWidget {
     (context) => HsSheet(
       title: 'Accent colour',
       subtitle:
-          'A label, a hairline and — in Linger — a quiet wash. '
+          'A label, a hairline and, in Linger, a quiet wash. '
           'Never a full card.',
       children: [
+        // Each swatch is a 48dp target around its 34dp dot, so the targets
+        // tile and the dots keep a 14dp gap.
         Wrap(
-          spacing: HsSpace.x3,
-          runSpacing: HsSpace.x3,
           children: [
             for (var hue = 0; hue < 360; hue += 30)
               _Swatch(
@@ -212,13 +219,23 @@ class _Swatch extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Pressable(
+    kind: PressKind.chip,
+    morphCorners: false,
+    haptic: true,
     onTap: () => onTap(accent),
-    child: Container(
-      width: 34,
-      height: 34,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        color: accent.resolve(isDark: context.hs.isDark),
+    semanticLabel: 'Use this accent colour',
+    child: SizedBox(
+      width: HsSize.tapTarget,
+      height: HsSize.tapTarget,
+      child: Center(
+        child: Container(
+          width: 34,
+          height: 34,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: accent.resolve(isDark: context.hs.isDark),
+          ),
+        ),
       ),
     ),
   );
@@ -298,30 +315,43 @@ class _DetailRow extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.hs;
     return Pressable(
+      kind: PressKind.row,
+      enabled: onTap != null,
       onTap: onTap,
+      semanticLabel: label,
       child: DecoratedBox(
         decoration: BoxDecoration(
           border: divider
               ? Border(bottom: BorderSide(color: palette.divider))
               : null,
         ),
-        child: SizedBox(
-          height: 54,
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: HsType.bodySans.copyWith(
-                    height: 1,
-                    color: muted ? palette.textSecondary : palette.textPrimary,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 54),
+          // A long value (a category name at a large font) may take at most
+          // half the row, so the label keeps the rest.
+          child: LayoutBuilder(
+            builder: (context, box) => Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HsType.bodySans.copyWith(
+                      height: 1,
+                      color: muted
+                          ? palette.textSecondary
+                          : palette.textPrimary,
+                    ),
                   ),
                 ),
-              ),
-              ?trailing,
-            ],
+                if (trailing != null)
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxWidth: box.maxWidth / 2),
+                    child: trailing,
+                  ),
+              ],
+            ),
           ),
         ),
       ),

@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:headshorts/core/motion/haptics.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
@@ -57,7 +58,7 @@ class ContactScreen extends StatelessWidget {
           onCopyTap: () async {
             await Clipboard.setData(const ClipboardData(text: developerEmail));
             if (context.mounted) {
-              unawaited(HapticFeedback.selectionClick());
+              HsHaptics.confirm();
               showNotice(context, 'Email copied to clipboard');
             }
           },
@@ -200,7 +201,7 @@ class _InfoDetailsCard extends StatelessWidget {
           SizedBox(height: 10),
           _DetailRow(label: 'Location', value: 'India 🇮🇳'),
           SizedBox(height: 10),
-          _DetailRow(label: 'Response Time', value: 'Typically 24–48 hours'),
+          _DetailRow(label: 'Response Time', value: 'Typically 24 to 48 hours'),
         ],
       ),
     );

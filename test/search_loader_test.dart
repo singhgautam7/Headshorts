@@ -251,11 +251,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('Google News is searched as well'),
+        find.textContaining('Google News and all its sources'),
         findsOneWidget,
       );
       expect(
-        find.textContaining('search term is sent to Google'),
+        find.textContaining('your search term is sent'),
         findsOneWidget,
         reason: 'the one thing that leaves the device is still said plainly',
       );
@@ -312,6 +312,7 @@ void main() {
       findsNothing,
       reason: 'a failure ends the wait rather than spinning on',
     );
-    expect(find.textContaining('Nothing for'), findsOneWidget);
+    expect(find.text('The search did not finish'), findsOneWidget);
+    expect(find.text('Try again'), findsOneWidget);
   });
 }

@@ -138,10 +138,6 @@ abstract final class HsType {
   /// The timestamp in the medium and small lists.
   static TextStyle get timestampSmall => _sans(11, 1, 400);
 
-  /// A category sub-tab.
-  static TextStyle get subTab => _sans(14, 1, 400);
-  static TextStyle get subTabActive => _sans(14, 1, 500);
-
   /// The two-letter language code on a source row: 9/600, tracked, on a
   /// stroke hairline.
   static TextStyle get languageTag => _sans(9, 1, 600, tracking: 0.06);

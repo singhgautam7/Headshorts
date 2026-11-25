@@ -45,9 +45,7 @@ abstract final class FeedParser {
           title: _text(item.title) ?? 'Untitled',
           link: link,
           publishedAt:
-              parseDate(item.pubDate) ??
-              parseDate(item.dc?.date) ??
-              DateTime.now(),
+              _stamp(item.pubDate) ?? _stamp(item.dc?.date) ?? DateTime.now(),
           summary: _snippet(description),
           contentSnippet: _snippet(content ?? description),
           fullContentHtml: _fullContent(content),
@@ -70,7 +68,7 @@ abstract final class FeedParser {
           guid: link,
           title: _text(item.title) ?? 'Untitled',
           link: link,
-          publishedAt: parseDate(item.dc?.date) ?? DateTime.now(),
+          publishedAt: _stamp(item.dc?.date) ?? DateTime.now(),
           summary: _snippet(item.description),
           contentSnippet: _snippet(content ?? item.description),
           fullContentHtml: _fullContent(content),
@@ -95,9 +93,7 @@ abstract final class FeedParser {
           title: _text(item.title) ?? 'Untitled',
           link: link,
           publishedAt:
-              parseDate(item.published) ??
-              parseDate(item.updated) ??
-              DateTime.now(),
+              _stamp(item.published) ?? _stamp(item.updated) ?? DateTime.now(),
           summary: _snippet(item.summary),
           contentSnippet: _snippet(content ?? item.summary),
           fullContentHtml: _fullContent(content),
@@ -147,7 +143,10 @@ abstract final class FeedParser {
 
   static String? _snippet(String? html) {
     if (html == null) return null;
-    final text = plainText(html);
+    // A space where a block ends, or one paragraph runs into the next.
+    final text = plainText(
+      html.replaceAllMapped(_blockBoundary, (m) => '${m[0]} '),
+    );
     return text.isEmpty ? null : text;
   }
 
@@ -232,6 +231,15 @@ abstract final class FeedParser {
     return null;
   }
 
+  /// A parsed date, never later than now. A publisher's clock a day ahead
+  /// would otherwise pin its item to the top of Today until the day caught up.
+  static DateTime? _stamp(String? raw) {
+    final parsed = parseDate(raw);
+    if (parsed == null) return null;
+    final now = DateTime.now();
+    return parsed.isAfter(now) ? now : parsed;
+  }
+
   static final _rfc822 = [
     DateFormat('EEE, dd MMM yyyy HH:mm:ss', 'en_US'),
     DateFormat('dd MMM yyyy HH:mm:ss', 'en_US'),
@@ -263,8 +271,26 @@ abstract final class FeedParser {
     return null;
   }
 
+  /// RFC 822 zone names. IST is India's: this is an India-first reader.
+  static const _zones = {
+    'GMT': Duration.zero,
+    'UTC': Duration.zero,
+    'UT': Duration.zero,
+    'EST': Duration(hours: -5),
+    'EDT': Duration(hours: -4),
+    'CST': Duration(hours: -6),
+    'CDT': Duration(hours: -5),
+    'MST': Duration(hours: -7),
+    'MDT': Duration(hours: -6),
+    'PST': Duration(hours: -8),
+    'PDT': Duration(hours: -7),
+    'IST': Duration(hours: 5, minutes: 30),
+  };
+
   static DateTime _applyZone(DateTime utcWallClock, String? zone) {
     if (zone == null || zone.isEmpty) return utcWallClock;
+    final named = _zones[zone];
+    if (named != null) return utcWallClock.subtract(named);
     final numeric = RegExp(r'^([+-])(\d{2})(\d{2})$').firstMatch(zone);
     if (numeric == null) return utcWallClock;
     final sign = numeric.group(1) == '-' ? -1 : 1;

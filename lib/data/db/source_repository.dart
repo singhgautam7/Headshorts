@@ -10,12 +10,40 @@ class SourceRepository {
 
   final HsDatabase _db;
 
+  /// Every subscription. Emits only when something a screen reads changed:
+  /// a refresh stamps `lastFetchedAt` and the validators on every source, and
+  /// nothing that watches this list draws them, so forty-five of those would
+  /// otherwise rebuild Today, Sources and Search forty-five times.
   Stream<List<SourceRow>> watchAll() =>
       (_db.select(_db.sources)..orderBy([
             (s) => OrderingTerm(expression: s.sortOrder),
             (s) => OrderingTerm(expression: s.title),
           ]))
-          .watch();
+          .watch()
+          .distinct(_sameToTheReader);
+
+  static bool _sameToTheReader(List<SourceRow> a, List<SourceRow> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      final x = a[i];
+      final y = b[i];
+      if (x.id != y.id ||
+          x.title != y.title ||
+          x.siteUrl != y.siteUrl ||
+          x.feedUrl != y.feedUrl ||
+          x.category != y.category ||
+          x.language != y.language ||
+          x.accentDark != y.accentDark ||
+          x.accentLight != y.accentLight ||
+          x.enabled != y.enabled ||
+          x.mutedInLatest != y.mutedInLatest ||
+          x.failingSince != y.failingSince ||
+          x.lastError != y.lastError) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   Stream<SourceRow?> watchById(int id) => (_db.select(
     _db.sources,
@@ -66,9 +94,15 @@ class SourceRepository {
         );
   }
 
+  /// Turning a source on is a fresh start: a feed that was abandoned after a
+  /// fortnight of silence gets its clock reset, so switching it back on is how
+  /// a reader asks for another go.
   Future<void> setEnabled(int id, {required bool enabled}) =>
       (_db.update(_db.sources)..where((s) => s.id.equals(id))).write(
-        SourcesCompanion(enabled: Value(enabled)),
+        SourcesCompanion(
+          enabled: Value(enabled),
+          failingSince: enabled ? const Value(null) : const Value.absent(),
+        ),
       );
 
   Future<void> setAccent(int id, SourceAccent accent) =>
@@ -118,16 +152,6 @@ class SourceRepository {
     return (_db.update(_db.sources)..where((s) => s.category.equals(from)))
         .write(SourcesCompanion(category: Value(name)));
   }
-
-  Future<void> reorder(List<int> idsInOrder) => _db.batch((b) {
-    for (var i = 0; i < idsInOrder.length; i++) {
-      b.update(
-        _db.sources,
-        SourcesCompanion(sortOrder: Value(i)),
-        where: (s) => s.id.equals(idsInOrder[i]),
-      );
-    }
-  });
 
   Future<void> remove(int id) =>
       (_db.delete(_db.sources)..where((s) => s.id.equals(id))).go();

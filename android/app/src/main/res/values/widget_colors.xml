@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Fallbacks below API 31; the app overwrites them from its own theme. -->
+    <color name="widget_bg">#FFF6F1EA</color>
+    <color name="widget_fg">#FF1B1B1B</color>
+    <color name="widget_fg2">#FF5C5C5C</color>
+    <color name="widget_accent">#FF791A18</color>
+</resources>

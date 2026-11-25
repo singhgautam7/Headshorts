@@ -106,25 +106,31 @@ class _GroupHeader extends StatelessWidget {
         selectable.every((s) => chosen.contains(s.feedUrl));
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.only(bottom: HsSpace.x1),
       child: Row(
         children: [
           Expanded(child: SectionLabel(category)),
           if (selectable.isNotEmpty)
             Pressable(
+              kind: PressKind.chip,
+              morphCorners: false,
+              haptic: true,
               onTap: () => onToggleCategory(category, selected: !allChosen),
               semanticLabel: allChosen
                   ? 'Clear $category'
                   : 'Select all in $category',
-              child: Padding(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: HsSpace.x2,
-                  vertical: HsSpace.x2,
-                ),
-                child: Text(
-                  allChosen ? 'Clear' : 'Select all',
-                  style: HsType.buttonSmall.copyWith(
-                    color: palette.textSecondary,
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(minHeight: HsSize.tapTarget),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: HsSpace.x2),
+                  child: Center(
+                    widthFactor: 1,
+                    child: Text(
+                      allChosen ? 'Clear' : 'Select all',
+                      style: HsType.buttonSmall.copyWith(
+                        color: palette.textSecondary,
+                      ),
+                    ),
                   ),
                 ),
               ),
@@ -161,36 +167,43 @@ class _PickerRow extends StatelessWidget {
               ? Border(bottom: BorderSide(color: palette.divider))
               : null,
         ),
-        child: SizedBox(
-          height: HsSize.rowHeight,
-          child: Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: source.accent.resolve(isDark: palette.isDark),
-                ),
-              ),
-              const SizedBox(width: 14),
-              Expanded(
-                child: Text(
-                  source.title,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: HsType.row.copyWith(
-                    color: selected
-                        ? palette.textPrimary
-                        : palette.textSecondary,
+        child: Pressable(
+          kind: PressKind.row,
+          enabled: !locked,
+          onTap: locked ? null : onToggle,
+          selected: selected,
+          semanticLabel: source.title,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: HsSize.rowHeight),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: source.accent.resolve(isDark: palette.isDark),
                   ),
                 ),
-              ),
-              HsToggle(
-                value: selected,
-                onChanged: locked ? null : (_) => onToggle(),
-              ),
-            ],
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Text(
+                    source.title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: HsType.row.copyWith(
+                      color: selected
+                          ? palette.textPrimary
+                          : palette.textSecondary,
+                    ),
+                  ),
+                ),
+                HsToggle(
+                  value: selected,
+                  onChanged: locked ? null : (_) => onToggle(),
+                ),
+              ],
+            ),
           ),
         ),
       ),

@@ -6,6 +6,7 @@ import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/shell.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/palette.dart';
+import 'package:headshorts/core/widgets/nav_pill.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -19,7 +20,8 @@ void main() {
     router = GoRouter(
       initialLocation: '/today',
       routes: [
-        StatefulShellRoute.indexedStack(
+        StatefulShellRoute(
+          navigatorContainerBuilder: appBranchContainer,
           builder: (context, state, shell) => AppShell(shell),
           branches: [
             // The v2 order, as the board's pill draws it.
@@ -131,6 +133,83 @@ void main() {
     await tester.fling(find.byType(AppShell), const Offset(-300, 0), 100);
     await tester.pumpAndSettle();
     expect(router.state.uri.path, '/today');
+  });
+
+  testWidgets('tapping the active tab scrolls its list to the top', (
+    tester,
+  ) async {
+    router = GoRouter(
+      initialLocation: '/sources',
+      routes: [
+        StatefulShellRoute(
+          navigatorContainerBuilder: appBranchContainer,
+          builder: (context, state, shell) => AppShell(shell),
+          branches: [
+            for (final tab in const [
+              'today',
+              'linger',
+              'sources',
+              'search',
+              'more',
+            ])
+              StatefulShellBranch(
+                routes: [
+                  GoRoute(
+                    path: '/$tab',
+                    builder: (context, state) => tab == 'sources'
+                        ? ListView.builder(
+                            itemCount: 100,
+                            itemBuilder: (_, i) =>
+                                SizedBox(height: 60, child: Text('row $i')),
+                          )
+                        : _Page(tab),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ],
+    );
+    await pump(tester);
+
+    await tester.drag(find.byType(ListView), const Offset(0, -1500));
+    await tester.pumpAndSettle();
+    final scrollable = tester.state<ScrollableState>(
+      find.descendant(
+        of: find.byType(ListView),
+        matching: find.byType(Scrollable),
+      ),
+    );
+    expect(scrollable.position.pixels, greaterThan(500));
+
+    await tester.tap(
+      find.descendant(of: find.byType(NavPill), matching: find.text('Sources')),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+    // On its way, not jumped.
+    expect(scrollable.position.pixels, greaterThan(0));
+    await tester.pumpAndSettle();
+    expect(scrollable.position.pixels, 0);
+    expect(router.state.uri.path, '/sources');
+  });
+
+  testWidgets('a warm tab builds after its idle slot, not before', (
+    tester,
+  ) async {
+    await tester.pumpWidget(
+      const Directionality(
+        textDirection: TextDirection.ltr,
+        child: TickerMode(
+          enabled: false,
+          child: WarmTab(branch: 2, slot: 0, child: Text('built')),
+        ),
+      ),
+    );
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(find.text('built'), findsNothing);
+    await tester.pump(const Duration(seconds: 2));
+    expect(find.text('built'), findsOneWidget);
   });
 }
 

@@ -1,17 +1,21 @@
 import 'package:flutter/cupertino.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
+import 'package:headshorts/core/tokens/motion.dart';
+import 'package:headshorts/core/widgets/app_header.dart';
 
 /// Pull to refresh, drawn the way the component sheet specifies.
 ///
 /// The ring traces with the finger and turns once per fetch — the single
 /// exception to the rule that nothing moves unless the reader moved it,
 /// because here the reader is literally holding it. It never spins idly.
-class PullToRefresh extends StatelessWidget {
+class PullToRefresh extends StatefulWidget {
   new({
     required this.onRefresh,
     required List<Widget> children,
     this.padding = EdgeInsets.zero,
+    this.controller,
     super.key,
   }) : delegate = SliverChildListDelegate(children);
 
@@ -19,70 +23,140 @@ class PullToRefresh extends StatelessWidget {
     required this.onRefresh,
     required NullableIndexedWidgetBuilder itemBuilder,
     int? itemCount,
+    ChildIndexGetter? findChildIndexCallback,
     this.padding = EdgeInsets.zero,
+    this.controller,
     super.key,
   }) : delegate = SliverChildBuilderDelegate(
          itemBuilder,
          childCount: itemCount,
+         // With keys on the rows, a refresh that prepends items moves the
+         // existing elements instead of re-binding each to the wrong row.
+         findChildIndexCallback: findChildIndexCallback,
        );
 
   final Future<void> Function() onRefresh;
   final SliverChildDelegate delegate;
   final EdgeInsets padding;
 
+  /// For a caller that scrolls the list itself ("back to the top").
+  final ScrollController? controller;
+
   static const _extent = 96.0;
 
   @override
-  Widget build(BuildContext context) => CustomScrollView(
-    physics: const BouncingScrollPhysics(
-      parent: AlwaysScrollableScrollPhysics(),
-    ),
-    slivers: [
-      CupertinoSliverRefreshControl(
-        refreshTriggerPullDistance: _extent,
-        refreshIndicatorExtent: 62,
-        onRefresh: onRefresh,
-        builder: (context, mode, pulled, trigger, indicatorExtent) =>
-            _Indicator(
-              mode: mode,
-              progress: (pulled / trigger).clamp(0.0, 1.0),
-              extent: indicatorExtent,
-            ),
-      ),
-      SliverPadding(
-        padding: padding,
-        sliver: SliverList(delegate: delegate),
-      ),
-    ],
-  );
+  State<PullToRefresh> createState() => _PullToRefreshState();
 }
 
-class _Indicator extends StatelessWidget {
-  const new({required this.mode, required this.progress, required this.extent});
+/// What the sliver is showing, handed to the ring drawn over the list.
+typedef _Pull = ({RefreshIndicatorMode mode, double progress, double pulled});
 
-  final RefreshIndicatorMode mode;
-  final double progress;
-  final double extent;
+class _PullToRefreshState extends State<PullToRefresh> {
+  static const _rest = (
+    mode: RefreshIndicatorMode.inactive,
+    progress: 0.0,
+    pulled: 0.0,
+  );
+
+  /// The ring is drawn here, over the list, rather than inside the sliver:
+  /// the sliver's region sits at the very top of the scroll view, which is
+  /// under the floating header. Drawn below the header's rest height it is
+  /// seen; the sliver only reports how far the reader has pulled.
+  final _pull = ValueNotifier<_Pull>(_rest);
+  _Pull? _pending;
+
+  @override
+  void dispose() {
+    _pull.dispose();
+    super.dispose();
+  }
+
+  /// Called from the sliver's builder, i.e. during layout, so the ring is
+  /// told after the frame rather than while it is being built.
+  void _report(_Pull next) {
+    if (_pending == next || (_pending == null && _pull.value == next)) return;
+    _pending = next;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending = _pending;
+      _pending = null;
+      if (mounted && pending != null) _pull.value = pending;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final inset = HeaderPage.insetOf(context);
+    return Stack(
+      children: [
+        NotificationListener<ScrollNotification>(
+          // Back at rest the sliver stops being laid out, so its last report
+          // is a sliver of a pull: without this a speck of ring stayed behind.
+          onNotification: (n) {
+            final m = _pull.value.mode;
+            if (n.depth == 0 &&
+                n.metrics.pixels >= 0 &&
+                m != RefreshIndicatorMode.refresh &&
+                m != RefreshIndicatorMode.armed) {
+              _report(_rest);
+            }
+            return false;
+          },
+          child: CustomScrollView(
+            controller: widget.controller,
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            slivers: [
+              CupertinoSliverRefreshControl(
+                refreshTriggerPullDistance: PullToRefresh._extent,
+                refreshIndicatorExtent: 62,
+                onRefresh: widget.onRefresh,
+                builder: (context, mode, pulled, trigger, indicatorExtent) {
+                  _report((
+                    mode: mode,
+                    progress: (pulled / trigger).clamp(0.0, 1.0),
+                    pulled: pulled,
+                  ));
+                  return const SizedBox.shrink();
+                },
+              ),
+              SliverPadding(
+                padding: widget.padding,
+                sliver: SliverList(delegate: widget.delegate),
+              ),
+            ],
+          ),
+        ),
+        Positioned(
+          top: inset,
+          left: 0,
+          right: 0,
+          child: IgnorePointer(
+            child: ValueListenableBuilder<_Pull>(
+              valueListenable: _pull,
+              builder: (context, pull, _) => _Indicator(pull: pull),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// The ring, centred in the room the pull has opened beneath the header.
+class _Indicator extends StatelessWidget {
+  const new({required this.pull});
+
+  final _Pull pull;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
+    final mode = pull.mode;
 
-    // rest — a plain rule, no ring at all.
-    if (mode == RefreshIndicatorMode.inactive || progress == 0) {
-      return SizedBox(
-        height: extent,
-        child: Center(
-          child: Container(
-            width: 26,
-            height: 2,
-            decoration: BoxDecoration(
-              color: palette.textMuted,
-              borderRadius: BorderRadius.circular(1),
-            ),
-          ),
-        ),
-      );
+    // At rest there is no ring at all.
+    if (mode == RefreshIndicatorMode.inactive || pull.progress == 0) {
+      return const SizedBox.shrink();
     }
 
     final fetching =
@@ -90,11 +164,11 @@ class _Indicator extends StatelessWidget {
         mode == RefreshIndicatorMode.armed;
 
     return SizedBox(
-      height: extent,
+      height: pull.pulled,
       child: Center(
         child: HsPullRing(
           color: fetching ? palette.textPrimary : palette.textSecondary,
-          progress: progress,
+          progress: pull.progress,
           spinning: mode == RefreshIndicatorMode.refresh,
         ),
       ),
@@ -122,20 +196,34 @@ class _HsPullRingState extends State<HsPullRing>
     with SingleTickerProviderStateMixin {
   late final AnimationController _turn = AnimationController(
     vsync: this,
-    duration: const Duration(milliseconds: 900),
+    duration: HsMotion.refreshTurn,
   );
 
-  @override
-  void didUpdateWidget(HsPullRing old) {
-    super.didUpdateWidget(old);
-    // One turn per fetch, then stop. Not a loop.
-    if (widget.spinning && !_turn.isAnimating) {
+  /// Turns only while a fetch is running, and only if the reader has not
+  /// switched motion off. The ticker is muted by [TickerMode] whenever the
+  /// list is off screen, so a hidden tab never spins it.
+  void _sync() {
+    final turn =
+        widget.spinning && HsMotion.levelOf(context) != MotionLevel.off;
+    if (turn && !_turn.isAnimating) {
       _turn.repeat();
-    } else if (!widget.spinning) {
+    } else if (!turn && (_turn.isAnimating || _turn.value != 0)) {
       _turn
         ..stop()
         ..value = 0;
     }
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _sync();
+  }
+
+  @override
+  void didUpdateWidget(HsPullRing old) {
+    super.didUpdateWidget(old);
+    _sync();
   }
 
   @override

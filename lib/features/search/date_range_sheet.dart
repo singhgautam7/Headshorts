@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart' show showDatePicker;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:headshorts/core/motion/expand_collapse.dart';
+import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
@@ -35,7 +37,7 @@ class _DateRangeSheetState extends ConsumerState<_DateRangeSheet> {
       firstDate: now.subtract(const Duration(days: 365 * 5)),
       lastDate: now,
     );
-    if (picked == null) return;
+    if (picked == null || !mounted) return;
     setState(() {
       _draft = SearchDateRange(
         DateRangePreset.between,
@@ -67,8 +69,8 @@ class _DateRangeSheetState extends ConsumerState<_DateRangeSheet> {
         // The two fields belong to "Between dates" and arrive with it. They
         // grow out from under the row that opened them rather than appearing
         // fully formed, so the sheet reads as one thing changing shape.
-        _Reveal(
-          visible: _draft.preset == DateRangePreset.between,
+        ExpandCollapse(
+          expanded: _draft.preset == DateRangePreset.between,
           child: Padding(
             padding: const EdgeInsets.only(top: HsSpace.x3),
             child: Row(
@@ -130,8 +132,8 @@ class _DateRangeSheetState extends ConsumerState<_DateRangeSheet> {
             ),
           ],
         ),
-        _Reveal(
-          visible:
+        ExpandCollapse(
+          expanded:
               _draft.preset == DateRangePreset.between && _draft.from == null,
           child: Padding(
             padding: const EdgeInsets.only(top: HsSpace.x3),
@@ -142,41 +144,6 @@ class _DateRangeSheetState extends ConsumerState<_DateRangeSheet> {
           ),
         ),
       ],
-    );
-  }
-}
-
-/// Grows a block in and out on the sheet's own clock.
-///
-/// Height and opacity together: a fade alone leaves the buttons below jumping
-/// a row, and a height change alone reads as a glitch. Under the OS's
-/// reduced-motion setting both collapse to the short fade, as everything
-/// else here does.
-class _Reveal extends StatelessWidget {
-  const new({required this.visible, required this.child});
-
-  final bool visible;
-  final Widget child;
-
-  @override
-  Widget build(BuildContext context) {
-    final duration = HsMotion.of(context, HsMotion.tabSlide);
-    final curve = HsMotion.curveOf(context, HsMotion.tabSlideCurve);
-
-    return AnimatedSize(
-      duration: duration,
-      curve: curve,
-      alignment: Alignment.topCenter,
-      child: AnimatedOpacity(
-        opacity: visible ? 1 : 0,
-        duration: duration,
-        curve: curve,
-        child: visible
-            ? child
-            // Zero height, not merely transparent: the sheet must give the
-            // room back when the fields go.
-            : const SizedBox(width: double.infinity, height: 0),
-      ),
     );
   }
 }
@@ -199,17 +166,20 @@ class _PresetRow extends StatelessWidget {
     final palette = context.hs;
     return Semantics(
       inMutuallyExclusiveGroup: true,
-      selected: selected,
       child: Pressable(
+        kind: PressKind.row,
+        haptic: true,
         onTap: onTap,
+        selected: selected,
+        semanticLabel: preset.label,
         child: DecoratedBox(
           decoration: BoxDecoration(
             border: showDivider
                 ? Border(bottom: BorderSide(color: palette.divider))
                 : null,
           ),
-          child: SizedBox(
-            height: 52,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: HsSize.tapTarget),
             child: Row(
               children: [
                 Expanded(
@@ -229,8 +199,8 @@ class _PresetRow extends StatelessWidget {
   }
 }
 
-/// The board's radio: a 20dp ring that fills to a 6dp-thick ink annulus when
-/// chosen. Ink, not accent — the control belongs to the reader.
+/// The board's radio: a 20dp ring with an ink dot that springs in when
+/// chosen. Ink, not accent: the control belongs to the reader.
 class _Radio extends StatelessWidget {
   const new({required this.selected});
 
@@ -239,16 +209,36 @@ class _Radio extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    return Container(
-      width: 20,
-      height: 20,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(
-          color: selected ? palette.textPrimary : palette.stroke,
-          width: selected ? 6 : 1.6,
-        ),
-      ),
+    final level = HsMotion.levelOf(context);
+    final curve = HsMotion.spatialCurve(level, HsMotion.fastCurve);
+    final off = level == MotionLevel.off;
+    return TweenAnimationBuilder<double>(
+      tween: Tween(end: selected ? 1 : 0),
+      duration: off ? HsMotion.fxInstant : curve.settle,
+      curve: off ? HsMotion.curveEffects : curve,
+      builder: (context, k, _) {
+        final c = k.clamp(0.0, 1.0);
+        return Container(
+          width: 20,
+          height: 20,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: Color.lerp(palette.stroke, palette.textPrimary, c)!,
+              width: 1.6,
+            ),
+          ),
+          child: Container(
+            width: 10 * k.clamp(0.0, 1.3),
+            height: 10 * k.clamp(0.0, 1.3),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: palette.textPrimary.withValues(alpha: c),
+            ),
+          ),
+        );
+      },
     );
   }
 }
@@ -264,6 +254,7 @@ class _DateField extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.hs;
     return Pressable(
+      kind: PressKind.row,
       onTap: onTap,
       semanticLabel: '$label, $value',
       child: Container(

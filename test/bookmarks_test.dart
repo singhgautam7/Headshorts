@@ -60,7 +60,12 @@ void main() {
       expect(row.title, 'Rail operators trial a single tap-in fare cap');
       expect(row.sourceTitle, 'BBC News');
       expect(row.language, 'en');
-      expect(row.contentHtml, contains('extracted body'));
+      // The list carries no body; opening the bookmark does.
+      expect(row.contentHtml, isNull);
+      expect(
+        (await bookmarks.byId(row.id))!.contentHtml,
+        contains('extracted'),
+      );
       expect(row.accentDark, isNonZero);
       expect(row.link, 'https://example.com/a');
     },
@@ -136,7 +141,7 @@ void main() {
     expect(await db.select(db.articles).get(), isEmpty);
     final row = (await bookmarks.watchAll().first).single;
     expect(row.title, 'A saved headline whose source is about to go');
-    expect(row.contentHtml, isNotNull);
+    expect((await bookmarks.byId(row.id))!.contentHtml, isNotNull);
   });
 
   test('removing and undoing puts it back exactly as it was', () async {
@@ -147,8 +152,11 @@ void main() {
     await bookmarks.removeById(row.id);
     expect(await bookmarks.watchAll().first, isEmpty);
 
+    // The list row carries no body, yet Undo must not lose it.
     await bookmarks.restore(row);
-    expect((await bookmarks.watchAll().first).single.title, row.title);
+    final back = (await bookmarks.watchAll().first).single;
+    expect(back.title, row.title);
+    expect((await bookmarks.byId(back.id))!.contentHtml, contains('extracted'));
   });
 
   test(
