@@ -1,8 +1,10 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:headshorts/app/providers.dart';
 import 'package:headshorts/app/settings_controller.dart';
+import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/feed/refresh_service.dart';
 
 /// A reader who has been away longer than this is told, once, that the feeds
@@ -38,7 +40,12 @@ class RefreshController extends Notifier<RefreshProgress> {
     if (cadence == null) return;
 
     final sources = await ref.read(sourceRepositoryProvider).enabled();
-    final working = sources.where((s) => s.failingSince == null).toList();
+    var working = sources.where((s) => s.failingSince == null).toList();
+    // All of them failing is what being offline looks like, not a reason to
+    // stop trying.
+    if (working.isEmpty) {
+      working = sources.where((s) => !s.isAbandoned).toList();
+    }
     if (working.isEmpty) return;
     // A source never fetched is as stale as it gets.
     final stamps = [for (final s in working) s.lastFetchedAt]
@@ -53,6 +60,7 @@ class RefreshController extends Notifier<RefreshProgress> {
   /// only sees its own writes, so wake the streams first.
   Future<void> onResume() async {
     ref.read(databaseProvider).notifyExternalWrite();
+    ref.invalidate(lastUpdatedProvider);
     await refreshIfDue();
   }
 
@@ -77,7 +85,13 @@ class RefreshController extends Notifier<RefreshProgress> {
     Completer<void> completer, {
     required bool explicit,
   }) async {
-    final away = await _wasAway();
+    var away = false;
+    try {
+      away = await _wasAway();
+    } on Object catch (e) {
+      // Only decides a line of copy; it must never hold up the fetch.
+      debugPrint('refresh: could not read the last fetch: $e');
+    }
 
     void finish() {
       if (!completer.isCompleted) completer.complete();

@@ -335,7 +335,20 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
       return const _MissingStory();
     }
     if (doc == null) {
-      return ColoredBox(color: palette.background, child: const SizedBox());
+      return ColoredBox(
+        color: palette.background,
+        child: const SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              HsSpace.x5,
+              HsSize.appBarHeight,
+              HsSpace.x5,
+              0,
+            ),
+            child: _BodySkeleton(),
+          ),
+        ),
+      );
     }
 
     final accentTone = doc.accent;

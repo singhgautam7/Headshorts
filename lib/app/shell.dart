@@ -46,6 +46,8 @@ class _AppShellState extends ConsumerState<AppShell> {
       // A swipe changes the tab without going through the pill, so the pill
       // is brought back here. After the frame: a provider must not change
       // while the tree is building.
+      // A fling on the page left behind is muted and never reports its end.
+      HsHaptics.scrolling = false;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) ref.read(navVisibilityProvider.notifier).show();
       });

@@ -40,6 +40,15 @@ void main() {
       );
     });
 
+    test('a Paper saved as the old default moves to Signature once', () async {
+      SharedPreferences.setMockInitialValues({'familyId': 'paper'});
+      final prefs = await SharedPreferences.getInstance();
+      final old = SettingsStore(prefs);
+      expect(old.read().familyId, 'signature');
+      await old.write(old.read().copyWith(familyId: 'paper'));
+      expect(old.read().familyId, 'paper', reason: 'picked again, it sticks');
+    });
+
     test('a stored family and wallpaper seed survive a restart', () async {
       final written = await store();
       await written.write(

@@ -25,8 +25,10 @@ Future<T?> _call<T>(String method, [Object? args]) async {
   }
 }
 
-/// Asks the home screen widgets to redraw from the database.
-Future<void> notifyHomeWidgets() => _call<void>('update');
+/// Asks the home screen widgets to redraw from the database. [fetched] when a
+/// refresh just finished, which clears any earlier failure they were showing.
+Future<void> notifyHomeWidgets({bool fetched = false}) =>
+    _call<void>('update', fetched);
 
 /// Ids of the widgets currently placed on a home screen.
 Future<List<int>> placedHomeWidgets() async =>
@@ -97,7 +99,7 @@ class HomeWidgetBridge with WidgetsBindingObserver {
     _ref
       ..onDispose(() => WidgetsBinding.instance.removeObserver(this))
       ..listen(refreshProvider.select((p) => p.finished), (_, finished) {
-        if (finished) unawaited(notifyHomeWidgets());
+        if (finished) unawaited(notifyHomeWidgets(fetched: true));
       })
       ..listen(
         settingsProvider.select(

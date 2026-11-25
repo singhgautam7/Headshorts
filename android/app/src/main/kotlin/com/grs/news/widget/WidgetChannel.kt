@@ -23,8 +23,8 @@ object WidgetChannel {
             val component = ComponentName(activity, HeadlinesWidgetProvider::class.java)
             when (call.method) {
                 "update" -> {
-                    // The app just finished a fetch: any earlier failure is stale.
-                    WidgetPrefs.setError(activity, "")
+                    // After a fetch any earlier failure is stale; a theme push says nothing about it.
+                    if (call.arguments == true) WidgetPrefs.setError(activity, "")
                     HeadlinesWidgetProvider.updateAll(activity)
                     result.success(null)
                 }

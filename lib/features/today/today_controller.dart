@@ -204,13 +204,21 @@ class TodayPagination extends Notifier<TodayPage> {
     _loading = true;
 
     final scope = ref.read(briefingScopeProvider);
-    final next = await ref
-        .read(articleRepositoryProvider)
-        .nextFloor(
-          category: scope.category,
-          mutedSourceIds: scope.muted,
-          floor: state.floor,
-        );
+    final ArticleCursor? next;
+    try {
+      next = await ref
+          .read(articleRepositoryProvider)
+          .nextFloor(
+            category: scope.category,
+            mutedSourceIds: scope.muted,
+            floor: state.floor,
+            ceiling: ref.read(todayHeldProvider),
+          );
+    } finally {
+      _loading = false;
+    }
+    // A filter applied meanwhile is another list; this floor is not its.
+    if (!ref.mounted || scope != ref.read(briefingScopeProvider)) return;
 
     if (next == null && state.floor == null) {
       // Nothing below a window that has not been opened yet. That is an empty
@@ -221,7 +229,6 @@ class TodayPagination extends Notifier<TodayPage> {
     } else {
       state = TodayPage(floor: next);
     }
-    _loading = false;
   }
 }
 

@@ -286,6 +286,7 @@ class SettingsStore {
   final SharedPreferences _prefs;
 
   static const _familyId = 'familyId';
+  static const _signatureDefault = 'signatureDefault';
   static const _themeMode = 'themeMode';
   static const _amoled = 'amoled';
 
@@ -315,7 +316,7 @@ class SettingsStore {
   Settings read() {
     const fallback = Settings();
     return Settings(
-      familyId: _prefs.getString(_familyId) ?? fallback.familyId,
+      familyId: _readFamily(fallback.familyId),
       themeMode:
           ThemeMode.values.asNameMap()[_prefs.getString(_themeMode)] ??
           switch (_prefs.getString(_legacyTheme)) {
@@ -373,7 +374,18 @@ class SettingsStore {
     );
   }
 
+  /// Signature replaced Paper as the default. Every install that ever saved
+  /// anything has `paper` written down whether or not it was chosen, so it is
+  /// moved over once; picking Paper again after that sticks.
+  String _readFamily(String fallback) {
+    final stored = _prefs.getString(_familyId);
+    if (stored == null) return fallback;
+    final moved = _prefs.getBool(_signatureDefault) ?? false;
+    return stored == 'paper' && !moved ? fallback : stored;
+  }
+
   Future<void> write(Settings s) async {
+    await _prefs.setBool(_signatureDefault, true);
     await _prefs.setString(_familyId, s.familyId);
     await _prefs.setString(_themeMode, s.themeMode.name);
     await _prefs.setBool(_amoled, s.amoled);

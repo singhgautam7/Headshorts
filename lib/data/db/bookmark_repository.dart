@@ -15,9 +15,9 @@ class BookmarkRepository {
 
   final HsDatabase _db;
 
-  /// The body of the bookmark most recently removed, so Undo can put it back.
-  /// The list below does not carry bodies, so the row Undo is handed has none.
-  static (String link, String? html)? _lastRemoved;
+  /// Bodies of bookmarks removed this session, so Undo can put them back: the
+  /// list below does not carry bodies, so the row Undo is handed has none.
+  static final _removed = <String, String?>{};
 
   /// Most recently saved first — the order the list is in.
   ///
@@ -149,15 +149,14 @@ class BookmarkRepository {
     SimpleSelectStatement<$BookmarksTable, BookmarkRow> q,
   ) async {
     final row = await q.getSingleOrNull();
-    _lastRemoved = row == null ? null : (row.link, row.contentHtml);
+    if (row != null) _removed[row.link] = row.contentHtml;
   }
 
   /// Puts a removed row back exactly as it was — what Undo calls.
   Future<void> restore(BookmarkRow row) {
-    final kept = _lastRemoved;
-    final restored =
-        row.contentHtml == null && kept != null && kept.$1 == row.link
-        ? row.copyWith(contentHtml: Value(kept.$2))
+    final kept = _removed.remove(row.link);
+    final restored = row.contentHtml == null && kept != null
+        ? row.copyWith(contentHtml: Value(kept))
         : row;
     return _db.into(_db.bookmarks).insertOnConflictUpdate(restored);
   }

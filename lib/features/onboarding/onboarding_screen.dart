@@ -39,6 +39,7 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   /// The pager's controller and page. Kept here so Android back can step
   /// through the pages, and recreated on the way back from the picker so the
   /// pager reopens on the setup page rather than the first.
+  final _retired = <PageController>[];
   PageController _pages = PageController();
   var _page = 0;
   final _chosen = <String>{};
@@ -52,6 +53,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
   @override
   void dispose() {
     _pages.dispose();
+    for (final c in _retired) {
+      c.dispose();
+    }
     super.dispose();
   }
 
@@ -74,7 +78,9 @@ class _OnboardingScreenState extends ConsumerState<OnboardingScreen> {
       case _Step.intro:
         _goTo(_page - 1);
       case _Step.pick:
-        _pages.dispose();
+        // Kept until the screen goes: a quick back can arrive while the
+        // outgoing pager is still mounted on it.
+        _retired.add(_pages);
         setState(() {
           _pages = PageController(initialPage: OnboardingIntro.setupIndex);
           _step = _Step.intro;

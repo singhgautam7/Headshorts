@@ -54,9 +54,4 @@ abstract final class HsHaptics {
   static void confirm() {
     if (_allow()) HapticFeedback.lightImpact();
   }
-
-  /// An action failed.
-  static void reject() {
-    if (_allow()) HapticFeedback.heavyImpact();
-  }
 }

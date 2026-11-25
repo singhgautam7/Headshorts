@@ -18,10 +18,6 @@ abstract final class HsMotion {
   static const micro = Duration(milliseconds: 150);
   static const microCurve = decelerate;
 
-  /// Active tab label growing into its pill.
-  static const navMorph = Duration(milliseconds: 220);
-  static const navMorphCurve = spring;
-
   /// The pill sliding out of the way on scroll, and back.
   static const navHide = Duration(milliseconds: 280);
   static const navHideCurve = Curves.easeInOutCubic;

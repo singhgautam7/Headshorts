@@ -130,6 +130,31 @@ void main() {
       );
     });
 
+    test('a page turn under a held head never shrinks the list', () async {
+      await seed(200);
+      final c = container();
+      c.listen(briefingProvider, (_, _) {});
+      await settle();
+      final head = c.read(briefingProvider).requireValue.first.article;
+      c
+          .read(todayHeldProvider.notifier)
+          .hold(ArticleCursor(head.publishedAt, head.id));
+      // Sixty newer items arrive while the reader is down the list.
+      final now = DateTime.now();
+      await articles.upsert(sourceId, [
+        for (var i = 1000; i < 1060; i++)
+          _article(i, at: now.subtract(Duration(seconds: i - 999))),
+      ]);
+      await settle();
+      final held = c.read(briefingProvider).requireValue.length;
+
+      await c.read(todayPaginationProvider.notifier).loadMore();
+      await settle();
+      final after = c.read(briefingProvider).requireValue;
+      expect(after.length, greaterThanOrEqualTo(held));
+      expect(after.first.article.id, head.id);
+    });
+
     test(
       'the scope is the same across a page turn and new across a filter',
       () async {
@@ -369,6 +394,18 @@ void main() {
       await c.read(refreshProvider.notifier).refreshIfDue();
       expect(counter.calls, 0);
     });
+
+    test(
+      'every source failing is being offline, not a reason to stop',
+      () async {
+        await fetched(2, failing: true);
+        final counter = _Counter();
+        final c = withAdapter(counter);
+
+        await c.read(refreshProvider.notifier).refreshIfDue();
+        expect(counter.calls, greaterThan(0));
+      },
+    );
 
     test('onResume wakes the streams, then refreshes if due', () async {
       await seed(3);

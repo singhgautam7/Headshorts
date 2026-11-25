@@ -6,7 +6,6 @@
 /// ticker at rest.
 library;
 
-export 'animated_list.dart';
 export 'animated_weight.dart';
 export 'cross_fade.dart';
 export 'expand_collapse.dart';

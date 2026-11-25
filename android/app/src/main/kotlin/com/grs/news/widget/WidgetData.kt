@@ -70,11 +70,12 @@ object WidgetData {
 
     private fun open(file: File): SQLiteDatabase? {
         val path = file.path
-        for (flags in intArrayOf(SQLiteDatabase.OPEN_READONLY, SQLiteDatabase.OPEN_READWRITE)) {
+        for (flags in intArrayOf(SQLiteDatabase.OPEN_READONLY, SQLiteDatabase.OPEN_READWRITE or SQLiteDatabase.ENABLE_WRITE_AHEAD_LOGGING)) {
             try {
                 return SQLiteDatabase.openDatabase(path, null, flags or SQLiteDatabase.NO_LOCALIZED_COLLATORS)
             } catch (_: Exception) {
-                // A read-only open of a WAL file can fail without its -shm; retry read-write.
+                // A read-only open of a WAL file can fail without its -shm; retry read-write,
+                // still in WAL mode: without the flag Android switches the file's journal mode.
             }
         }
         return null

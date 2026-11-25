@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:drift/drift.dart';
 import 'package:flutter/foundation.dart' show immutable;
 import 'package:headshorts/core/util/canonical_url.dart';
@@ -237,6 +239,7 @@ class ArticleRepository {
     Set<int>? sourceIds,
     Set<int>? mutedSourceIds,
     ArticleCursor? floor,
+    ArticleCursor? ceiling,
     int pageSize = todayPageSize,
   }) async {
     final query = _scoped(
@@ -245,6 +248,9 @@ class ArticleRepository {
       mutedSourceIds: mutedSourceIds,
       keysOnly: true,
     );
+    // A held list starts at its ceiling: counting newer rows would put the
+    // floor inside the window and shrink it.
+    if (ceiling != null) query.where(_atOrBelow(ceiling));
     if (floor == null) {
       // The first window is over-fetched to `pageSize * 2` (see
       // [watchBriefing]). The first floor lies one page below that, or the
@@ -545,7 +551,9 @@ class ArticleRepository {
     // refresh to compare it was the most expensive thing the refresh did.
     final a = _db.articles;
     const bodyLength = CustomExpression<int>(
-      'coalesce(length(articles.full_content_html), 0)',
+      // Bytes: length() of text counts characters, Dart counts UTF-16
+      // units, and one emoji would make every refresh a rewrite.
+      'coalesce(length(CAST(articles.full_content_html AS BLOB)), 0)',
     );
     final existing =
         await (_db.selectOnly(a)
@@ -611,7 +619,8 @@ class ArticleRepository {
             (item.author != null && item.author != prior.read(a.author)) ||
             (item.imageUrl != null &&
                 item.imageUrl != prior.read(a.imageUrl)) ||
-            (body != null && body.length != prior.read(bodyLength));
+            (body != null &&
+                utf8.encode(body).length != prior.read(bodyLength));
         if (!changed) continue;
 
         batch.update(

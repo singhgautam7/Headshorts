@@ -14,12 +14,6 @@ AnimationStyle sheetStyle(BuildContext context) => _style(
   reverse: HsMotion.standardCurve,
 );
 
-/// `animationStyle:` for showDialog at the current level. Expressive:
-/// springDefault clamped, out on the same. Subtle: springSubtle. Off: 90 ms.
-/// (Flutter's dialog transition is a fade; there is no scale hook.)
-AnimationStyle dialogStyle(BuildContext context) =>
-    _style(HsMotion.levelOf(context), HsMotion.defaultCurve);
-
 AnimationStyle _style(
   MotionLevel level,
   SpringCurve spring, {

@@ -287,7 +287,7 @@ class _LatestChip extends StatelessWidget {
       onTap: onTap,
       semanticLabel: 'Show latest stories',
       child: Container(
-        height: HsSize.navItem,
+        height: HsSize.tapTarget,
         alignment: Alignment.center,
         child: Container(
           height: 32,
@@ -488,7 +488,7 @@ class _ListSizeButton extends ConsumerWidget {
           },
           semanticLabel: 'Change view, ${size.label}',
           child: SizedBox(
-            height: HsSize.navItem,
+            height: HsSize.tapTarget,
             child: Center(
               child: Container(
                 width: 32,
@@ -530,7 +530,7 @@ class _ScopePill extends StatelessWidget {
       onTap: onTap,
       semanticLabel: 'Filter headlines',
       child: Container(
-        height: HsSize.navItem,
+        height: HsSize.tapTarget,
         alignment: Alignment.center,
         child: Container(
           height: 32,

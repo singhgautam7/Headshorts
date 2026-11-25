@@ -99,6 +99,7 @@ class HsIconButton extends StatelessWidget {
 
     button = Tooltip(
       message: semanticLabel,
+      excludeFromSemantics: true,
       triggerMode: TooltipTriggerMode.longPress,
       child: button,
     );
