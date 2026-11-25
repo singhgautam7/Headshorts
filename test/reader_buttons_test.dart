@@ -204,7 +204,7 @@ void main() {
       await open(tester);
       // The barrier is what the finger lands on; the drag closes it.
       await tester.drag(
-        find.byType(ListView),
+        find.byType(CustomScrollView),
         const Offset(0, -200),
         warnIfMissed: false,
       );

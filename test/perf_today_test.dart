@@ -132,8 +132,7 @@ void main() {
 
     test('a page turn under a held head never shrinks the list', () async {
       await seed(200);
-      final c = container();
-      c.listen(briefingProvider, (_, _) {});
+      final c = container()..listen(briefingProvider, (_, _) {});
       await settle();
       final head = c.read(briefingProvider).requireValue.first.article;
       c

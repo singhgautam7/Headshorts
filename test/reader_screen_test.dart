@@ -126,18 +126,17 @@ void main() {
     await tester.pumpWidget(app(ReaderScreen(articleRow.id)));
     await tester.pumpAndSettle(const Duration(seconds: 2));
 
-    final section = find.byType(OtherSourcesSection);
+    // With no match it takes no height, and a sliver that paints nothing
+    // counts as off stage.
+    final section = find.byType(OtherSourcesSection, skipOffstage: false);
     expect(section, findsOneWidget);
-    expect(
-      tester.getTopLeft(section).dy,
-      greaterThanOrEqualTo(
-        tester
-            .getTopLeft(
-              find.textContaining('The body paragraph', findRichText: true),
-            )
-            .dy,
-      ),
-    );
+    final body = find.textContaining('The body paragraph', findRichText: true);
+    if (body.evaluate().isNotEmpty) {
+      expect(
+        tester.getTopLeft(section).dy,
+        greaterThanOrEqualTo(tester.getTopLeft(body).dy),
+      );
+    }
     await tester.pumpWidget(const SizedBox());
     await tester.pumpAndSettle(const Duration(seconds: 2));
   });

@@ -26,8 +26,8 @@ import 'package:headshorts/features/sources/sources_screen.dart';
 import 'package:headshorts/features/stats/stats_screen.dart';
 import 'package:headshorts/features/today/today_screen.dart';
 
-/// Every pushed page: a container-transform-shaped push on [HsMotion.page].
-/// Expressive: the page fades in and scales up from 96% on the spring.
+/// Every pushed page, on [HsMotion.page].
+/// Expressive: the page fades in and slides over a short way from the end.
 /// Subtle: a fade with a small rise that never overshoots. Off: a 90 ms fade.
 /// The pop plays the same animation backwards on the same clock.
 Page<void> _page(Widget child) => _HsPage(child);
@@ -138,15 +138,15 @@ class _HsRoute extends PageRoute<void> {
         child: FadeTransition(opacity: curved, child: page),
       );
     }
-    return FadeTransition(
-      opacity: curved,
-      child: ScaleTransition(
-        scale: Tween<double>(
-          begin: 0.96,
-          end: 1,
-        ).animate(CurvedAnimation(parent: animation, curve: HsMotion.spring)),
-        child: page,
-      ),
+    // A slide, not a scale: text under a changing scale is rasterised again at
+    // every step, which cost over 100 ms a frame on the way back from a long
+    // article.
+    return SlideTransition(
+      position: Tween(
+        begin: const Offset(0.06, 0),
+        end: Offset.zero,
+      ).animate(curved),
+      child: FadeTransition(opacity: curved, child: page),
     );
   }
 }

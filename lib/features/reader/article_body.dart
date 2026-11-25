@@ -24,6 +24,7 @@ class ArticleBody extends StatelessWidget {
     required this.articleUrl,
     required this.bodySize,
     required this.linkMode,
+    this.asSliver = false,
     super.key,
   });
 
@@ -40,6 +41,10 @@ class ArticleBody extends StatelessWidget {
   /// Where a tapped link goes — a Custom Tab, or the reader's own browser.
   final LinkOpenMode linkMode;
 
+  /// Laid out lazily, block by block, inside a `CustomScrollView`. A long
+  /// article built as one column is the slowest frame in the app.
+  final bool asSliver;
+
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
@@ -55,6 +60,8 @@ class ArticleBody extends StatelessWidget {
           HsType.readerBody(bodySize),
           html,
         ).copyWith(color: palette.textPrimary),
+        renderMode: asSliver ? RenderMode.sliverList : RenderMode.column,
+        rebuildTriggers: [bodySize, palette, accent],
         onTapUrl: (url) => openInWeb(
           // A relative href that survived the cleaner is resolved here rather
           // than handed to the browser as-is.

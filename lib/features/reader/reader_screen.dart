@@ -410,88 +410,99 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
                           _onScroll(notification);
                           return false;
                         },
-                        child: ListView(
+                        // Slivers, so the body is laid out as it is reached.
+                        child: CustomScrollView(
                           controller: _scroll,
-                          padding: const EdgeInsets.fromLTRB(
-                            HsSpace.x5,
-                            0,
-                            HsSpace.x5,
-                            HsSpace.navClearance + 20,
-                          ),
-                          children: [
-                            HeaderPage.gap(),
-                            const SizedBox(height: HsSpace.x2),
-                            Text(
-                              doc.title,
-                              textDirection: textDirectionOf(doc.title),
-                              style: HsType.forText(
-                                HsType.readerTitle,
-                                doc.title,
-                              ).copyWith(color: palette.textPrimary),
-                            ),
-                            // The feed's summary is the publisher's
-                            // standfirst — The Hindu's `sub-title`, NDTV's
-                            // `sp-descp` — and sits under the headline as it
-                            // does on their page, unless the body opens with
-                            // the same words, when it would only repeat.
-                            if (_standfirstText case final dek?) ...[
-                              const SizedBox(height: 14),
-                              Text(
-                                dek,
-                                textDirection: textDirectionOf(dek),
-                                style: HsType.forText(
-                                  HsType.readerStandfirst,
-                                  dek,
-                                ).copyWith(color: palette.textSecondary),
+                          slivers: [
+                            _padded(
+                              SliverList.list(
+                                children: [
+                                  HeaderPage.gap(),
+                                  const SizedBox(height: HsSpace.x2),
+                                  Text(
+                                    doc.title,
+                                    textDirection: textDirectionOf(doc.title),
+                                    style: HsType.forText(
+                                      HsType.readerTitle,
+                                      doc.title,
+                                    ).copyWith(color: palette.textPrimary),
+                                  ),
+                                  // The feed's summary is the publisher's
+                                  // standfirst — The Hindu's `sub-title`, NDTV's
+                                  // `sp-descp` — and sits under the headline as it
+                                  // does on their page, unless the body opens with
+                                  // the same words, when it would only repeat.
+                                  if (_standfirstText case final dek?) ...[
+                                    const SizedBox(height: 14),
+                                    Text(
+                                      dek,
+                                      textDirection: textDirectionOf(dek),
+                                      style: HsType.forText(
+                                        HsType.readerStandfirst,
+                                        dek,
+                                      ).copyWith(color: palette.textSecondary),
+                                    ),
+                                  ],
+                                  const SizedBox(height: 18),
+                                  _Attribution(
+                                    doc: doc,
+                                    minutes: switch (extraction.value) {
+                                      final ExtractedArticle a => a.minutes,
+                                      _ => null,
+                                    },
+                                  ),
+                                  const SizedBox(height: 18),
+                                  const HsDivider(),
+                                  const SizedBox(height: 18),
+                                ],
                               ),
-                            ],
-                            const SizedBox(height: 18),
-                            _Attribution(
-                              doc: doc,
-                              minutes: switch (extraction.value) {
-                                final ExtractedArticle a => a.minutes,
-                                _ => null,
-                              },
                             ),
-                            const SizedBox(height: 18),
-                            const HsDivider(),
-                            const SizedBox(height: 18),
                             // While it reads, the plain-text listen view
                             // stands in for the rendered body: the engine
                             // reports a word as a range in the string it was
                             // given, so that string has to be what is drawn.
                             if (listenActive)
-                              ListenView(
-                                language: doc.language,
-                                accent: accent,
-                                bodySize: textSize.fontSize,
-                                spokenKey: _spokenKey,
-                                highlightWords: ref.watch(
-                                  settingsProvider.select(
-                                    (s) => s.highlightWords,
+                              _padded(
+                                SliverToBoxAdapter(
+                                  child: ListenView(
+                                    language: doc.language,
+                                    accent: accent,
+                                    bodySize: textSize.fontSize,
+                                    spokenKey: _spokenKey,
+                                    highlightWords: ref.watch(
+                                      settingsProvider.select(
+                                        (s) => s.highlightWords,
+                                      ),
+                                    ),
                                   ),
                                 ),
                               )
+                            // Flat skeleton while the page slides in and the
+                            // body is parsed; the article fades in over it.
+                            else if (bodyLoading)
+                              _padded(
+                                const SliverToBoxAdapter(
+                                  child: _BodySkeleton(),
+                                ),
+                              )
                             else
-                              // Flat skeleton while the page slides in and the
-                              // body is parsed; the article fades in over it.
-                              SkeletonCrossFade(
-                                loading: bodyLoading,
-                                placeholder: const _BodySkeleton(),
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.stretch,
-                                  children: [
+                              _FadeInSliver(
+                                sliver: SliverMainAxisGroup(
+                                  slivers: [
                                     // The feed's picture, unless the body
                                     // carries it — the publisher's own figure
                                     // keeps its caption and its place.
                                     if (doc.imageUrl != null &&
                                         !_bodyCarriesLead)
-                                      _LeadImage(
-                                        url: doc.imageUrl!,
-                                        articleUrl: doc.link,
+                                      _padded(
+                                        SliverToBoxAdapter(
+                                          child: _LeadImage(
+                                            url: doc.imageUrl!,
+                                            articleUrl: doc.link,
+                                          ),
+                                        ),
                                       ),
-                                    ..._body(
+                                    for (final sliver in _body(
                                       context,
                                       failed
                                           ? const ThinExtraction(
@@ -502,10 +513,16 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
                                                 const ThinExtraction(''),
                                       textSize,
                                       doc,
-                                    ),
+                                    ))
+                                      _padded(sliver),
                                   ],
                                 ),
                               ),
+                            const SliverToBoxAdapter(
+                              child: SizedBox(
+                                height: HsSpace.navClearance + 20,
+                              ),
+                            ),
                           ],
                         ),
                       ),
@@ -742,12 +759,18 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
             articleUrl: doc.link,
             bodySize: size.fontSize,
             linkMode: linkMode,
+            asSliver: true,
           ),
-          const SizedBox(height: HsSpace.x6),
-          _OriginalSourceCard(doc: doc),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.only(top: HsSpace.x6),
+              child: _OriginalSourceCard(doc: doc),
+            ),
+          ),
           // Other publishers' takes on the same story: the end of the full
           // text, cached articles only. Renders nothing when there are none.
-          if (doc.articleId case final id?) OtherSourcesSection(id),
+          if (doc.articleId case final id?)
+            SliverToBoxAdapter(child: OtherSourcesSection(id)),
         ];
       }(),
       ThinExtraction(:final reason) => _thinView(context, reason, doc),
@@ -761,38 +784,40 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     final author = doc.author?.trim();
 
     return [
-      Container(
-        padding: const EdgeInsets.all(18),
-        decoration: BoxDecoration(
-          color: palette.surface,
-          border: Border.all(color: palette.stroke),
-          borderRadius: HsRadius.cardBorder,
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Text(
-              'That is all this feed gives us',
-              style: HsType.statTitle.copyWith(color: palette.textPrimary),
-            ),
-            const SizedBox(height: HsSpace.x2),
-            Text(
-              'Source: ${doc.sourceTitle}'
-              '${author != null && author.isNotEmpty ? ' · By $author' : ''}',
-              style: HsType.rowSub.copyWith(color: palette.textSecondary),
-            ),
-            const SizedBox(height: HsSpace.x2),
-            Text(
-              '$reason The rest is on their page.',
-              style: HsType.note.copyWith(color: palette.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            HsButton(
-              'Open in web',
-              onPressed: () => unawaited(openInWeb(doc.link)),
-              height: HsSize.buttonSmall,
-            ),
-          ],
+      SliverToBoxAdapter(
+        child: Container(
+          padding: const EdgeInsets.all(18),
+          decoration: BoxDecoration(
+            color: palette.surface,
+            border: Border.all(color: palette.stroke),
+            borderRadius: HsRadius.cardBorder,
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'That is all this feed gives us',
+                style: HsType.statTitle.copyWith(color: palette.textPrimary),
+              ),
+              const SizedBox(height: HsSpace.x2),
+              Text(
+                'Source: ${doc.sourceTitle}'
+                '${author != null && author.isNotEmpty ? ' · By $author' : ''}',
+                style: HsType.rowSub.copyWith(color: palette.textSecondary),
+              ),
+              const SizedBox(height: HsSpace.x2),
+              Text(
+                '$reason The rest is on their page.',
+                style: HsType.note.copyWith(color: palette.textSecondary),
+              ),
+              const SizedBox(height: 14),
+              HsButton(
+                'Open in web',
+                onPressed: () => unawaited(openInWeb(doc.link)),
+                height: HsSize.buttonSmall,
+              ),
+            ],
+          ),
         ),
       ),
     ];
@@ -811,6 +836,51 @@ class _ReaderScreenState extends ConsumerState<ReaderScreen>
     final probe = dek.substring(0, dek.length.clamp(0, 40));
     return bodyText.startsWith(probe) ? null : dek;
   }
+}
+
+/// The article's column: the same side margins for every sliver in it.
+Widget _padded(Widget sliver) => SliverPadding(
+  padding: const EdgeInsets.symmetric(horizontal: HsSpace.x5),
+  sliver: sliver,
+);
+
+/// The body fading in where the skeleton was, once. Paint only: the slivers
+/// under it are built a single time.
+class _FadeInSliver extends StatefulWidget {
+  const new({required this.sliver});
+
+  final Widget sliver;
+
+  @override
+  State<_FadeInSliver> createState() => _FadeInSliverState();
+}
+
+class _FadeInSliverState extends State<_FadeInSliver>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _in = AnimationController(vsync: this);
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_in.isAnimating || _in.isCompleted) return;
+    _in.animateTo(
+      1,
+      duration: HsMotion.levelOf(context) == MotionLevel.off
+          ? HsMotion.fxInstant
+          : HsMotion.fxDefault,
+      curve: HsMotion.curveEffects,
+    );
+  }
+
+  @override
+  void dispose() {
+    _in.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      SliverFadeTransition(opacity: _in, sliver: widget.sliver);
 }
 
 /// The article's own picture, above the body.
