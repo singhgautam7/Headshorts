@@ -400,11 +400,16 @@ class _PillLayer extends ConsumerWidget {
         curve: curve,
         child: IgnorePointer(
           ignoring: !visible,
-          child: NavPill(
-            destinations: NavPill.destinationsForApp,
-            selectedIndex: index,
-            blur: blur,
-            onSelected: onSelected,
+          // Five items share one row: past this the label has nowhere to go.
+          // TalkBack and the icons carry the rest, as in Material's own bar.
+          child: MediaQuery.withClampedTextScaling(
+            maxScaleFactor: 1.2,
+            child: NavPill(
+              destinations: NavPill.destinationsForApp,
+              selectedIndex: index,
+              blur: blur,
+              onSelected: onSelected,
+            ),
           ),
         ),
       ),

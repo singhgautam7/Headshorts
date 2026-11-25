@@ -1489,14 +1489,16 @@ class _ReaderFloatingButtons extends ConsumerWidget {
                 ),
                 const SizedBox(width: HsSpace.x2),
                 // Flexible: at a large font scale, or on a narrow screen, the
-                // label gives way rather than pushing the others off.
+                // label shrinks rather than pushing the others off.
                 Flexible(
-                  child: Text(
-                    thin ? 'Try again' : 'Open in web',
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: HsType.buttonSmall.copyWith(
-                      color: palette.textPrimary,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      thin ? 'Try again' : 'Open in web',
+                      maxLines: 1,
+                      style: HsType.buttonSmall.copyWith(
+                        color: palette.textPrimary,
+                      ),
                     ),
                   ),
                 ),

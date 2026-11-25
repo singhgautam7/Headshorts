@@ -44,9 +44,9 @@ class StatsSummary {
       : minutesByDay.map((d) => d.minutes).reduce((a, b) => a + b) /
             minutesByDay.length;
 
-  /// Sources the reader has essentially stopped opening — the pruning list.
+  /// Sources not opened once in the window: what "you never open" says.
   List<SourceReadThrough> get neverOpened =>
-      perSource.where((s) => s.fraction < 0.05).toList();
+      perSource.where((s) => s.opened == 0).toList();
 }
 
 class SourceReadThrough {

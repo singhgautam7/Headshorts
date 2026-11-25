@@ -168,16 +168,19 @@ class _Item extends StatelessWidget {
                     horizontal: HsSpace.x3,
                     vertical: HsSpace.x2,
                   ),
-                  child: AnimatedWeight(
-                    label,
-                    isActive: selected,
-                    active: 650,
-                    maxLines: 3,
-                    textAlign: TextAlign.center,
-                    style: HsType.chipSelected.copyWith(
-                      color: palette.onPrimary,
+                  // Shrinks before it would break a word in two.
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: AnimatedWeight(
+                      label,
+                      isActive: selected,
+                      active: 650,
+                      textAlign: TextAlign.center,
+                      style: HsType.chipSelected.copyWith(
+                        color: palette.onPrimary,
+                      ),
+                      restColor: palette.textPrimary,
                     ),
-                    restColor: palette.textPrimary,
                   ),
                 ),
               ),
