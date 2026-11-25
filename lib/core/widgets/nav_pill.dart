@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show ValueListenable;
 import 'package:flutter/widgets.dart';
@@ -42,7 +41,6 @@ class NavPill extends StatelessWidget {
     required this.destinations,
     required this.selectedIndex,
     required this.onSelected,
-    this.blur = false,
     super.key,
   });
 
@@ -64,10 +62,6 @@ class NavPill extends StatelessWidget {
   final List<NavDestination> destinations;
   final int selectedIndex;
   final ValueChanged<int> onSelected;
-
-  /// Opaque-first. Blur is a setting, off by default, because it costs
-  /// battery and buys nothing on a true-black ground.
-  final bool blur;
 
   /// Width of a destination while selected: icon, label, and the padding.
   static double _selectedWidth(BuildContext context, NavDestination d) {
@@ -143,10 +137,7 @@ class NavPill extends StatelessWidget {
     );
 
     // One layer: the morph repaints inside it, nothing outside does.
-    return NavPillSurface(
-      blur: blur,
-      child: RepaintBoundary(child: content),
-    );
+    return NavPillSurface(child: RepaintBoundary(child: content));
   }
 }
 
@@ -234,39 +225,23 @@ class _IndicatorPainter extends CustomPainter {
 }
 
 /// The pill's dress, on its own so the Reader's floating actions can wear it:
-/// the nav tone, a hairline, the one soft shadow, and the optional blur.
+/// the nav tone, a hairline, and the one soft shadow.
 class NavPillSurface extends StatelessWidget {
-  const new({required this.child, this.blur = false, super.key});
+  const new({required this.child, super.key});
 
   final Widget child;
-  final bool blur;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
-    final inner = blur
-        ? ClipRRect(
-            borderRadius: HsRadius.pillBorder,
-            child: BackdropFilter(
-              filter: ui.ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  color: palette.nav.withValues(alpha: 0.86),
-                  borderRadius: HsRadius.pillBorder,
-                  border: Border.all(color: palette.stroke),
-                ),
-                child: child,
-              ),
-            ),
-          )
-        : DecoratedBox(
-            decoration: BoxDecoration(
-              color: palette.nav,
-              borderRadius: HsRadius.pillBorder,
-              border: Border.all(color: palette.stroke),
-            ),
-            child: child,
-          );
+    final inner = DecoratedBox(
+      decoration: BoxDecoration(
+        color: palette.nav,
+        borderRadius: HsRadius.pillBorder,
+        border: Border.all(color: palette.stroke),
+      ),
+      child: child,
+    );
 
     return Padding(
       padding: const EdgeInsets.only(bottom: HsSize.navPillInset),

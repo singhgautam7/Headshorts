@@ -15,9 +15,10 @@ import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/data/sources/source_adapter.dart';
 import 'package:headshorts/features/bookmarks/bookmarks_screen.dart';
 import 'package:headshorts/features/linger/linger_filter_sheet.dart';
+import 'package:headshorts/features/more/settings_screen.dart';
+import 'package:headshorts/features/more/text_size_sheet.dart';
 import 'package:headshorts/features/onboarding/onboarding_screen.dart';
 import 'package:headshorts/features/search/date_range_sheet.dart';
-import 'package:headshorts/features/search/search_scope_sheet.dart';
 import 'package:headshorts/features/search/search_screen.dart';
 import 'package:headshorts/features/sources/add_source_screen.dart';
 import 'package:headshorts/features/sources/opml_import_screen.dart';
@@ -171,7 +172,8 @@ void main() {
 
   screen('Headlines filter sheet', (t) => pumpSheet(t, showSourceFilterSheet));
   screen('Linger filter sheet', (t) => pumpSheet(t, showLingerFilterSheet));
-  screen('Search scope sheet', (t) => pumpSheet(t, showSearchScopeSheet));
+  screen('Text size sheet', (t) => pumpSheet(t, showTextSizeSheet));
+  screen('Settings', (t) => pump(t, const SettingsScreen()));
   screen('Date range sheet', (t) => pumpSheet(t, showDateRangeSheet));
 
   screen('Search, empty', (t) => pump(t, const SearchScreen()));

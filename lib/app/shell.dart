@@ -5,7 +5,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:headshorts/app/nav_visibility.dart';
-import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/motion/haptics.dart';
 import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/motion/spring_curve.dart';
@@ -374,7 +373,7 @@ class _BranchStackState extends State<BranchStack>
   }
 }
 
-/// The pill and its hide on scroll. Watches the visibility and blur itself, so
+/// The pill and its hide on scroll. Watches the visibility itself, so
 /// a hide rebuilds this and nothing else.
 class _PillLayer extends ConsumerWidget {
   const new({required this.index, required this.onSelected});
@@ -384,7 +383,6 @@ class _PillLayer extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final blur = ref.watch(settingsProvider.select((s) => s.blurBehindNav));
     final visible = ref.watch(navVisibilityProvider);
     final duration = HsMotion.of(context, HsMotion.navHide);
     final curve = HsMotion.curveOf(context, HsMotion.navHideCurve);
@@ -407,7 +405,6 @@ class _PillLayer extends ConsumerWidget {
             child: NavPill(
               destinations: NavPill.destinationsForApp,
               selectedIndex: index,
-              blur: blur,
               onSelected: onSelected,
             ),
           ),

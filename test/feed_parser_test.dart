@@ -167,6 +167,15 @@ void _entityDecoding() {
       expect(item.author, "Jane O'Neill");
     });
 
+    test('paragraphs in a summary do not run together', () {
+      final item = parse(
+        'A headline',
+        description:
+            '&lt;p&gt;Get the podcast&lt;/p&gt;&lt;p&gt;Wells says&lt;/p&gt;',
+      ).single;
+      expect(item.summary, 'Get the podcast Wells says');
+    });
+
     test('leaves a full-content body as markup for the Reader to parse', () {
       final body =
           '<p>${'Long enough to count as an article. ' * 40}</p>'

@@ -18,46 +18,15 @@ DeviceClass classifyDevice({required int? ramMb, bool lowRamFlag = false}) =>
     ? DeviceClass.low
     : DeviceClass.normal;
 
-/// What the reader picked. Auto resolves from the phone.
-enum MotionPreference {
-  auto,
-  expressive,
-  subtle,
-  off;
-
-  String get label => switch (this) {
-    MotionPreference.auto => 'Automatic',
-    MotionPreference.expressive => 'Expressive',
-    MotionPreference.subtle => 'Subtle',
-    MotionPreference.off => 'Off',
-  };
-
-  String get description => switch (this) {
-    MotionPreference.auto => 'Follows your phone',
-    MotionPreference.expressive => 'Springs and changing shapes',
-    MotionPreference.subtle => 'Short fades, nothing bounces',
-    MotionPreference.off => 'Nothing moves',
-  };
-}
-
-/// Level for [pref] on a phone of class [device]. The phone wins: with
-/// [systemOff] (Remove animations, or an accessibility navigation service)
-/// the answer is always Off.
-MotionLevel resolveMotionLevel(
-  MotionPreference pref,
-  DeviceClass device, {
-  bool systemOff = false,
-}) => systemOff
+/// The level for a phone of class [device]. There is no setting: the phone
+/// decides, and with [systemOff] (Remove animations, or an accessibility
+/// navigation service) the answer is always Off.
+MotionLevel resolveMotionLevel(DeviceClass device, {bool systemOff = false}) =>
+    systemOff
     ? MotionLevel.off
-    : switch (pref) {
-        MotionPreference.expressive => MotionLevel.expressive,
-        MotionPreference.subtle => MotionLevel.subtle,
-        MotionPreference.off => MotionLevel.off,
-        MotionPreference.auto =>
-          device == DeviceClass.low
-              ? MotionLevel.subtle
-              : MotionLevel.expressive,
-      };
+    : device == DeviceClass.low
+    ? MotionLevel.subtle
+    : MotionLevel.expressive;
 
 /// True when the phone asks for no animation: Remove animations
 /// (`disableAnimations`) or an accessibility navigation service.

@@ -251,11 +251,11 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(
-        find.textContaining('Google News is searched as well'),
+        find.textContaining('Google News and all its sources'),
         findsOneWidget,
       );
       expect(
-        find.textContaining('search term is sent to Google'),
+        find.textContaining('your search term is sent'),
         findsOneWidget,
         reason: 'the one thing that leaves the device is still said plainly',
       );

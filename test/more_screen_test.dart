@@ -16,7 +16,9 @@ import 'package:headshorts/data/db/tables.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/data/sources/source_adapter.dart';
 import 'package:headshorts/features/more/more_screen.dart';
+import 'package:headshorts/features/more/settings_screen.dart';
 import 'package:headshorts/features/more/stats_card.dart';
+import 'package:headshorts/features/reader/text_size_slider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
@@ -35,7 +37,8 @@ void main() {
     router = GoRouter(
       routes: [
         GoRoute(path: '/', builder: (_, _) => const MoreScreen()),
-        for (final path in ['/more/appearance', '/more/header'])
+        GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+        for (final path in ['/more/settings'])
           GoRoute(
             path: path,
             builder: (_, _) {
@@ -161,22 +164,11 @@ void main() {
   /// Row labels by group, in the order the screen draws them.
   const groups = {
     'SAVED': ['Bookmarks'],
-    'LOOK': ['Theme', 'Header', 'Text size', 'List size', 'Motion'],
-    'BEHAVIOUR': [
-      'Haptics',
-      'Blur behind the nav',
-      'Open links',
-      'Read aloud',
-      'Search the web',
-      'Reading fairness',
-      'Check for new',
-      'Home screen widget',
-    ],
-    'YOUR DATA': ['Data', 'Permissions'],
-    'ABOUT HEADSHORTS': ['Contact us', 'Privacy', 'About'],
+    'MANAGE': ['Data', 'Permissions'],
+    'ABOUT HEADSHORTS': ['Settings', 'Contact us', 'Privacy', 'About'],
   };
 
-  testWidgets('five groups in order, each with its rows in order', (
+  testWidgets('three groups in order, each with its rows in order', (
     tester,
   ) async {
     await pump(tester, size: const Size(390, 3200));
@@ -216,93 +208,103 @@ void main() {
     await unmount(tester);
   });
 
-  testWidgets('Theme and Header say what they hold and open their pages', (
-    tester,
-  ) async {
+  testWidgets('settings are behind their own row, not on More', (tester) async {
     await pump(tester, size: const Size(390, 3200));
-    expect(find.text('Colours, light and dark, pure black'), findsOneWidget);
-    expect(find.text('Floating header and when it shows'), findsOneWidget);
-    await tester.tap(find.widgetWithText(SettingsRow, 'Theme'));
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(opened, ['/more/appearance']);
-    router.pop();
-    await tester.pump(const Duration(milliseconds: 500));
-    await tester.tap(find.widgetWithText(SettingsRow, 'Header'));
-    await tester.pump(const Duration(milliseconds: 500));
-    expect(opened, ['/more/appearance', '/more/header']);
-    await unmount(tester);
-  });
-
-  testWidgets('a setting lives on one page: none of Theme or Header is here', (
-    tester,
-  ) async {
-    await pump(tester, size: const Size(390, 3200));
-    for (final label in [
-      'Appearance',
-      'Light',
-      'Dark',
-      'System',
-      'True black',
-      'Pure black',
-      'Floating header',
-      'Show the pill',
-    ]) {
+    for (final label in ['Theme', 'Text size', 'Open links', 'Haptics']) {
       expect(find.text(label), findsNothing, reason: label);
     }
+    await tester.tap(find.widgetWithText(SettingsRow, 'Settings'));
+    await tester.pump(const Duration(milliseconds: 500));
+    expect(opened, ['/more/settings']);
     await unmount(tester);
   });
 
-  testWidgets('Haptics and Blur are switches: the whole row taps once', (
-    tester,
-  ) async {
-    await pump(tester, size: const Size(390, 3200));
-    final container = ProviderScope.containerOf(
-      tester.element(find.byType(MoreScreen)),
-    );
-    final before = container.read(settingsProvider);
+  group('Settings', () {
+    const settings = {
+      'LOOK': ['Theme', 'Header', 'Text size', 'List size'],
+      'READING': [
+        'Open links',
+        'Read aloud',
+        'Reading fairness',
+        'Search the web',
+      ],
+      'PHONE': ['Haptics', 'Home screen widget'],
+    };
 
-    await tester.tap(find.text('Haptics'));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(container.read(settingsProvider).haptics, !before.haptics);
+    Future<void> open(WidgetTester tester, {double textScale = 1}) async {
+      router.go('/settings');
+      await pump(
+        tester,
+        size: textScale == 1 ? const Size(390, 2400) : const Size(360, 640),
+        textScale: textScale,
+      );
+    }
 
-    // A press on the drawn switch is the same one tap, not a second target.
-    await tester.tap(find.byType(HsToggle).first, warnIfMissed: false);
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(container.read(settingsProvider).haptics, before.haptics);
+    testWidgets('every row is there once, and the removed ones are not', (
+      tester,
+    ) async {
+      await open(tester);
+      for (final labels in settings.values) {
+        IconData? last;
+        for (final label in labels) {
+          final row = find.widgetWithText(SettingsRow, label);
+          expect(row, findsOneWidget, reason: label);
+          final icon = tester.widget<SettingsRow>(row).icon;
+          expect(icon, isNot(last), reason: label);
+          last = icon;
+        }
+      }
+      for (final gone in ['Motion', 'Blur behind the nav', 'Check for new']) {
+        expect(find.text(gone), findsNothing, reason: gone);
+      }
+      await unmount(tester);
+    });
 
-    await tester.tap(find.text('Blur behind the nav'));
-    await tester.pump(const Duration(milliseconds: 300));
-    expect(
-      container.read(settingsProvider).blurBehindNav,
-      !before.blurBehindNav,
-    );
-    expect(
-      tester.getSemantics(
-        find.widgetWithText(SettingsRow, 'Blur behind the nav'),
-      ),
-      matchesSemantics(
-        hasToggledState: true,
-        isToggled: !before.blurBehindNav,
-        label: 'Blur behind the nav, Prettier, slightly heavier on battery',
-        hasTapAction: true,
-        isButton: true,
-      ),
-    );
-    await unmount(tester);
-  });
+    testWidgets('Haptics is a switch: the whole row taps once', (tester) async {
+      await open(tester);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      final before = container.read(settingsProvider).haptics;
+      await tester.tap(find.text('Haptics'));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(container.read(settingsProvider).haptics, !before);
+      await tester.tap(find.byType(HsToggle).first, warnIfMissed: false);
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(container.read(settingsProvider).haptics, before);
+      await unmount(tester);
+    });
 
-  testWidgets('Motion shows the level, or why it is off', (tester) async {
-    await pump(tester, size: const Size(390, 3200));
-    expect(find.text('Automatic'), findsOneWidget);
-    expect(find.text('Off while your phone removes animations'), findsNothing);
-    await unmount(tester);
+    testWidgets('Text size opens the same slider the Reader has', (
+      tester,
+    ) async {
+      await open(tester);
+      await tester.tap(find.text('Text size'));
+      for (var i = 0; i < 10; i++) {
+        await tester.pump(const Duration(milliseconds: 100));
+      }
+      expect(find.byType(TextSizeSlider), findsOneWidget);
+      final container = ProviderScope.containerOf(
+        tester.element(find.byType(SettingsScreen)),
+      );
+      await tester.tapAt(
+        tester.getCenter(find.byType(TextSizeSlider)) + const Offset(70, 0),
+      );
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(
+        container.read(settingsProvider).textSize.index,
+        greaterThan(TextSizeStep.small.index),
+      );
+      await unmount(tester);
+    });
 
-    await pump(tester, size: const Size(390, 3200), disableAnimations: true);
-    expect(
-      find.text('Off while your phone removes animations'),
-      findsOneWidget,
-    );
-    await unmount(tester);
+    testWidgets('renders at 2.0 on 360x640', (tester) async {
+      await open(tester, textScale: 2);
+      await tester.drag(find.byType(ListView).first, const Offset(0, -3000));
+      await tester.pump(const Duration(milliseconds: 300));
+      expect(tester.takeException(), isNull);
+      await unmount(tester);
+    });
   });
 
   testWidgets('tapping the card pushes /stats', (tester) async {

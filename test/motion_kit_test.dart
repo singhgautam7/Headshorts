@@ -9,39 +9,19 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {
   group('resolveMotionLevel', () {
-    test('Automatic is Expressive on a normal or unknown phone', () {
+    test('Expressive on a normal or unknown phone', () {
       for (final d in [DeviceClass.normal, DeviceClass.unknown]) {
-        expect(
-          resolveMotionLevel(MotionPreference.auto, d),
-          MotionLevel.expressive,
-        );
+        expect(resolveMotionLevel(d), MotionLevel.expressive);
       }
     });
 
-    test('Automatic drops to Subtle on a low-RAM phone', () {
-      expect(
-        resolveMotionLevel(MotionPreference.auto, DeviceClass.low),
-        MotionLevel.subtle,
-      );
-    });
-
-    test('a pick is honoured whatever the phone is', () {
-      expect(
-        resolveMotionLevel(MotionPreference.expressive, DeviceClass.low),
-        MotionLevel.expressive,
-      );
-      expect(
-        resolveMotionLevel(MotionPreference.off, DeviceClass.normal),
-        MotionLevel.off,
-      );
+    test('Subtle on a low-RAM phone', () {
+      expect(resolveMotionLevel(DeviceClass.low), MotionLevel.subtle);
     });
 
     test('the phone removing animations wins over everything', () {
-      for (final p in MotionPreference.values) {
-        expect(
-          resolveMotionLevel(p, DeviceClass.normal, systemOff: true),
-          MotionLevel.off,
-        );
+      for (final d in DeviceClass.values) {
+        expect(resolveMotionLevel(d, systemOff: true), MotionLevel.off);
       }
     });
   });

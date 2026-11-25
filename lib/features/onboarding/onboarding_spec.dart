@@ -31,6 +31,9 @@ abstract final class OnboardingSpec {
   static const Duration barEntranceDelay = Duration(milliseconds: 230);
   static const Duration barEntrance = Duration(milliseconds: 250);
 
-  /// The illustration above each page's title.
-  static const double artHeight = 112;
+  /// The illustration above each page's title: what the words leave, between
+  /// these two, acting itself out once over [scene].
+  static const double artMin = 96;
+  static const double artMax = 380;
+  static const Duration scene = Duration(milliseconds: 3200);
 }

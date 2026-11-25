@@ -6,14 +6,12 @@ import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/motion/theme_ripple.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
-import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
-import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/features/more/segmented_control.dart';
-import 'package:headshorts/features/onboarding/onboarding_screen.dart';
+import 'package:headshorts/features/onboarding/onboarding_art.dart';
 import 'package:headshorts/features/onboarding/onboarding_spec.dart';
 
 /// The pager: three short pages, one idea each, then the setup page every
@@ -63,7 +61,7 @@ class OnboardingIntro extends StatelessWidget {
                 onPageChanged: onPageChanged,
                 children: [
                   _FeaturePage(
-                    art: const _BriefingArt(),
+                    art: BriefingArt(active: page == 0),
                     title: 'A briefing that ends.',
                     titleStyle: HsType.welcome,
                     body:
@@ -71,23 +69,17 @@ class OnboardingIntro extends StatelessWidget {
                         'they were published. No algorithm, no counts, no '
                         'infinite scroll. When you reach the bottom, that is '
                         'the news.',
-                    extra: HsButton(
-                      'Import OPML instead',
-                      onPressed: onImport,
-                      kind: HsButtonKind.tertiary,
-                      height: HsSize.buttonCompact,
-                    ),
                   ),
-                  const _FeaturePage(
-                    art: _LingerArt(),
-                    title: 'One story at a time',
+                  _FeaturePage(
+                    art: TwoWaysArt(active: page == 1),
+                    title: 'Two ways to read',
                     body:
-                        'Linger shows a single story, full screen. Swipe for '
-                        'the next. What you have seen does not come round '
-                        'again.',
+                        'Headlines lists every story from all your sources, '
+                        'newest first. Linger shows one story at a time: '
+                        'swipe up for the next.',
                   ),
-                  const _FeaturePage(
-                    art: _PhoneArt(),
+                  _FeaturePage(
+                    art: SourcesArt(active: page == 2),
                     title: 'Yours, on your phone',
                     body:
                         'Your sources, your list. No account and no server. '
@@ -116,6 +108,7 @@ class OnboardingIntro extends StatelessWidget {
           primaryLabel: setup ? 'Choose your sources' : 'Next',
           onPrimary: setup ? onFinish : () => onGoTo(page + 1),
           onBack: () => onGoTo(page - 1),
+          onImport: page == 0 ? onImport : null,
         ),
       ],
     );
@@ -140,11 +133,13 @@ class _FadeOut extends StatelessWidget {
   }
 }
 
-/// A page's frame: content centred when it fits, scrolling when it does not.
+/// A page's frame: content centred when it fits, or filling the page with
+/// [fill], and scrolling when it does not fit.
 class _PageFrame extends StatelessWidget {
-  const new({required this.child});
+  const new({required this.child, this.fill = false});
 
   final Widget child;
+  final bool fill;
 
   @override
   Widget build(BuildContext context) {
@@ -159,7 +154,7 @@ class _PageFrame extends StatelessWidget {
         padding: pad,
         child: ConstrainedBox(
           constraints: BoxConstraints(minHeight: box.maxHeight - pad.vertical),
-          child: Align(child: child),
+          child: fill ? child : Align(child: child),
         ),
       ),
     );
@@ -172,179 +167,75 @@ class _FeaturePage extends StatelessWidget {
     required this.title,
     required this.body,
     this.titleStyle,
-    this.extra,
   });
 
   final Widget art;
   final String title;
   final TextStyle? titleStyle;
   final String body;
-  final Widget? extra;
 
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
     return _PageFrame(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          OnboardingEntrance(
-            delay: OnboardingSpec.delayArt,
-            child: SizedBox(
-              height: OnboardingSpec.artHeight,
-              width: double.infinity,
-              // A drawing: it does not grow with the system font.
-              child: MediaQuery.withNoTextScaling(
-                child: ExcludeSemantics(child: art),
-              ),
-            ),
-          ),
-          const SizedBox(height: HsSpace.x5),
-          OnboardingEntrance(
-            delay: OnboardingSpec.delayTitle,
-            child: Text(
-              title,
-              style: (titleStyle ?? HsType.stepTitle).copyWith(
-                color: palette.textPrimary,
-              ),
-            ),
-          ),
-          const SizedBox(height: HsSpace.x3),
-          OnboardingEntrance(
-            delay: OnboardingSpec.delayBody,
-            child: Text(
-              body,
-              style: HsType.bodySans.copyWith(color: palette.textSecondary),
-            ),
-          ),
-          if (extra != null) ...[
-            const SizedBox(height: HsSpace.x3),
-            OnboardingEntrance(delay: OnboardingSpec.delayBody, child: extra!),
-          ],
-        ],
-      ),
-    );
-  }
-}
-
-/// Page 1: the column of headlines fading to the rule where the feed stops.
-class _BriefingArt extends StatelessWidget {
-  const new();
-
-  @override
-  Widget build(BuildContext context) => const Align(
-    alignment: Alignment.centerLeft,
-    child: FadingBriefingMark(gap: 9, showCaption: false),
-  );
-}
-
-/// Page 2: one card in front, two behind, the way Linger stacks them.
-class _LingerArt extends StatelessWidget {
-  const new();
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    final accent = AccentScope.of(context).resolve(isDark: palette.isDark);
-    Widget card(Color edge, {required bool front}) => DecoratedBox(
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: HsRadius.cardBorder,
-        border: Border.all(color: edge),
-      ),
-      child: front
-          ? Padding(
-              padding: const EdgeInsets.all(HsSpace.x3),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        width: 28,
-                        height: 3,
-                        decoration: BoxDecoration(
-                          color: accent,
-                          borderRadius: BorderRadius.circular(2),
+      fill: true,
+      // The picture takes whatever the words leave, so a short phone shrinks
+      // it and a tall one shows it large.
+      child: IntrinsicHeight(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(
+                  minHeight: OnboardingSpec.artMin,
+                ),
+                // Positioned, so the drawing adds nothing to the intrinsic
+                // height it is being fitted into.
+                child: Stack(
+                  children: [
+                    Positioned.fill(
+                      child: OnboardingEntrance(
+                        delay: OnboardingSpec.delayArt,
+                        child: Center(
+                          child: ConstrainedBox(
+                            constraints: const BoxConstraints(
+                              maxHeight: OnboardingSpec.artMax,
+                            ),
+                            // A drawing: it does not grow with the font.
+                            child: SizedBox.expand(
+                              child: FittedBox(
+                                child: MediaQuery.withNoTextScaling(
+                                  child: ExcludeSemantics(child: art),
+                                ),
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      const SizedBox(width: HsSpace.x2),
-                      const SkeletonBar(width: 56, height: 8),
-                    ],
-                  ),
-                  const SizedBox(height: HsSpace.x2),
-                  const SkeletonBar(),
-                  const SizedBox(height: HsSpace.x2),
-                  const SkeletonBar(widthFactor: 0.8),
-                  const SizedBox(height: HsSpace.x2),
-                  const SkeletonBar(widthFactor: 0.6, height: 9),
-                ],
+                    ),
+                  ],
+                ),
               ),
-            )
-          : null,
-    );
-    return Stack(
-      children: [
-        Positioned(
-          left: HsSpace.x4,
-          right: HsSpace.x4,
-          top: 0,
-          height: 84,
-          child: card(palette.divider, front: false),
-        ),
-        Positioned(
-          left: HsSpace.x2,
-          right: HsSpace.x2,
-          top: 6,
-          height: 90,
-          child: card(palette.divider, front: false),
-        ),
-        Positioned(
-          left: 0,
-          right: 0,
-          top: 12,
-          height: 96,
-          child: card(palette.stroke, front: true),
-        ),
-      ],
-    );
-  }
-}
-
-/// Page 3: a short list of sources kept on the phone, each one switched on.
-class _PhoneArt extends StatelessWidget {
-  const new();
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    const widths = [0.5, 0.38, 0.62];
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: palette.surface,
-        borderRadius: HsRadius.cardBorder,
-        border: Border.all(color: palette.stroke),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(
-          horizontal: HsSpace.x4,
-          vertical: HsSpace.x2,
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-          children: [
-            for (final w in widths)
-              Row(
-                children: [
-                  Expanded(child: SkeletonBar(widthFactor: w, height: 10)),
-                  Icon(
-                    Icons.check_circle_rounded,
-                    size: 22,
-                    color: palette.primary,
-                  ),
-                ],
+            ),
+            const SizedBox(height: HsSpace.x5),
+            OnboardingEntrance(
+              delay: OnboardingSpec.delayTitle,
+              child: Text(
+                title,
+                style: (titleStyle ?? HsType.stepTitle).copyWith(
+                  color: palette.textPrimary,
+                ),
               ),
+            ),
+            const SizedBox(height: HsSpace.x3),
+            OnboardingEntrance(
+              delay: OnboardingSpec.delayBody,
+              child: Text(
+                body,
+                style: HsType.bodySans.copyWith(color: palette.textSecondary),
+              ),
+            ),
           ],
         ),
       ),
@@ -385,7 +276,7 @@ class _SetupPageState extends ConsumerState<_SetupPage> {
           OnboardingEntrance(
             delay: OnboardingSpec.delayTitle,
             child: Text(
-              'You can change this and more any time in More.',
+              'You can change this any time in Settings.',
               style: HsType.bodySans.copyWith(color: palette.textSecondary),
             ),
           ),
@@ -595,6 +486,7 @@ class _NavBar extends StatelessWidget {
     required this.primaryLabel,
     required this.onPrimary,
     required this.onBack,
+    this.onImport,
   });
 
   final int page;
@@ -602,6 +494,10 @@ class _NavBar extends StatelessWidget {
   final String primaryLabel;
   final VoidCallback onPrimary;
   final VoidCallback onBack;
+
+  /// Import OPML, on the first page only. Its room is kept on every page, so
+  /// the pager does not change height underneath a swipe.
+  final VoidCallback? onImport;
 
   @override
   Widget build(BuildContext context) {
@@ -678,13 +574,26 @@ class _NavBar extends StatelessWidget {
         child: Padding(
           padding: const EdgeInsets.fromLTRB(
             HsSpace.x5,
-            HsSpace.x3,
+            0,
             HsSpace.x5,
             HsSpace.x5,
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Visibility(
+                visible: onImport != null,
+                maintainSize: true,
+                maintainAnimation: true,
+                maintainState: true,
+                child: HsButton(
+                  'Import OPML',
+                  onPressed: onImport,
+                  kind: HsButtonKind.tertiary,
+                  height: HsSize.buttonCompact,
+                ),
+              ),
+              const SizedBox(height: HsSpace.x2),
               OnboardingDots(current: page, count: count),
               const SizedBox(height: HsSpace.x4),
               buttons,

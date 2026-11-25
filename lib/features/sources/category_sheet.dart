@@ -65,8 +65,13 @@ class _RenameSheetState extends ConsumerState<_RenameCategorySheet> {
       subtitle: 'Every source in this category moves with it.',
       children: [
         Container(
-          height: HsSize.buttonLarge,
-          padding: const EdgeInsets.symmetric(horizontal: HsSpace.x4),
+          constraints: const BoxConstraints(minHeight: HsSize.buttonLarge),
+          // The container is taller than its line of text: centre it.
+          alignment: Alignment.centerLeft,
+          padding: const EdgeInsets.symmetric(
+            horizontal: HsSpace.x4,
+            vertical: HsSpace.x2,
+          ),
           decoration: BoxDecoration(
             color: palette.background,
             border: Border.all(color: palette.stroke),

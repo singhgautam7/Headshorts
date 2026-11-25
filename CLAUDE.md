@@ -222,24 +222,19 @@ sources should watch it.
 **A feed fetched for a search is remembered for five minutes**
 (`_fetchedFeedsProvider`). A source in scope with nothing cached is fetched
 on every search, and refining a query runs several — so an unfollowed source
-added to the scope was re-downloaded on each one, for identical items. In
+was re-downloaded on each one, for identical items. In
 memory only: a search must never quietly subscribe anybody to anything.
 
 **Settings are read before the first `await`.** `ref.watch` past an await
 registers a dependency on a provider that may already have moved on, and
 Riverpod is entitled to throw for it.
 
-**Scope is a lens, exactly like Filter.** `searchScopeProvider` holds feed
-addresses, and **null means "whatever I follow and have switched on"** rather
-than a snapshot of it — a source enabled tomorrow is in scope tomorrow
-without the reader coming back to add it. Adding an unfollowed source
-searches it once: it does not subscribe, does not fetch on a schedule and
-does not appear in the briefing. An **empty** scope finds nothing, because
-saying so beats quietly falling back to everything.
-
-A **paused source is still searchable.** The scope decides what is in, not
-the subscription — the cache still holds what that source published, and
-refusing to look in it would be a second, invisible filter.
+**Scope is whatever is followed and switched on**, and there is no picker for
+it in Search. `searchScopeEntriesProvider` derives it, so a source enabled
+tomorrow is in scope tomorrow, and Search's empty state shows the scope and
+links to Sources to change it. One place decides what the app reads; a second
+list of sources inside Search (which shipped first) was a filter nobody could
+find again.
 
 **A source with nothing cached is fetched on the spot** (`_searchLive`): one
 request, filtered in memory, **nothing written to the database**. That is the
@@ -317,12 +312,11 @@ doing nothing. So these hand off to the browser, and the group says so.
 **The query leaves the device, and that is the only thing that does.** It is
 the single exception to "nothing is ever sent anywhere", so it is stated in
 three places: on Search's own empty state **before** anything is typed, on the
-Privacy screen, and as a setting (More → Search the web) that turns it off.
-The empty-state line is shown only while the setting is on, and says the same
-three things the heading used to: the feeds are shallow, so Google News is
-searched as well; the search term is sent and nothing else is; those results
-open in the browser. `search_loader_test` pins all three and pins that the
-heading no longer repeats them. On by default, because a search
+Privacy screen, and as a setting (Settings → Search the web) that turns it off.
+The empty-state line is shown only while the setting is on, and is one
+sentence: Google News and all its sources are searched too, and only the
+search term is sent. `search_loader_test` pins both halves and that the
+heading over the results does not repeat them. On by default, because a search
 that cannot see past the last few days of six feeds is the thing readers
 report as broken.
 
@@ -389,8 +383,8 @@ Linger reflect it without anything being told to reload:
 
 | Screen | Does |
 |---|---|
-| **Search** | The fourth tab. A query over the cache, scoped to the sources the reader picks, in a date range. Two sheets: scope and date |
-| **More** | A stats card (minutes read this week, seven bars against a fixed 60 minute ceiling, opens Stats), then Kuber's classic rows: 40 dp icon tile, title, description or current value **under** the title, chevron or toggle. Saved (Bookmarks) · Look (Theme, Header, Text size, List size, Motion) · Behaviour (Haptics, Blur, Open links, Read aloud, Search the web, Reading fairness, Check for new, Home screen widget) · Your data (Data, Permissions) · About HeadShorts. Every setting lives on exactly one page; every one-of-N row opens `showOptionSheet`; each row is its own ConsumerWidget with a `select` |
+| **Search** | The fourth tab. A query over the cache of the sources that are on, in a date range. One sheet: date |
+| **More** | A stats card (minutes read this week, seven bars against a fixed 60 minute ceiling, opens Stats), then Kuber's classic rows: 40 dp icon tile, title, description or current value **under** the title, chevron or toggle. Saved (Bookmarks) · Manage (Data, Permissions) · About HeadShorts (Settings, Contact, Privacy, About). Settings is its own page, so More stays a hub: Look (Theme, Header, Text size, List size) · Reading (Open links, Read aloud, Reading fairness, Search the web) · Phone (Haptics, Home screen widget). Text size opens the Reader's own slider in a sheet. Every setting lives on exactly one page; every one-of-N row opens `showOptionSheet`; each row is its own ConsumerWidget with a `select` |
 | Bookmarks | One pushed page under More: saved articles newest-saved first, swipe or long-press to remove with Undo, and an empty state that names where the control is |
 | About | Kuber's arrangement in HeadShorts' dress (`about_screen.dart`): a note from the maker on the settings card, four tiles for what the app stands for, what it is in a paragraph, the version, and a developer group linking the portfolio (singhgautam.com), the other apps on Play, and the listing. Plain hyphens only; no em dashes in the copy |
 | Data | One page inside More: Export OPML (through the system share sheet — Android's save dialog is not available to `file_selector`), Import OPML, Clear cached articles |
@@ -418,13 +412,16 @@ The toggle means **"in my briefing or not"**:
 Unsubscribing is destructive — it takes the source's articles with it — so it
 stays a deliberate act on the source's own screen, not a toggle.
 
-Two settings do real work rather than being stored and ignored:
+One setting here does real work rather than being stored and ignored:
 
 - **Open links** picks the `LaunchMode` — a Custom Tab, or the reader's own
   browser. Threaded through to `ArticleBody` so in-article links honour it too.
-- **Check for new** gates `refreshIfDue`, which is what launch and tab-return
-  call. An explicit pull or tap on the refresh mark calls `refresh` and always
-  fetches: an ask is never quietly ignored.
+
+**There is no "check for new" setting, no motion setting and no nav blur.**
+Opening the app, or coming back to it, fetches when the oldest source is over an
+hour old (`refreshEvery`); a pull always fetches. Nothing is fetched while the
+app is closed, so a cadence to choose would be a promise it does not keep: the
+setting returns with notifications. Motion follows the phone.
 
 **Clear cached articles** deletes articles *and* read events, and keeps
 subscriptions. Read state goes with the rows that carried it — leaving "read"
@@ -441,7 +438,7 @@ changes what is fetched, and there is no such thing as a paused language.
 - **A filter offers only languages that have a source behind it**, and hides
   itself entirely when there is one — a control with a single option is
   furniture. Headlines' Filter puts language above Category; the onboarding
-  picker, Sources and Search's scope sheet each carry `LanguageChips`. Each
+  picker and Sources each carry `LanguageChips`. Each
   language names itself **in its own script**.
 - **The language filter is a scrolling chip row, not a segmented control.**
   The board draws three segments because that reader follows two languages;
@@ -655,6 +652,15 @@ The rules that follow from that, and that the tests pin:
 normally in Today. Opening its full article marks it read, which removes it
 from Linger and de-emphasises it in Today.
 
+### A Linger card never scrolls
+
+A scroll inside a card that is itself paged fights the page: reaching the end
+of one flung several of the other. `LingerCaption` measures the room and cuts
+the headline and description to it; what does not fit is behind **Show more**,
+which lights the whole text over a darkened screen until Show less, a tap
+outside or back. Below `lingerShortHeight` (a phone in landscape) the card puts
+its text beside its button.
+
 ### Linger has one Filter button
 
 `LingerFilter` is a category plus, optionally, the set of sources to keep —
@@ -833,8 +839,8 @@ than returning immediately, so onboarding's await actually waits.
 
 Launch behaviour: open to cache, refresh behind the content, show a quiet
 "updating…" and offer pull-to-refresh. **The only blocking loader in the app
-is the first-run fetch in onboarding**, and it reports one bar per feed,
-filling as each returns.
+is the first-run fetch in onboarding**: every source by name, ticked as it
+arrives.
 
 ### Text fields are decoded; bodies are not
 
@@ -972,8 +978,8 @@ with `TickerMode`.
 primitive: every tappable goes through it or a control built on it. Springs
 move position, scale, size and shape; colour and opacity never overshoot.
 Three levels (`HsMotion.levelOf`): Expressive, Subtle (no overshoot, no morph)
-and Off (90ms at most), from More → Motion (Automatic by default: Subtle under
-4 GB of RAM) and always Off under the OS's Remove animations. `HsHaptics` is
+and Off (90ms at most). There is no setting: Subtle under 4 GB of RAM, Off under
+the OS's Remove animations, Expressive otherwise. `HsHaptics` is
 the only haptic call, behind one switch; one tap, one tick.
 
 **Shared controls**, one of each: `HsButton` (pill; 12 or 8 dp held; `loading`),
@@ -1002,7 +1008,7 @@ overflow menu is. The list-size button on Headlines is the first of them.
 
 **A one-of-N setting is `showOptionSheet`** — the shared sheet with the
 option, what it means, and a tick on the one in effect. Open links, text size,
-reading fairness and refresh cadence all go through it; nothing cycles a value
+and reading fairness go through it; nothing cycles a value
 in place on tap.
 
 **Top-bar actions are `HsIconButton`**, 40 visual inside a 48 target, for back,
@@ -1192,13 +1198,13 @@ the tab rather than snapping. A branch that paints an opaque ground of its
 own would cover that fade.
 
 **`NavPillSurface` is the pill's dress** — nav tone, hairline, the one soft
-shadow, optional blur — on its own so the Reader's three floating actions
+shadow — on its own so the Reader's three floating actions
 (Open in web · Share · More) are separate objects wearing exactly it, with air
 between them, rather than a second style of floating control.
 
 **The nav pill** is a floating, detached, content-hugging object: five tabs —
-Headlines · Linger · Sources · Search · More — no FAB, opaque by default
-(blur is an off-by-default setting), only the selected destination carries
+Headlines · Linger · Sources · Search · More — no FAB, always opaque,
+only the selected destination carries
 text, and inactive labels are not in the tree.
 
 **Only the selected item takes free space** — `Flexible(flex: 1)` for it,

@@ -30,9 +30,7 @@ void main() {
       );
       expect(settings.themeMode, ThemeMode.dark);
       expect(settings.amoled, isTrue);
-      expect(settings.blurBehindNav, isFalse);
       expect(settings.linkOpenMode, LinkOpenMode.inApp);
-      expect(settings.refreshCadence, RefreshCadence.hourly);
       expect(
         settings.maxConsecutivePerSource,
         0,
@@ -66,11 +64,9 @@ void main() {
         familyId: 'ember',
         themeMode: ThemeMode.light,
         amoled: false,
-        blurBehindNav: true,
         textSize: TextSizeStep.large,
         onboarded: true,
         linkOpenMode: LinkOpenMode.browser,
-        refreshCadence: RefreshCadence.daily,
         maxConsecutivePerSource: 5,
       );
       await written.write(settings);
@@ -79,11 +75,9 @@ void main() {
       expect(read.familyId, 'ember');
       expect(read.themeMode, ThemeMode.light);
       expect(read.amoled, isFalse);
-      expect(read.blurBehindNav, isTrue);
       expect(read.textSize, TextSizeStep.large);
       expect(read.onboarded, isTrue);
       expect(read.linkOpenMode, LinkOpenMode.browser);
-      expect(read.refreshCadence, RefreshCadence.daily);
       expect(read.maxConsecutivePerSource, 5);
     });
 
@@ -95,19 +89,13 @@ void main() {
 
     test('motion and haptics round-trip, with calm defaults', () async {
       final fresh = (await store()).read();
-      expect(fresh.motionPreference, MotionPreference.auto);
       expect(fresh.deviceClass, DeviceClass.unknown);
       expect(fresh.haptics, isTrue);
 
       await (await store()).write(
-        const Settings(
-          motionPreference: MotionPreference.subtle,
-          deviceClass: DeviceClass.low,
-          haptics: false,
-        ),
+        const Settings(deviceClass: DeviceClass.low, haptics: false),
       );
       final read = (await store()).read();
-      expect(read.motionPreference, MotionPreference.subtle);
       expect(read.deviceClass, DeviceClass.low);
       expect(read.haptics, isFalse);
       expect(read.motionLevel, MotionLevel.subtle);
@@ -115,31 +103,11 @@ void main() {
 
     test('survives a value it does not recognise', () async {
       SharedPreferences.setMockInitialValues({
-        'refreshCadence': 'fortnightly',
         'linkOpenMode': 'carrier-pigeon',
       });
 
       final settings = (await store()).read();
-      expect(settings.refreshCadence, RefreshCadence.hourly);
       expect(settings.linkOpenMode, LinkOpenMode.inApp);
-    });
-  });
-
-  group('refresh cadence', () {
-    test('manual has no interval, so nothing is ever due', () {
-      expect(RefreshCadence.manual.interval, isNull);
-    });
-
-    test('the others are ordered shortest first', () {
-      final intervals = RefreshCadence.values
-          .map((c) => c.interval)
-          .whereType<Duration>()
-          .toList();
-      expect(intervals, [
-        const Duration(hours: 1),
-        const Duration(hours: 4),
-        const Duration(days: 1),
-      ]);
     });
   });
 

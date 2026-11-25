@@ -3,7 +3,6 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:headshorts/app/providers.dart';
-import 'package:headshorts/core/widgets/nav_pill.dart';
 import 'package:headshorts/core/widgets/pull_to_refresh.dart';
 import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/data/db/database.dart';
@@ -86,43 +85,6 @@ void main() {
 
       expect(find.text('Headlines'), findsOneWidget);
       expect(find.text('Content'), findsOneWidget);
-    });
-  });
-
-  group('NavPill blur', () {
-    testWidgets('includes BackdropFilter when blur is true', (tester) async {
-      await pumpThemed(
-        tester,
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: NavPill(
-            destinations: NavPill.destinationsForApp,
-            selectedIndex: 0,
-            blur: true,
-            onSelected: (_) {},
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byType(BackdropFilter), findsOneWidget);
-    });
-
-    testWidgets('omits BackdropFilter when blur is false', (tester) async {
-      await pumpThemed(
-        tester,
-        Align(
-          alignment: Alignment.bottomCenter,
-          child: NavPill(
-            destinations: NavPill.destinationsForApp,
-            selectedIndex: 0,
-            onSelected: (_) {},
-          ),
-        ),
-      );
-      await tester.pumpAndSettle();
-
-      expect(find.byType(BackdropFilter), findsNothing);
     });
   });
 }

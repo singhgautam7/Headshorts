@@ -170,25 +170,24 @@ void main() {
     expect(outcome.fetchedLive, 0);
   });
 
-  test('an unfollowed source added to the scope is fetched', () async {
+  test('a source that is switched off is not searched', () async {
     final id = await sources.add(
       title: 'BBC News',
       feedUrl: 'https://bbc.example/rss',
       category: 'World',
     );
-    await articles.upsert(id, [live('cached-1', 'A cached monsoon headline')]);
+    await sources.add(
+      title: 'Paused',
+      feedUrl: 'https://paused.example/rss',
+      category: 'World',
+    );
     await settle();
+    await sources.setEnabled(id, enabled: false);
+    await Future<void>.delayed(const Duration(milliseconds: 100));
 
-    // A catalog source the reader does not follow, added to this search only.
-    container.read(searchScopeProvider.notifier).set({
-      'https://bbc.example/rss',
-      'https://guardian.example/rss',
-    });
-
-    // The scope resolves against sources that exist; an address the catalog
-    // does not carry simply is not in scope, which is its own guarantee.
+    // What is searched is decided in Sources and nowhere else.
     expect(container.read(searchScopeEntriesProvider).map((e) => e.feedUrl), [
-      'https://bbc.example/rss',
+      'https://paused.example/rss',
     ]);
   });
 

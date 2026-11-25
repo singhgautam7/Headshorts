@@ -30,6 +30,8 @@ class HsSheet extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.hs;
     final sub = subtitle;
+    final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    final bar = MediaQuery.viewPaddingOf(context).bottom;
 
     return Container(
       decoration: BoxDecoration(
@@ -47,7 +49,8 @@ class HsSheet extends StatelessWidget {
           left: HsSpace.x5,
           right: HsSpace.x5,
           top: 20,
-          bottom: 28 + MediaQuery.viewInsetsOf(context).bottom,
+          // 16 above the keyboard, or above the system bar when it is shut.
+          bottom: HsSpace.x4 + (keyboard > 0 ? keyboard : bar),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,

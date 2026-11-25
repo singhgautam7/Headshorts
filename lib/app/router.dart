@@ -16,6 +16,7 @@ import 'package:headshorts/features/more/header_screen.dart';
 import 'package:headshorts/features/more/info_screens.dart';
 import 'package:headshorts/features/more/more_screen.dart';
 import 'package:headshorts/features/more/permissions_screen.dart';
+import 'package:headshorts/features/more/settings_screen.dart';
 import 'package:headshorts/features/onboarding/onboarding_screen.dart';
 import 'package:headshorts/features/reader/reader_screen.dart';
 import 'package:headshorts/features/search/search_screen.dart';
@@ -275,6 +276,10 @@ GoRouter buildRouter({required bool onboarded}) {
         path: '/sources/:id',
         pageBuilder: (context, state) =>
             _page(SourceDetailScreen(int.parse(state.pathParameters['id']!))),
+      ),
+      GoRoute(
+        path: '/more/settings',
+        pageBuilder: (context, state) => _page(const SettingsScreen()),
       ),
       GoRoute(
         path: '/more/appearance',

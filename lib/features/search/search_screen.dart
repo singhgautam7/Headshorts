@@ -1,10 +1,11 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart' show InputDecoration, TextField;
+import 'package:flutter/material.dart' show Icons, InputDecoration, TextField;
 import 'package:flutter/services.dart' show TextInputAction;
 import 'package:flutter/widgets.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:headshorts/app/nav_visibility.dart';
 import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
@@ -22,7 +23,6 @@ import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/features/search/cache_explainer.dart';
 import 'package:headshorts/features/search/date_range_sheet.dart';
 import 'package:headshorts/features/search/search_controller.dart';
-import 'package:headshorts/features/search/search_scope_sheet.dart';
 import 'package:headshorts/features/today/headline_card.dart';
 
 /// A chip's hit region adds half of (48 - 32) above and below its visual.
@@ -83,17 +83,10 @@ class _SearchScreenState extends ConsumerState<SearchScreen> {
                 children: [
                   _FilterChip(
                     label: range.chipLabel,
+                    icon: Icons.calendar_today_outlined,
                     active: !range.isInitial,
                     onTap: () => showDateRangeSheet(context),
                     semanticLabel: 'Date range, ${range.chipLabel}',
-                  ),
-                  _FilterChip(
-                    label:
-                        '${scope.length} '
-                        '${scope.length == 1 ? 'source' : 'sources'}',
-                    active: ref.watch(searchScopeProvider) != null,
-                    onTap: () => showSearchScopeSheet(context),
-                    semanticLabel: 'Sources in scope, ${scope.length}',
                   ),
                 ],
               ),
@@ -310,17 +303,19 @@ class _SearchBarState extends State<_SearchBar> {
   }
 }
 
-/// A chip that opens a sheet, in the shared chip dress: selected while the
-/// range or scope differs from its default.
+/// The chip that opens the date sheet, in the shared chip dress: selected
+/// while the range differs from its default.
 class _FilterChip extends StatelessWidget {
   const new({
     required this.label,
     required this.active,
     required this.onTap,
     required this.semanticLabel,
+    required this.icon,
   });
 
   final String label;
+  final IconData icon;
   final bool active;
   final VoidCallback onTap;
   final String semanticLabel;
@@ -331,60 +326,36 @@ class _FilterChip extends StatelessWidget {
     button: true,
     excludeSemantics: true,
     onTap: onTap,
-    child: HsChip(label, selected: active, onTap: onTap),
+    child: HsChip(label, icon: icon, selected: active, onTap: onTap),
   );
 }
 
-/// Before the first search: what the scope is, shown rather than described,
-/// so the first result is never a surprise.
+/// To the Sources tab, where what is searched is decided.
+void _toSources(BuildContext context, WidgetRef ref) {
+  ref.read(navVisibilityProvider.notifier).show();
+  context.go('/sources');
+}
+
+/// Before the first search: which sources it covers, then two short notes.
 class _EmptyState extends ConsumerWidget {
   const new();
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final palette = context.hs;
     final entries = ref.watch(searchScopeEntriesProvider);
     final web = ref.watch(settingsProvider.select((s) => s.searchTheWeb));
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(
         HsSpace.x5,
-        40,
+        HsSpace.x3,
         HsSpace.x5,
         HsSpace.navClearance,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            'Search looks through the sources you choose',
-            style: HsType.stepTitle.copyWith(
-              fontSize: 20,
-              color: palette.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            entries.isEmpty
-                ? 'Nothing is in scope yet. Add a source to search, or switch '
-                      'one on in Sources.'
-                : 'By default that is the ${entries.length} you follow and have '
-                      'switched on. Add any source from the catalog to widen a '
-                      'search; it will not be followed.',
-            style: HsType.caughtUpBody.copyWith(color: palette.textSecondary),
-          ),
-          if (web) ...[
-            const SizedBox(height: 12),
-            Text(
-              'Your sources carry only what their feeds still list, so Google '
-              'News is searched as well and its results are grouped on their '
-              'own. Your search term is sent to Google; nothing else is, and '
-              'those results open in your browser.',
-              style: HsType.note.copyWith(color: palette.textMuted),
-            ),
-          ],
           if (entries.isNotEmpty) ...[
-            const SizedBox(height: 22),
             SectionLabel('In scope · ${entries.length}'),
             const SizedBox(height: HsSpace.x3 - _hitPad),
             Wrap(
@@ -399,19 +370,77 @@ class _EmptyState extends ConsumerWidget {
                   ),
               ],
             ),
+            const SizedBox(height: HsSpace.x4),
           ],
-          const SizedBox(height: 22),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: HsButton(
-              'Change sources',
-              onPressed: () => showSearchScopeSheet(context),
-              kind: HsButtonKind.secondary,
-              height: HsSize.buttonCompact,
-            ),
+          _Note(
+            text: entries.isEmpty
+                ? 'No sources are on. Turn some on in '
+                : 'To search other sources, turn them on in ',
+            link: 'Sources',
+            onLink: () => _toSources(context, ref),
           ),
+          // The one thing that leaves the device, said before it happens.
+          if (web) ...[
+            const SizedBox(height: HsSpace.x3),
+            const _Note(
+              text:
+                  'Google News and all its sources are searched too. Only '
+                  'your search term is sent.',
+            ),
+          ],
         ],
       ),
+    );
+  }
+}
+
+/// A quoted note, as Markdown draws one: a bar, then the text. With a [link]
+/// the whole note is the target.
+class _Note extends StatelessWidget {
+  const new({required this.text, this.link, this.onLink});
+
+  final String text;
+  final String? link;
+  final VoidCallback? onLink;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+    final style = HsType.caughtUpBody.copyWith(color: palette.textSecondary);
+    final quote = Container(
+      constraints: BoxConstraints(
+        minHeight: link == null ? 0 : HsSize.tapTarget,
+      ),
+      alignment: Alignment.centerLeft,
+      padding: const EdgeInsetsDirectional.only(start: HsSpace.x3),
+      decoration: BoxDecoration(
+        border: BorderDirectional(
+          start: BorderSide(color: palette.stroke, width: HsSize.accentBar),
+        ),
+      ),
+      child: Text.rich(
+        TextSpan(
+          text: text,
+          style: style,
+          children: [
+            if (link != null)
+              TextSpan(
+                text: '$link.',
+                style: style.copyWith(
+                  color: palette.primary,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+    if (onLink == null) return quote;
+    return Pressable(
+      kind: PressKind.row,
+      onTap: onLink,
+      semanticLabel: '$text$link',
+      child: ExcludeSemantics(child: quote),
     );
   }
 }
@@ -650,7 +679,7 @@ class _EndOfResults extends StatelessWidget {
             'From ${outcome.sourcesSearched} '
             '${outcome.sourcesSearched == 1 ? 'source' : 'sources'}'
             '${outcome.webHits.isEmpty ? '' : ' and Google News'}, '
-            '${SearchDateRange.shortDate(from)} – '
+            '${SearchDateRange.shortDate(from)} to '
             '${SearchDateRange.shortDate(to)}',
             textAlign: TextAlign.center,
             style: HsType.note.copyWith(color: palette.textMuted),
@@ -661,7 +690,7 @@ class _EndOfResults extends StatelessWidget {
               // The honest caveat, stated where it matters rather than in a
               // help screen: a feed only carries its recent items, so a
               // source with nothing cached cannot be searched back very far.
-              '${outcome.fetchedLive} of those are not followed, so only '
+              '${outcome.fetchedLive} of those had nothing saved yet, so only '
               'what their feed carries right now was searched.',
               textAlign: TextAlign.center,
               style: HsType.note.copyWith(color: palette.textMuted),
@@ -741,8 +770,7 @@ class _NoResults extends ConsumerWidget {
           const SizedBox(height: HsSpace.x3),
           Text(
             scope == 0
-                ? 'No sources are in scope, so there was nothing to look '
-                      'through.'
+                ? 'No sources are on, so there was nothing to look through.'
                 : 'None of your $scope ${scope == 1 ? 'source' : 'sources'} '
                       'published a match'
                       '${range.isUnbounded ? '' : ' in the '
@@ -778,8 +806,8 @@ class _NoResults extends ConsumerWidget {
             const SizedBox(height: 10),
           ],
           HsButton(
-            'Add sources to this search',
-            onPressed: () => showSearchScopeSheet(context),
+            'Go to Sources',
+            onPressed: () => _toSources(context, ref),
             kind: HsButtonKind.secondary,
             height: HsSize.buttonSmall,
           ),

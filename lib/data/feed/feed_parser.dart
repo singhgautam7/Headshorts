@@ -143,7 +143,10 @@ abstract final class FeedParser {
 
   static String? _snippet(String? html) {
     if (html == null) return null;
-    final text = plainText(html);
+    // A space where a block ends, or one paragraph runs into the next.
+    final text = plainText(
+      html.replaceAllMapped(_blockBoundary, (m) => '${m[0]} '),
+    );
     return text.isEmpty ? null : text;
   }
 

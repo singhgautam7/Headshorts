@@ -331,6 +331,7 @@ class HsChip extends StatelessWidget {
     this.selected = false,
     this.onTap,
     this.accentDot = false,
+    this.icon,
     super.key,
   });
 
@@ -338,6 +339,9 @@ class HsChip extends StatelessWidget {
   final bool selected;
   final VoidCallback? onTap;
   final bool accentDot;
+
+  /// A glyph before the label, in its ink.
+  final IconData? icon;
 
   /// A `Wrap.runSpacing` that leaves [gap] between the chips' visuals: the
   /// 48 dp hit region already carries 8 dp above and below each.
@@ -392,6 +396,16 @@ class HsChip extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (icon != null) ...[
+                    Icon(
+                      icon,
+                      size: 16,
+                      color: selected
+                          ? palette.onPrimaryContainer
+                          : palette.textSecondary,
+                    ),
+                    const SizedBox(width: HsSpace.x2),
+                  ],
                   if (accentDot) ...[
                     Container(
                       width: 6,

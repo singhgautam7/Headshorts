@@ -31,6 +31,7 @@ ArticleRow _article({
   bool read = false,
   String? summary = 'The pilot covers about forty stations.',
   String? imageUrl,
+  String? snippet,
 }) => ArticleRow(
   id: 7,
   sourceId: 1,
@@ -45,13 +46,17 @@ ArticleRow _article({
   readFull: read,
   summary: summary,
   contentSnippet:
+      snippet ??
       'The pilot covers about forty stations and runs '
-      'until March.',
+          'until March.',
   imageUrl: imageUrl,
 );
 
-Headline _headline({bool read = false, String? imageUrl}) =>
-    Headline(_article(read: read, imageUrl: imageUrl), _source());
+Headline _headline({bool read = false, String? imageUrl, String? snippet}) =>
+    Headline(
+      _article(read: read, imageUrl: imageUrl, snippet: snippet),
+      _source(),
+    );
 
 void main() {
   group('HeadlineCard', () {
@@ -209,6 +214,93 @@ void main() {
         (container.decoration! as BoxDecoration).color,
         HsPalette.light.surface,
       );
+    });
+
+    group('a long description', () {
+      final long = List.filled(
+        40,
+        'The council agreed to study the crossing again next spring.',
+      ).join(' ');
+
+      Future<void> at(
+        WidgetTester tester,
+        Size size, {
+        double scale = 1,
+      }) async {
+        await tester.binding.setSurfaceSize(size);
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await pumpThemed(
+          tester,
+          MediaQuery(
+            data: MediaQueryData(
+              size: size,
+              textScaler: TextScaler.linear(scale),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(8),
+              child: LingerCard(
+                headline: _headline(snippet: long),
+                position: 0,
+                total: 3,
+                onReadFull: () {},
+              ),
+            ),
+          ),
+        );
+      }
+
+      testWidgets('never scrolls inside the card', (tester) async {
+        await at(tester, const Size(390, 700));
+        expect(
+          find.descendant(
+            of: find.byType(LingerCard),
+            matching: find.byType(Scrollable),
+          ),
+          findsNothing,
+        );
+      });
+
+      testWidgets('opens lit from Show more, and Show less closes it', (
+        tester,
+      ) async {
+        await at(tester, const Size(390, 700));
+        await tester.tap(find.text('Show more'));
+        await tester.pumpAndSettle();
+        expect(find.text(long), findsNWidgets(2));
+        expect(tester.takeException(), isNull);
+        await tester.tap(find.text('Show less'));
+        await tester.pumpAndSettle();
+        expect(find.text('Show less'), findsNothing);
+
+        // A tap outside closes it too.
+        await tester.tap(find.text('Show more'));
+        await tester.pumpAndSettle();
+        await tester.tapAt(const Offset(4, 696));
+        await tester.pumpAndSettle();
+        expect(find.text('Show less'), findsNothing);
+      });
+
+      for (final size in const [
+        Size(800, 200),
+        Size(740, 150),
+        Size(360, 420),
+      ]) {
+        testWidgets('fits a ${size.width}x${size.height} window', (
+          tester,
+        ) async {
+          for (final scale in [1.0, 2.0]) {
+            await at(tester, size, scale: scale);
+            expect(tester.takeException(), isNull, reason: 'scale $scale');
+          }
+        });
+      }
+    });
+
+    testWidgets('a short description has nothing to show more of', (
+      tester,
+    ) async {
+      await pumpThemed(tester, card());
+      expect(find.text('Show more'), findsNothing);
     });
 
     testWidgets('opens the Reader from "Read full"', (tester) async {

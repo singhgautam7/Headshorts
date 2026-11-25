@@ -17,6 +17,7 @@ import 'package:headshorts/features/reader/listen_controller.dart';
 import 'package:headshorts/features/reader/reader_controller.dart';
 import 'package:headshorts/features/reader/reader_screen.dart';
 import 'package:headshorts/features/reader/related/other_sources_section.dart';
+import 'package:headshorts/features/reader/text_size_slider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 void main() {

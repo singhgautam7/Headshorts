@@ -22,6 +22,7 @@ import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/db/tables.dart';
 import 'package:headshorts/data/feed/feed_parser.dart';
+import 'package:headshorts/features/linger/linger_caption.dart';
 import 'package:headshorts/features/linger/linger_controller.dart';
 import 'package:headshorts/features/linger/linger_filter_sheet.dart';
 
@@ -181,26 +182,6 @@ class _LingerScreenState extends ConsumerState<LingerScreen> {
                                     headline: queue[i],
                                     position: i,
                                     total: queue.length,
-                                    onNextCard: i < queue.length
-                                        ? () {
-                                            if (_controller.hasClients) {
-                                              _controller.nextPage(
-                                                duration: HsMotion.page,
-                                                curve: HsMotion.pageCurve,
-                                              );
-                                            }
-                                          }
-                                        : null,
-                                    onPreviousCard: i > 0
-                                        ? () {
-                                            if (_controller.hasClients) {
-                                              _controller.previousPage(
-                                                duration: HsMotion.page,
-                                                curve: HsMotion.pageCurve,
-                                              );
-                                            }
-                                          }
-                                        : _refresh,
                                     onReadFull: () => context.push(
                                       '/reader/${queue[i].article.id}',
                                     ),
@@ -328,18 +309,31 @@ class _QueueSkeleton extends StatelessWidget {
           border: Border.all(color: palette.stroke),
         ),
         padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 30),
-        child: const Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            HeadlineSkeleton(widths: [0.82, 0.4]),
-            SizedBox(height: HsSpace.x6),
-            HeadlineSkeleton(widths: [0.64, 0.5]),
-          ],
+        // Clipped in a short window rather than overflowing it.
+        child: const ClipRect(
+          child: OverflowBox(
+            alignment: Alignment.topCenter,
+            minHeight: 0,
+            maxHeight: double.infinity,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                HeadlineSkeleton(widths: [0.82, 0.4]),
+                SizedBox(height: HsSpace.x6),
+                HeadlineSkeleton(widths: [0.64, 0.5]),
+              ],
+            ),
+          ),
         ),
       ),
     );
   }
 }
+
+/// Below this a card lays its text and its button side by side: a phone in
+/// landscape, or a short split-screen window.
+const lingerShortHeight = 380.0;
 
 /// One Linger card.
 ///
@@ -354,8 +348,6 @@ class LingerCard extends ConsumerStatefulWidget {
     required this.position,
     required this.total,
     required this.onReadFull,
-    this.onNextCard,
-    this.onPreviousCard,
     super.key,
   });
 
@@ -363,31 +355,12 @@ class LingerCard extends ConsumerStatefulWidget {
   final int position;
   final int total;
   final VoidCallback onReadFull;
-  final VoidCallback? onNextCard;
-  final VoidCallback? onPreviousCard;
 
   @override
   ConsumerState<LingerCard> createState() => _LingerCardState();
 }
 
 class _LingerCardState extends ConsumerState<LingerCard> {
-  final ScrollController _scrollController = ScrollController();
-  double _accumulatedOverscroll = 0;
-
-  @override
-  void didUpdateWidget(LingerCard oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.headline.article.id != widget.headline.article.id) {
-      _accumulatedOverscroll = 0;
-    }
-  }
-
-  @override
-  void dispose() {
-    _scrollController.dispose();
-    super.dispose();
-  }
-
   int? _extractFor;
   String _extract = '';
 
@@ -432,160 +405,138 @@ class _LingerCardState extends ConsumerState<LingerCard> {
     );
     final bodyStyle = HsType.lingerBody.copyWith(color: palette.textSecondary);
 
+    final ground = dark ? accentWash(accent, palette) : palette.surface;
+    final edge = dark ? accent.withValues(alpha: 0.34) : palette.divider;
+
+    final header = _Header(
+      source: widget.headline.source.title,
+      accent: accent,
+      dark: dark,
+      when: widget.headline.article.publishedAt,
+      author: widget.headline.article.author,
+    );
+    LingerCaption caption({double gap = 22}) => LingerCaption(
+      title: widget.headline.article.title,
+      description: extract,
+      titleStyle: titleStyle,
+      bodyStyle: bodyStyle,
+      ground: ground,
+      edge: edge,
+      gap: gap,
+    );
+    final readFull = HsButton(
+      'Read full',
+      onPressed: widget.onReadFull,
+      kind: dark ? HsButtonKind.accent : HsButtonKind.primary,
+    );
+    final hint = Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        HsGlyph.swipeUp(palette.textMuted),
+        const SizedBox(width: HsSpace.x2),
+        Flexible(
+          child: Text(
+            remaining == 0
+                ? 'Swipe up for the end of the briefing'
+                : 'Swipe up for the next of $remaining remaining',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: HsType.timestamp.copyWith(color: palette.textMuted),
+          ),
+        ),
+      ],
+    );
+
     return AccentScope(
       accent: tone,
       child: Container(
         decoration: BoxDecoration(
-          color: dark ? accentWash(accent, palette) : palette.surface,
+          color: ground,
           borderRadius: const BorderRadius.all(HsRadius.sheet),
-          border: Border.all(
-            color: dark ? accent.withValues(alpha: 0.34) : palette.divider,
-          ),
+          border: Border.all(color: edge),
         ),
         clipBehavior: Clip.antiAlias,
-        child: Stack(
-          children: [
-            if (!dark)
-              Positioned(
-                left: 0,
-                top: 30,
-                bottom: 30,
-                child: Container(
-                  width: HsSize.accentBar,
-                  decoration: BoxDecoration(
-                    color: accent,
-                    borderRadius: const BorderRadius.horizontal(
-                      right: Radius.circular(2),
-                    ),
-                  ),
-                ),
-              ),
-            Padding(
-              padding: EdgeInsets.fromLTRB(dark ? 26 : 22, 30, 26, 30),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _Header(
-                    source: widget.headline.source.title,
-                    accent: accent,
-                    dark: dark,
-                    when: widget.headline.article.publishedAt,
-                    author: widget.headline.article.author,
-                  ),
-                  const SizedBox(height: 22),
-                  Expanded(
-                    child: LayoutBuilder(
-                      builder: (context, constraints) {
-                        final textDirection = Directionality.of(context);
-                        final titlePainter = TextPainter(
-                          text: TextSpan(
-                            text: widget.headline.article.title,
-                            style: titleStyle,
-                          ),
-                          textDirection: textDirection,
-                        )..layout(maxWidth: constraints.maxWidth);
-
-                        var neededHeight = titlePainter.height;
-                        if (extract.isNotEmpty) {
-                          final extractPainter = TextPainter(
-                            text: TextSpan(text: extract, style: bodyStyle),
-                            textDirection: textDirection,
-                            maxLines: 6,
-                          )..layout(maxWidth: constraints.maxWidth);
-                          neededHeight += 22.0 + extractPainter.height;
-                        }
-
-                        final overflows = neededHeight > constraints.maxHeight;
-
-                        final textColumn = Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              widget.headline.article.title,
-                              style: titleStyle,
-                            ),
-                            if (extract.isNotEmpty) ...[
-                              const SizedBox(height: 22),
-                              Text(
-                                extract,
-                                maxLines: 6,
-                                overflow: TextOverflow.ellipsis,
-                                style: bodyStyle,
-                              ),
-                            ],
-                          ],
-                        );
-
-                        if (!overflows) {
-                          return textColumn;
-                        }
-
-                        return NotificationListener<ScrollNotification>(
-                          onNotification: (notification) {
-                            if (notification is ScrollStartNotification) {
-                              _accumulatedOverscroll = 0;
-                            } else if (notification is OverscrollNotification) {
-                              _accumulatedOverscroll += notification.overscroll;
-                              if (_accumulatedOverscroll > 20) {
-                                _accumulatedOverscroll = 0;
-                                widget.onNextCard?.call();
-                              } else if (_accumulatedOverscroll < -20) {
-                                _accumulatedOverscroll = 0;
-                                widget.onPreviousCard?.call();
-                              }
-                            } else if (notification is ScrollEndNotification) {
-                              _accumulatedOverscroll = 0;
-                            }
-                            return false;
-                          },
-                          child: SingleChildScrollView(
-                            controller: _scrollController,
-                            physics: const ClampingScrollPhysics(),
-                            child: textColumn,
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 22),
-                  HsButton(
-                    'Read full',
-                    onPressed: widget.onReadFull,
-                    kind: dark ? HsButtonKind.accent : HsButtonKind.primary,
-                  ),
-                  const SizedBox(height: HsSpace.x4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      HsGlyph.swipeUp(palette.textMuted),
-                      const SizedBox(width: HsSpace.x2),
-                      Flexible(
-                        child: Text(
-                          remaining == 0
-                              ? 'Swipe up for the end of the briefing'
-                              : 'Swipe up for the next of $remaining remaining',
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: HsType.timestamp.copyWith(
-                            color: palette.textMuted,
-                          ),
+        child: LayoutBuilder(
+          builder: (context, box) {
+            // A phone on its side: the text beside the button, not above it.
+            final short = box.maxHeight < lingerShortHeight;
+            final inset = short ? HsSpace.x4 : 30.0;
+            return Stack(
+              children: [
+                if (!dark)
+                  Positioned(
+                    left: 0,
+                    top: inset,
+                    bottom: inset,
+                    child: Container(
+                      width: HsSize.accentBar,
+                      decoration: BoxDecoration(
+                        color: accent,
+                        borderRadius: const BorderRadius.horizontal(
+                          right: Radius.circular(2),
                         ),
                       ),
-                    ],
+                    ),
                   ),
-                ],
-              ),
-            ),
-            Positioned(
-              right: HsSpace.x3,
-              top: 34,
-              child: PositionRuler(
-                total: widget.total + 1,
-                index: widget.position,
-                accent: accent,
-              ),
-            ),
-          ],
+                Padding(
+                  padding: EdgeInsets.fromLTRB(
+                    dark ? 26 : 22,
+                    inset,
+                    short ? 40 : 26,
+                    inset,
+                  ),
+                  child: short
+                      ? Row(
+                          children: [
+                            Expanded(
+                              flex: 3,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  header,
+                                  const SizedBox(height: HsSpace.x2),
+                                  Expanded(child: caption(gap: HsSpace.x2)),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: HsSpace.x5),
+                            Expanded(
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  readFull,
+                                  const SizedBox(height: HsSpace.x2),
+                                  Flexible(child: hint),
+                                ],
+                              ),
+                            ),
+                          ],
+                        )
+                      : Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            header,
+                            const SizedBox(height: 22),
+                            Expanded(child: caption()),
+                            const SizedBox(height: 22),
+                            readFull,
+                            const SizedBox(height: HsSpace.x4),
+                            hint,
+                          ],
+                        ),
+                ),
+                Positioned(
+                  right: HsSpace.x3,
+                  top: short ? HsSpace.x4 : 34,
+                  child: PositionRuler(
+                    total: widget.total + 1,
+                    index: widget.position,
+                    accent: accent,
+                  ),
+                ),
+              ],
+            );
+          },
         ),
       ),
     );
@@ -657,12 +608,18 @@ class _Header extends StatelessWidget {
                 ),
               ),
             const SizedBox(width: HsSpace.x2),
-            // Leave room for the ruler.
-            Padding(
-              padding: const EdgeInsets.only(right: HsSpace.x4),
-              child: Text(
-                relativeTime(when),
-                style: HsType.timestamp.copyWith(color: palette.textMuted),
+            // Leave room for the ruler, and never push the source off.
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 160),
+              child: Padding(
+                padding: const EdgeInsets.only(right: HsSpace.x4),
+                child: Text(
+                  relativeTime(when),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.end,
+                  style: HsType.timestamp.copyWith(color: palette.textMuted),
+                ),
               ),
             ),
           ],
@@ -737,6 +694,25 @@ class PositionRuler extends StatelessWidget {
   }
 }
 
+/// Centred, and shrunk to fit a window too short for it.
+class _FitShort extends StatelessWidget {
+  const new({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, box) => box.maxHeight >= lingerShortHeight
+        ? Center(child: child)
+        : Center(
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: SizedBox(width: box.maxWidth, child: child),
+            ),
+          ),
+  );
+}
+
 class _HardStop extends StatelessWidget {
   const new({required this.total, required this.onBackToToday});
 
@@ -755,7 +731,7 @@ class _HardStop extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 26, vertical: 30),
       child: Stack(
         children: [
-          Center(
+          _FitShort(
             child: CaughtUp(
               large: true,
               detail: total == 0

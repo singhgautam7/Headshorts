@@ -114,15 +114,13 @@ class SourcesScreen extends ConsumerWidget {
                   onChanged: ref.read(sourcesLanguageProvider.notifier).select,
                 ),
               ],
-              const SizedBox(height: HsSpace.x3),
-              Text(
-                subscribed == 0
-                    ? 'Nothing on yet. Turn a few on and the briefing starts '
-                          'filling.'
-                    : '$subscribed on · turning one off keeps it, and its '
-                          'items, for later',
-                style: HsType.note.copyWith(color: palette.textMuted),
-              ),
+              if (subscribed == 0) ...[
+                const SizedBox(height: HsSpace.x3),
+                Text(
+                  'Nothing on yet. Turn on a few to fill your briefing.',
+                  style: HsType.note.copyWith(color: palette.textMuted),
+                ),
+              ],
             ],
           ),
         ),

@@ -130,11 +130,11 @@ void main() {
     await pump(tester);
     expect(find.text('A briefing that ends.'), findsOneWidget);
     expect(find.text('Skip'), findsOneWidget);
-    expect(find.text('Import OPML instead'), findsOneWidget);
+    expect(find.text('Import OPML'), findsOneWidget);
 
     await tapText(tester, 'Next');
-    expect(find.text('One story at a time'), findsOneWidget);
-    expect(find.text('Import OPML instead'), findsNothing);
+    expect(find.text('Two ways to read'), findsOneWidget);
+    expect(find.text('Import OPML').hitTestable(), findsNothing);
 
     await tapText(tester, 'Next');
     expect(find.text('Yours, on your phone'), findsOneWidget);
@@ -186,7 +186,7 @@ void main() {
 
     await tester.binding.handlePopRoute();
     await settle(tester);
-    expect(find.text('One story at a time'), findsOneWidget);
+    expect(find.text('Two ways to read'), findsOneWidget);
 
     await tapText(tester, 'Skip');
     await tapText(tester, 'Choose your sources');
@@ -242,7 +242,7 @@ void main() {
     await tester.pump(const Duration(milliseconds: 60));
     // Mid-slide: both pages are on stage side by side.
     expect(find.text('A briefing that ends.'), findsOneWidget);
-    expect(find.text('One story at a time'), findsOneWidget);
+    expect(find.text('Two ways to read'), findsOneWidget);
     await settle(tester);
     expect(find.text('A briefing that ends.'), findsNothing);
     await unmount(tester);

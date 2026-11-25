@@ -28,9 +28,6 @@ class SettingsController extends Notifier<Settings> {
   Future<void> setAmoled({required bool value}) =>
       _save(state.copyWith(amoled: value));
 
-  Future<void> setBlurBehindNav({required bool enabled}) =>
-      _save(state.copyWith(blurBehindNav: enabled));
-
   Future<void> setTextSize(TextSizeStep step) =>
       _save(state.copyWith(textSize: step));
 
@@ -38,9 +35,6 @@ class SettingsController extends Notifier<Settings> {
 
   Future<void> setLinkOpenMode(LinkOpenMode mode) =>
       _save(state.copyWith(linkOpenMode: mode));
-
-  Future<void> setRefreshCadence(RefreshCadence cadence) =>
-      _save(state.copyWith(refreshCadence: cadence));
 
   Future<void> setMaxConsecutivePerSource(int max) =>
       _save(state.copyWith(maxConsecutivePerSource: max));
@@ -56,9 +50,6 @@ class SettingsController extends Notifier<Settings> {
 
   Future<void> setSearchTheWeb({required bool enabled}) =>
       _save(state.copyWith(searchTheWeb: enabled));
-
-  Future<void> setMotionPreference(MotionPreference pref) =>
-      _save(state.copyWith(motionPreference: pref));
 
   Future<void> setHaptics({required bool enabled}) {
     HsHaptics.enabled = enabled;

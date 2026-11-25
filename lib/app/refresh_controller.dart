@@ -3,13 +3,16 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:headshorts/app/providers.dart';
-import 'package:headshorts/app/settings_controller.dart';
 import 'package:headshorts/data/db/source_repository.dart';
 import 'package:headshorts/data/feed/refresh_service.dart';
 
 /// A reader who has been away longer than this is told, once, that the feeds
 /// only carry recent items.
 const awayThreshold = Duration(days: 3);
+
+/// How stale the briefing may be before opening the app, or coming back to
+/// it, fetches again. Nothing is fetched while the app is closed.
+const refreshEvery = Duration(hours: 1);
 
 /// Drives refreshes and reports their progress.
 ///
@@ -25,10 +28,10 @@ class RefreshController extends Notifier<RefreshProgress> {
     return RefreshProgress.idle;
   }
 
-  /// Refreshes only if the cache is staler than the reader's chosen cadence.
+  /// Refreshes only if the cache is staler than [refreshEvery].
   ///
   /// Used on launch and on coming back to the app. A pull, or the refresh
-  /// mark, always fetches — [refresh] itself never consults the cadence,
+  /// mark, always fetches — [refresh] itself never consults it,
   /// because an ask is never quietly ignored.
   ///
   /// Staleness is the **oldest** success among sources that are working, not
@@ -36,9 +39,6 @@ class RefreshController extends Notifier<RefreshProgress> {
   /// A source that is failing is left out, or one dead feed would force a
   /// refresh on every resume.
   Future<void> refreshIfDue() async {
-    final cadence = ref.read(settingsProvider).refreshCadence.interval;
-    if (cadence == null) return;
-
     final sources = await ref.read(sourceRepositoryProvider).enabled();
     var working = sources.where((s) => s.failingSince == null).toList();
     // All of them failing is what being offline looks like, not a reason to
@@ -51,7 +51,9 @@ class RefreshController extends Notifier<RefreshProgress> {
     final stamps = [for (final s in working) s.lastFetchedAt]
       ..sort((a, b) => (a ?? DateTime(0)).compareTo(b ?? DateTime(0)));
     final oldest = stamps.first;
-    if (oldest != null && DateTime.now().difference(oldest) < cadence) return;
+    if (oldest != null && DateTime.now().difference(oldest) < refreshEvery) {
+      return;
+    }
     await _run(explicit: false);
   }
 

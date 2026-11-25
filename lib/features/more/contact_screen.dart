@@ -201,7 +201,7 @@ class _InfoDetailsCard extends StatelessWidget {
           SizedBox(height: 10),
           _DetailRow(label: 'Location', value: 'India 🇮🇳'),
           SizedBox(height: 10),
-          _DetailRow(label: 'Response Time', value: 'Typically 24–48 hours'),
+          _DetailRow(label: 'Response Time', value: 'Typically 24 to 48 hours'),
         ],
       ),
     );

@@ -137,6 +137,7 @@ class _AddSourceScreenState extends ConsumerState<AddSourceScreen> {
                         minHeight: HsSize.tapTarget,
                       ),
                       child: Center(
+                        widthFactor: 1,
                         child: Text(
                           'Or import an OPML file',
                           textAlign: TextAlign.center,
@@ -366,6 +367,10 @@ class StickySubmit extends StatelessWidget {
   Widget build(BuildContext context) {
     final ground = context.hs.background;
     final keyboard = MediaQuery.viewInsetsOf(context).bottom;
+    // 16 above the keyboard, or 16 above the system bar when it is closed.
+    final below = keyboard > 0
+        ? keyboard
+        : MediaQuery.viewPaddingOf(context).bottom;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
@@ -398,7 +403,7 @@ class StickySubmit extends StatelessWidget {
             HsSpace.x5,
             0,
             HsSpace.x5,
-            HsSpace.x4 + keyboard,
+            HsSpace.x4 + below,
           ),
           child: HsButton(label, onPressed: onPressed),
         ),

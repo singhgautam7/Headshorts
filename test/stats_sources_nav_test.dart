@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:drift/drift.dart' show Value;
 import 'package:drift/native.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -28,9 +29,7 @@ void main() {
   late SettingsStore store;
 
   setUp(() async {
-    SharedPreferences.setMockInitialValues({
-      'refreshCadence': 'manual',
-    }); // no real fetches
+    SharedPreferences.setMockInitialValues({});
     store = SettingsStore(await SharedPreferences.getInstance());
     db = HsDatabase.forTesting(NativeDatabase.memory());
     final id = await SourceRepository(db).add(
@@ -46,6 +45,10 @@ void main() {
         publishedAt: DateTime.now(),
       ),
     ]);
+    // Fetched a moment ago, so nothing is due and no real request starts.
+    await db
+        .update(db.sources)
+        .write(SourcesCompanion(lastFetchedAt: Value(DateTime.now())));
     router = buildRouter(onboarded: true);
   });
 
