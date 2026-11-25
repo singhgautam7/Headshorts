@@ -84,7 +84,7 @@ class ThemeFamily {
   /// from blue to red; the numbers beside the hue are unused.
   static const signature = ThemeFamily(
     id: 'signature',
-    name: 'HeadShorts Signature',
+    name: 'Signature',
     blurb: 'classic red',
     neutralHue: _sigHue,
     neutralChroma: 1,

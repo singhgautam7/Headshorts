@@ -31,7 +31,7 @@ void main() {
         'sky',
         'ruby',
       ]);
-      expect(ThemeFamily.signature.name, 'HeadShorts Signature');
+      expect(ThemeFamily.signature.name, 'Signature');
       expect(ThemeFamily.signature.blurb, 'classic red');
       expect(ThemeFamily.mull.blurb, 'teal blue');
     });
