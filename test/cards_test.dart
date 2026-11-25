@@ -225,6 +225,9 @@ void main() {
     });
 
     group('a long description', () {
+      var opened = 0;
+      setUp(() => opened = 0);
+
       final long = List.filled(
         40,
         'The council agreed to study the crossing again next spring.',
@@ -250,7 +253,7 @@ void main() {
                 headline: _headline(snippet: long),
                 position: 0,
                 total: 3,
-                onReadFull: () {},
+                onReadFull: () => opened++,
               ),
             ),
           ),
@@ -276,6 +279,8 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text(long), findsNWidgets(2));
         expect(tester.takeException(), isNull);
+        await tester.ensureVisible(find.text('Show less'));
+        await tester.pumpAndSettle();
         await tester.tap(find.text('Show less'));
         await tester.pumpAndSettle();
         expect(find.text('Show less'), findsNothing);
@@ -289,6 +294,16 @@ void main() {
         expect(close.center.dx, greaterThan(390 / 2));
         await tester.tap(find.byType(HsIconButton));
         await tester.pumpAndSettle();
+        expect(find.text('Show less'), findsNothing);
+
+        // The article, from the end of the lit text.
+        await tester.tap(find.text('Show more'));
+        await tester.pumpAndSettle();
+        await tester.ensureVisible(find.text('Read full article'));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('Read full article'));
+        await tester.pumpAndSettle();
+        expect(opened, 1);
         expect(find.text('Show less'), findsNothing);
 
         // A tap outside closes it too.

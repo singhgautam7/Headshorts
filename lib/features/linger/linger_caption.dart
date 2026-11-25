@@ -4,6 +4,7 @@ import 'package:flutter/material.dart' show Icons;
 import 'package:flutter/widgets.dart';
 import 'package:headshorts/core/motion/motion_level.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
+import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/motion.dart';
 import 'package:headshorts/core/tokens/typography.dart';
@@ -22,6 +23,8 @@ class LingerCaption extends StatelessWidget {
     required this.bodyStyle,
     required this.ground,
     required this.edge,
+    required this.accent,
+    required this.onReadFull,
     this.gap = 22,
     super.key,
   });
@@ -34,6 +37,10 @@ class LingerCaption extends StatelessWidget {
   /// The card's own ground and hairline, so the lit panel is the same object.
   final Color ground;
   final Color edge;
+
+  /// Carried into the lit card, which is drawn outside the card's own scope.
+  final SourceAccent accent;
+  final VoidCallback onReadFull;
   final double gap;
 
   /// The most of a description a card shows before "Show more".
@@ -162,7 +169,7 @@ class LingerCaption extends StatelessWidget {
 }
 
 /// The caption, lit: the whole text, scrolling only if it is taller than the
-/// screen, and "Show less" beneath it.
+/// screen, ending in "Show less" and "Read full article".
 class _Lit extends StatelessWidget {
   const new({required this.caption});
 
@@ -182,6 +189,9 @@ class _Lit extends StatelessWidget {
         children: [
           HsIconButton(
             icon: Icons.close_rounded,
+            // The headline's colour, with the ground's ink on it.
+            fill: caption.titleStyle.color,
+            tint: context.hs.lingerBackground,
             onPressed: () => Navigator.of(context).pop(),
             semanticLabel: 'Close',
           ),
@@ -198,41 +208,42 @@ class _Lit extends StatelessWidget {
       borderRadius: HsRadius.cardBorder,
       border: Border.all(color: caption.edge),
     ),
-    padding: const EdgeInsets.fromLTRB(
-      _Centred.pad,
-      _Centred.pad,
-      _Centred.pad,
-      0,
-    ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Flexible(
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(caption.title, style: caption.titleStyle),
-                if (caption.description.isNotEmpty) ...[
-                  SizedBox(height: caption.gap),
-                  Text(
-                    caption.description,
-                    style: caption.bodyStyle.copyWith(
-                      color: context.hs.textPrimary,
-                    ),
-                  ),
-                ],
-              ],
+    clipBehavior: Clip.antiAlias,
+    // One scroll: the two actions end the text rather than pin under it.
+    child: SingleChildScrollView(
+      padding: const EdgeInsets.all(_Centred.pad),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(caption.title, style: caption.titleStyle),
+          if (caption.description.isNotEmpty) ...[
+            SizedBox(height: caption.gap),
+            Text(
+              caption.description,
+              style: caption.bodyStyle.copyWith(color: context.hs.textPrimary),
+            ),
+          ],
+          _MoreLess(
+            label: 'Show less',
+            color: caption.titleStyle.color,
+            onTap: () => Navigator.of(context).pop(),
+          ),
+          const SizedBox(height: HsSpace.x2),
+          AccentScope(
+            accent: caption.accent,
+            child: HsButton(
+              'Read full article',
+              onPressed: () {
+                Navigator.of(context).pop();
+                caption.onReadFull();
+              },
+              kind: context.hs.isDark
+                  ? HsButtonKind.accent
+                  : HsButtonKind.primary,
             ),
           ),
-        ),
-        _MoreLess(
-          label: 'Show less',
-          color: caption.titleStyle.color,
-          onTap: () => Navigator.of(context).pop(),
-        ),
-      ],
+        ],
+      ),
     ),
   );
 }

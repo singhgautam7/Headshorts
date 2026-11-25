@@ -24,6 +24,7 @@ class HsIconButton extends StatelessWidget {
     this.filled = true,
     this.active = false,
     this.tint,
+    this.fill,
     super.key,
   });
 
@@ -47,15 +48,20 @@ class HsIconButton extends StatelessWidget {
   final bool active;
   final Color? tint;
 
+  /// A disc in another colour than the family's, with [tint] to read on it.
+  final Color? fill;
+
   @override
   Widget build(BuildContext context) {
     final palette = context.hs;
     final level = HsMotion.levelOf(context);
     final disabled = onPressed == null;
     final fg = tint ?? (active ? palette.onPrimary : palette.textPrimary);
-    final bg = active
-        ? palette.primary
-        : (filled ? palette.primaryContainer : Colors.transparent);
+    final bg =
+        fill ??
+        (active
+            ? palette.primary
+            : (filled ? palette.primaryContainer : Colors.transparent));
     final target = size < HsSize.tapTarget ? HsSize.tapTarget : size;
 
     final glyph = child != null

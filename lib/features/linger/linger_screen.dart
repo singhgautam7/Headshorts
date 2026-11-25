@@ -422,6 +422,8 @@ class _LingerCardState extends ConsumerState<LingerCard> {
       bodyStyle: bodyStyle,
       ground: ground,
       edge: edge,
+      accent: tone,
+      onReadFull: widget.onReadFull,
       gap: gap,
     );
     final readFull = HsButton(
