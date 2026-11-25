@@ -218,7 +218,11 @@ class _BriefingState extends ConsumerState<_Briefing> {
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    HeaderPage.gap(),
+                    HeaderPage.gap(
+                      less: offline
+                          ? 0
+                          : (HsSize.tapTarget - HsSize.chipVisual) / 2,
+                    ),
                     if (offline) const _OfflineNote(),
                     const _Header(),
                   ],
@@ -348,7 +352,7 @@ class _Header extends ConsumerWidget {
 
     final style = HsType.timestamp.copyWith(color: palette.textMuted);
     return Padding(
-      padding: const EdgeInsets.only(top: 8, bottom: 14),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

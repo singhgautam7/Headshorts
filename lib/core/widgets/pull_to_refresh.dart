@@ -88,30 +88,44 @@ class _PullToRefreshState extends State<PullToRefresh> {
     final inset = HeaderPage.insetOf(context);
     return Stack(
       children: [
-        CustomScrollView(
-          controller: widget.controller,
-          physics: const BouncingScrollPhysics(
-            parent: AlwaysScrollableScrollPhysics(),
+        NotificationListener<ScrollNotification>(
+          // Back at rest the sliver stops being laid out, so its last report
+          // is a sliver of a pull: without this a speck of ring stayed behind.
+          onNotification: (n) {
+            final m = _pull.value.mode;
+            if (n.depth == 0 &&
+                n.metrics.pixels >= 0 &&
+                m != RefreshIndicatorMode.refresh &&
+                m != RefreshIndicatorMode.armed) {
+              _report(_rest);
+            }
+            return false;
+          },
+          child: CustomScrollView(
+            controller: widget.controller,
+            physics: const BouncingScrollPhysics(
+              parent: AlwaysScrollableScrollPhysics(),
+            ),
+            slivers: [
+              CupertinoSliverRefreshControl(
+                refreshTriggerPullDistance: PullToRefresh._extent,
+                refreshIndicatorExtent: 62,
+                onRefresh: widget.onRefresh,
+                builder: (context, mode, pulled, trigger, indicatorExtent) {
+                  _report((
+                    mode: mode,
+                    progress: (pulled / trigger).clamp(0.0, 1.0),
+                    pulled: pulled,
+                  ));
+                  return const SizedBox.shrink();
+                },
+              ),
+              SliverPadding(
+                padding: widget.padding,
+                sliver: SliverList(delegate: widget.delegate),
+              ),
+            ],
           ),
-          slivers: [
-            CupertinoSliverRefreshControl(
-              refreshTriggerPullDistance: PullToRefresh._extent,
-              refreshIndicatorExtent: 62,
-              onRefresh: widget.onRefresh,
-              builder: (context, mode, pulled, trigger, indicatorExtent) {
-                _report((
-                  mode: mode,
-                  progress: (pulled / trigger).clamp(0.0, 1.0),
-                  pulled: pulled,
-                ));
-                return const SizedBox.shrink();
-              },
-            ),
-            SliverPadding(
-              padding: widget.padding,
-              sliver: SliverList(delegate: widget.delegate),
-            ),
-          ],
         ),
         Positioned(
           top: inset,

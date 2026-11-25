@@ -2,6 +2,7 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:headshorts/core/tokens/accents.dart';
 import 'package:headshorts/core/tokens/palette.dart';
+import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/data/db/article_repository.dart';
 import 'package:headshorts/data/db/database.dart';
 import 'package:headshorts/data/db/tables.dart';
@@ -32,13 +33,16 @@ ArticleRow _article({
   String? summary = 'The pilot covers about forty stations.',
   String? imageUrl,
   String? snippet,
+  String? title,
 }) => ArticleRow(
   id: 7,
   sourceId: 1,
   guid: 'g',
   canonicalUrl: 'example.com/rail',
   titleKey: 'cap fare operators rail regions single',
-  title: 'Rail operators trial a single tap-in fare cap across three regions',
+  title:
+      title ??
+      'Rail operators trial a single tap-in fare cap across three regions',
   link: 'https://example.com/rail',
   publishedAt: DateTime.now().subtract(const Duration(hours: 5)),
   fetchedAt: DateTime.now(),
@@ -52,11 +56,15 @@ ArticleRow _article({
   imageUrl: imageUrl,
 );
 
-Headline _headline({bool read = false, String? imageUrl, String? snippet}) =>
-    Headline(
-      _article(read: read, imageUrl: imageUrl, snippet: snippet),
-      _source(),
-    );
+Headline _headline({
+  bool read = false,
+  String? imageUrl,
+  String? snippet,
+  String? title,
+}) => Headline(
+  _article(read: read, imageUrl: imageUrl, snippet: snippet, title: title),
+  _source(),
+);
 
 void main() {
   group('HeadlineCard', () {
@@ -272,12 +280,52 @@ void main() {
         await tester.pumpAndSettle();
         expect(find.text('Show less'), findsNothing);
 
+        // Centred, with a close button above its top right corner.
+        await tester.tap(find.text('Show more'));
+        await tester.pumpAndSettle();
+        final less = tester.getRect(find.text('Show less'));
+        final close = tester.getRect(find.byType(HsIconButton));
+        expect(close.bottom, lessThan(less.top));
+        expect(close.center.dx, greaterThan(390 / 2));
+        await tester.tap(find.byType(HsIconButton));
+        await tester.pumpAndSettle();
+        expect(find.text('Show less'), findsNothing);
+
         // A tap outside closes it too.
         await tester.tap(find.text('Show more'));
         await tester.pumpAndSettle();
         await tester.tapAt(const Offset(4, 696));
         await tester.pumpAndSettle();
         expect(find.text('Show less'), findsNothing);
+      });
+
+      testWidgets('a headline that fills the card still leaves it a start', (
+        tester,
+      ) async {
+        await tester.binding.setSurfaceSize(const Size(360, 560));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+        await pumpThemed(
+          tester,
+          Padding(
+            padding: const EdgeInsets.all(8),
+            child: LingerCard(
+              headline: _headline(
+                title: List.filled(16, 'Thirupparankundram').join(' '),
+                snippet: long,
+              ),
+              position: 0,
+              total: 3,
+              onReadFull: () {},
+            ),
+          ),
+        );
+        expect(tester.takeException(), isNull);
+        final body = tester.getSize(find.text(long)).height;
+        final title = tester
+            .getSize(find.textContaining('Thirupparankundram'))
+            .height;
+        expect(body, greaterThan(0));
+        expect(title, greaterThan(body));
       });
 
       for (final size in const [

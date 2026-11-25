@@ -78,6 +78,9 @@ abstract final class HsSize {
   /// The least a control's tap region is, and the height a chip's hit
   /// region takes around its 32 dp visual.
   static const tapTarget = 48.0;
+
+  /// The widest a lit Linger caption gets, on a tablet or in landscape.
+  static const litMaxWidth = 600.0;
   static const chipVisual = 32.0;
   static const toggleKnobOff = 14.0;
 

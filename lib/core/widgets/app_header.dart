@@ -288,7 +288,11 @@ class HeaderPage extends ConsumerStatefulWidget {
       false;
 
   /// The first child of the body's list.
-  static Widget gap() => Builder(builder: (c) => SizedBox(height: insetOf(c)));
+  ///
+  /// [less] takes back the empty part of a tap region that comes first, so the
+  /// thing seen starts where it does on every other page.
+  static Widget gap({double less = 0}) =>
+      Builder(builder: (c) => SizedBox(height: insetOf(c) - less));
 
   /// The first sliver of a `CustomScrollView`.
   static Widget sliverGap() => Builder(

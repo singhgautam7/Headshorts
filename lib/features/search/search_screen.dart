@@ -373,31 +373,78 @@ class _EmptyState extends ConsumerWidget {
             const SizedBox(height: HsSpace.x4),
           ],
           _Note(
-            text: entries.isEmpty
-                ? 'No sources are on. Turn some on in '
-                : 'To search other sources, turn them on in ',
-            link: 'Sources',
-            onLink: () => _toSources(context, ref),
-          ),
-          // The one thing that leaves the device, said before it happens.
-          if (web) ...[
-            const SizedBox(height: HsSpace.x3),
-            const _Note(
-              text:
+            points: [
+              _Point(
+                entries.isEmpty
+                    ? 'No sources are on. Turn some on in '
+                    : 'To search other sources, turn them on in ',
+                link: 'Sources',
+                onLink: () => _toSources(context, ref),
+              ),
+              // The one thing that leaves the device, said before it happens.
+              if (web)
+                const _Point(
                   'Google News and all its sources are searched too. Only '
                   'your search term is sent.',
-            ),
-          ],
+                ),
+            ],
+          ),
         ],
       ),
     );
   }
 }
 
-/// A quoted note, as Markdown draws one: a bar, then the text. With a [link]
-/// the whole note is the target.
+/// A quoted note, as Markdown draws one: a bar, a title, then its points,
+/// numbered when there is more than one.
 class _Note extends StatelessWidget {
-  const new({required this.text, this.link, this.onLink});
+  const new({required this.points});
+
+  final List<_Point> points;
+
+  @override
+  Widget build(BuildContext context) {
+    final palette = context.hs;
+    return Container(
+      padding: const EdgeInsetsDirectional.only(start: HsSpace.x3),
+      decoration: BoxDecoration(
+        border: BorderDirectional(
+          start: BorderSide(color: palette.stroke, width: HsSize.accentBar),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            'Note',
+            style: HsType.statTitle.copyWith(color: palette.textPrimary),
+          ),
+          for (final (i, point) in points.indexed)
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.baseline,
+              textBaseline: TextBaseline.alphabetic,
+              children: [
+                if (points.length > 1) ...[
+                  Text(
+                    '${i + 1}.',
+                    style: HsType.caughtUpBody.copyWith(
+                      color: palette.textMuted,
+                    ),
+                  ),
+                  const SizedBox(width: HsSpace.x2),
+                ],
+                Expanded(child: point),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// One point of a [_Note]. With a [link] the whole point is the target.
+class _Point extends StatelessWidget {
+  const new(this.text, {this.link, this.onLink});
 
   final String text;
   final String? link;
@@ -407,16 +454,9 @@ class _Note extends StatelessWidget {
   Widget build(BuildContext context) {
     final palette = context.hs;
     final style = HsType.caughtUpBody.copyWith(color: palette.textSecondary);
-    final quote = Container(
-      constraints: BoxConstraints(
-        minHeight: link == null ? 0 : HsSize.tapTarget,
-      ),
-      alignment: Alignment.centerLeft,
-      padding: const EdgeInsetsDirectional.only(start: HsSpace.x3),
-      decoration: BoxDecoration(
-        border: BorderDirectional(
-          start: BorderSide(color: palette.stroke, width: HsSize.accentBar),
-        ),
+    final body = Padding(
+      padding: EdgeInsets.symmetric(
+        vertical: link == null ? HsSpace.x1 : HsSpace.x3,
       ),
       child: Text.rich(
         TextSpan(
@@ -435,12 +475,12 @@ class _Note extends StatelessWidget {
         ),
       ),
     );
-    if (onLink == null) return quote;
+    if (onLink == null) return body;
     return Pressable(
       kind: PressKind.row,
       onTap: onLink,
       semanticLabel: '$text$link',
-      child: ExcludeSemantics(child: quote),
+      child: ExcludeSemantics(child: body),
     );
   }
 }

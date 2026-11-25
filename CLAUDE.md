@@ -657,8 +657,9 @@ from Linger and de-emphasises it in Today.
 A scroll inside a card that is itself paged fights the page: reaching the end
 of one flung several of the other. `LingerCaption` measures the room and cuts
 the headline and description to it; what does not fit is behind **Show more**,
-which lights the whole text over a darkened screen until Show less, a tap
-outside or back. Below `lingerShortHeight` (a phone in landscape) the card puts
+which lights the whole text in a centred card over a darkened screen, until
+Show less, the close button, a tap outside or back. A headline that would fill
+the card gives up 40% of it, so a description always starts. Below `lingerShortHeight` (a phone in landscape) the card puts
 its text beside its button.
 
 ### Linger has one Filter button
