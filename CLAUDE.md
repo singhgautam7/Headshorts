@@ -314,8 +314,9 @@ the single exception to "nothing is ever sent anywhere", so it is stated in
 three places: on Search's own empty state **before** anything is typed, on the
 Privacy screen, and as a setting (Settings → Search the web) that turns it off.
 The empty-state line is shown only while the setting is on, and is one
-sentence: Google News and all its sources are searched too, and only the
-search term is sent. `search_loader_test` pins both halves and that the
+point: Google News and all its sources are searched too, only the search term
+is sent, and Settings turns it off (the link opens Settings with that row lit,
+`SettingsAnchor`). `search_loader_test` pins both halves and that the
 heading over the results does not repeat them. On by default, because a search
 that cannot see past the last few days of six feeds is the thing readers
 report as broken.

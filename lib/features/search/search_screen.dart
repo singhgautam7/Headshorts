@@ -20,6 +20,7 @@ import 'package:headshorts/core/widgets/caught_up.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/glyphs.dart';
 import 'package:headshorts/core/widgets/screen.dart';
+import 'package:headshorts/features/more/settings_screen.dart';
 import 'package:headshorts/features/search/cache_explainer.dart';
 import 'package:headshorts/features/search/date_range_sheet.dart';
 import 'package:headshorts/features/search/search_controller.dart';
@@ -383,9 +384,11 @@ class _EmptyState extends ConsumerWidget {
               ),
               // The one thing that leaves the device, said before it happens.
               if (web)
-                const _Point(
+                _Point(
                   'Google News and all its sources are searched too. Only '
-                  'your search term is sent.',
+                  'your search term is sent. You can turn this off in ',
+                  link: 'Settings',
+                  onLink: () => context.push(SettingsScreen.searchTheWebPath),
                 ),
             ],
           ),
@@ -465,12 +468,13 @@ class _Point extends StatelessWidget {
           children: [
             if (link != null)
               TextSpan(
-                text: '$link.',
+                text: link,
                 style: style.copyWith(
                   color: palette.primary,
                   fontWeight: FontWeight.w600,
                 ),
               ),
+            if (link != null) const TextSpan(text: '.'),
           ],
         ),
       ),
@@ -479,7 +483,7 @@ class _Point extends StatelessWidget {
     return Pressable(
       kind: PressKind.row,
       onTap: onLink,
-      semanticLabel: '$text$link',
+      semanticLabel: '$text$link.',
       child: ExcludeSemantics(child: body),
     );
   }

@@ -16,6 +16,7 @@ import 'package:headshorts/data/db/tables.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/data/sources/source_adapter.dart';
 import 'package:headshorts/features/more/more_screen.dart';
+import 'package:headshorts/features/more/settings_anchor.dart';
 import 'package:headshorts/features/more/settings_screen.dart';
 import 'package:headshorts/features/more/stats_card.dart';
 import 'package:headshorts/features/reader/text_size_slider.dart';
@@ -37,7 +38,11 @@ void main() {
     router = GoRouter(
       routes: [
         GoRoute(path: '/', builder: (_, _) => const MoreScreen()),
-        GoRoute(path: '/settings', builder: (_, _) => const SettingsScreen()),
+        GoRoute(
+          path: '/settings',
+          builder: (_, s) =>
+              SettingsScreen(highlight: s.uri.queryParameters['highlight']),
+        ),
         for (final path in ['/more/settings'])
           GoRoute(
             path: path,
@@ -257,6 +262,31 @@ void main() {
       for (final gone in ['Motion', 'Blur behind the nav', 'Check for new']) {
         expect(find.text(gone), findsNothing, reason: gone);
       }
+      await unmount(tester);
+    });
+
+    testWidgets('a linked setting is scrolled to and lit, once', (
+      tester,
+    ) async {
+      router.go('/settings?highlight=${SettingsScreen.searchTheWeb}');
+      await pump(tester, size: const Size(360, 640));
+      await tester.pump(const Duration(milliseconds: 400));
+      await tester.pump(const Duration(milliseconds: 400));
+      final row = find.widgetWithText(SettingsRow, 'Search the web');
+      expect(row.hitTestable(), findsOneWidget);
+      Color glow() => tester
+          .widget<ColoredBox>(
+            find
+                .descendant(
+                  of: find.byType(SettingsAnchor),
+                  matching: find.byType(ColoredBox),
+                )
+                .last,
+          )
+          .color;
+      expect(glow().a, greaterThan(0.1));
+      await tester.pump(const Duration(seconds: 3));
+      expect(glow().a, closeTo(0, 0.01));
       await unmount(tester);
     });
 

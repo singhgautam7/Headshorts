@@ -145,6 +145,17 @@ abstract final class HsMotion {
   static const pageSlide = Duration(milliseconds: 300);
   static const pageSlideCurve = Curves.easeInOut;
 
+  /// A linked setting's glow: in over 150 ms, held a second, out over 600 ms.
+  static const arrival = Duration(milliseconds: 1750);
+  static double arrivalStrength(double t) {
+    final ms = t * arrival.inMilliseconds;
+    return ms < 150
+        ? ms / 150
+        : ms < 1150
+        ? 1
+        : (arrival.inMilliseconds - ms) / 600;
+  }
+
   /// One turn of the pull-to-refresh ring while a fetch runs.
   static const refreshTurn = Duration(milliseconds: 900);
 

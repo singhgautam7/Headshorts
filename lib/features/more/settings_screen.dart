@@ -9,6 +9,7 @@ import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/widgets/controls.dart';
 import 'package:headshorts/core/widgets/sheet.dart';
 import 'package:headshorts/data/prefs/settings.dart';
+import 'package:headshorts/features/more/settings_anchor.dart';
 import 'package:headshorts/features/more/settings_widgets.dart';
 import 'package:headshorts/features/more/text_size_sheet.dart';
 
@@ -17,7 +18,15 @@ import 'package:headshorts/features/more/text_size_sheet.dart';
 /// setting shows its value under its title and opens a sheet. Nothing cycles
 /// in place, and each row watches only the setting it shows.
 class SettingsScreen extends StatelessWidget {
-  const new({super.key});
+  const new({this.highlight, super.key});
+
+  /// The row to scroll to and light: one of the ids below.
+  final String? highlight;
+
+  static const searchTheWeb = 'search-the-web';
+
+  /// Where to push to land on [searchTheWeb], lit.
+  static const searchTheWebPath = '/more/settings?highlight=$searchTheWeb';
 
   @override
   Widget build(BuildContext context) => SettingsScaffold(
@@ -169,44 +178,47 @@ class SettingsScreen extends StatelessWidget {
               }
             },
           ),
-          _SettingRow<bool>(
-            icon: Icons.travel_explore_rounded,
-            label: 'Search the web',
-            select: (s) => s.searchTheWeb,
-            subtitle: (v) => v ? 'Google News' : 'Off',
-            onTap: (context, ref, current) async {
-              final picked = await showOptionSheet<bool>(
-                context,
-                title: 'Search the web',
-                description:
-                    'Your own feeds carry only their most recent items, '
-                    'so a search of them alone cannot reach far back. '
-                    'With this on, Search also asks Google News and '
-                    'shows what it finds under its own heading.',
-                selected: current,
-                options: const [
-                  SheetOption(
-                    value: true,
-                    label: 'Also search Google News',
-                    description:
-                        'Your search term is sent to Google. Nothing '
-                        'else is: not what you read, follow or save',
-                  ),
-                  SheetOption(
-                    value: false,
-                    label: 'Off',
-                    description:
-                        'Search only what is on this device. Nothing '
-                        'leaves it',
-                  ),
-                ],
-              );
-              if (picked != null) {
-                await ref
-                    .read(settingsProvider.notifier)
-                    .setSearchTheWeb(enabled: picked);
-              }
-            },
+          SettingsAnchor(
+            active: highlight == searchTheWeb,
+            child: _SettingRow<bool>(
+              icon: Icons.travel_explore_rounded,
+              label: 'Search the web',
+              select: (s) => s.searchTheWeb,
+              subtitle: (v) => v ? 'Google News' : 'Off',
+              onTap: (context, ref, current) async {
+                final picked = await showOptionSheet<bool>(
+                  context,
+                  title: 'Search the web',
+                  description:
+                      'Your own feeds carry only their most recent items, '
+                      'so a search of them alone cannot reach far back. '
+                      'With this on, Search also asks Google News and '
+                      'shows what it finds under its own heading.',
+                  selected: current,
+                  options: const [
+                    SheetOption(
+                      value: true,
+                      label: 'Also search Google News',
+                      description:
+                          'Your search term is sent to Google. Nothing '
+                          'else is: not what you read, follow or save',
+                    ),
+                    SheetOption(
+                      value: false,
+                      label: 'Off',
+                      description:
+                          'Search only what is on this device. Nothing '
+                          'leaves it',
+                    ),
+                  ],
+                );
+                if (picked != null) {
+                  await ref
+                      .read(settingsProvider.notifier)
+                      .setSearchTheWeb(enabled: picked);
+                }
+              },
+            ),
           ),
         ],
       ),

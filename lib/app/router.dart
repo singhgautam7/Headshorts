@@ -279,7 +279,9 @@ GoRouter buildRouter({required bool onboarded}) {
       ),
       GoRoute(
         path: '/more/settings',
-        pageBuilder: (context, state) => _page(const SettingsScreen()),
+        pageBuilder: (context, state) => _page(
+          SettingsScreen(highlight: state.uri.queryParameters['highlight']),
+        ),
       ),
       GoRoute(
         path: '/more/appearance',
