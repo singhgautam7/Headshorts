@@ -22,8 +22,6 @@ class Oklch {
   final double h;
   final double alpha;
 
-  Oklch withAlpha(double a) => Oklch(l, c, h, a);
-
   /// Same hue and chroma, different lightness — used for pressed/hover states.
   Oklch lightness(double newL) => Oklch(newL, c, h, alpha);
 

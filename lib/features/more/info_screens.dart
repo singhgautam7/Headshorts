@@ -1,43 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 import 'package:headshorts/core/theme/hs_theme.dart';
 import 'package:headshorts/core/tokens/dimensions.dart';
 import 'package:headshorts/core/tokens/typography.dart';
 import 'package:headshorts/core/util/open_in_web.dart';
-import 'package:headshorts/core/widgets/app_header.dart';
-import 'package:headshorts/core/widgets/screen.dart';
 import 'package:headshorts/data/prefs/settings.dart';
 import 'package:headshorts/features/more/settings_widgets.dart';
-
-/// Prose screens: About is short on purpose.
-class ProseScreen extends StatelessWidget {
-  const new({required this.title, required this.paragraphs, super.key});
-
-  final String title;
-  final List<String> paragraphs;
-
-  @override
-  Widget build(BuildContext context) {
-    final palette = context.hs;
-    return PushedScreen(
-      title: title,
-      onBack: () => context.pop(),
-      child: ListView(
-        padding: const EdgeInsets.all(HsSpace.x5),
-        children: [
-          HeaderPage.gap(),
-          for (final paragraph in paragraphs) ...[
-            Text(
-              paragraph,
-              style: HsType.bodySerif.copyWith(color: palette.textSecondary),
-            ),
-            const SizedBox(height: HsSpace.x4),
-          ],
-        ],
-      ),
-    );
-  }
-}
 
 /// Rich Privacy screen ported from Perch: leads with the brief statement,
 /// then verifiable claims with success indicators.

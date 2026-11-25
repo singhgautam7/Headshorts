@@ -13,7 +13,6 @@ abstract final class HsSpace {
   /// space-6 — the gap between headline cards in Today.
   static const x6 = 32.0;
   static const x7 = 48.0;
-  static const x8 = 64.0;
 
   /// Bottom padding that keeps scrolling content clear of the floating pill.
   static const navClearance = 104.0;
@@ -75,7 +74,6 @@ abstract final class HsSize {
 
   static const rowHeight = 56.0;
   static const sourceRowHeight = 60.0;
-  static const settingsRowHeight = 58.0;
 
   /// The least a control's tap region is, and the height a chip's hit
   /// region takes around its 32 dp visual.

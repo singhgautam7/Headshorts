@@ -444,10 +444,6 @@ ShapeBorder _chipShape(double t, Color stroke, {required bool hasOutline}) {
 Color accentWash(Color accent, HsPalette palette, {Color? on}) =>
     Oklab.mix(accent, on ?? palette.background, palette.isDark ? 0.15 : 0.07);
 
-/// The softer wash, used where two accented surfaces sit next to each other.
-Color accentWashSoft(Color accent, HsPalette palette) =>
-    Oklab.mix(accent, palette.background, palette.isDark ? 0.08 : 0.04);
-
 /// A hairline rule at divider strength.
 class HsDivider extends StatelessWidget {
   const new({super.key});
